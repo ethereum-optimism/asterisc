@@ -13,20 +13,22 @@ This project is a work in progress. Maybe 20% complete.
 TODO
 - [ ] Go:
   - [x] Implement yul opcodes in Go
+    - [x] fast/slow u256
+    - [x] fast u64
+    - [x] slow u64 (u256 backed)
   - [x] Implement merkleized state loading/storing state-machine
   - [x] Implement ALU + load/store parts of RISC-V
   - [x] Implement state merkleization
   - [x] Implement access-list collecter shim and db
   - [ ] update state model to track multiple copies of registers state and PC
-  - [ ] change Go step code to use uint256 words (maybe not for fast-mode? Depends on performance)
-  - [ ] split Go into fast and slow mode
+  - [x] change Go step code to use uint256 words
+  - [x] split Go into fast and slow mode
   - [ ] support syscalls
     - [ ] memory brk/mmap
     - [ ] exit
     - [ ] extend w/ threading clone/futex/gettid/tgkil/tkill
     - [ ] extras
   - [ ] implement pre-image oracle by swapping a special memory region for the requested preimage
-  - [ ] implement fast-mode by copying slow-mode and swapping the state-machine for direct state access
 - [ ] Sol:
   - [ ] Forge solidity testing setup
   - [ ] complete port of Go slow-mode emu to solidity
@@ -63,7 +65,7 @@ The use of YUL / "solidity assembly" is very convenient because:
 - it uses function calls, no operators, that can be mirrored exactly in Go
 - it preserves underflow/overflow behavior: this is a feature, not a bug, when emulating an ALU and registers.
 - it operates on unsigned word-sized integers only: no typed data, just like registers don't have types.
-- it makes control-flow cheap and easy: a "hart" / core is more like a tiny graph than a call-stack.
+  - In Go it is typed `U64` and `U256` for sanity, but it's all `uint256` words in slow mode.
 
 ### Why fast and slow mode?
 
@@ -73,6 +75,10 @@ When bisecting a program trace, you only need to produce a commitment to a few i
 However, once an instruction is reached, you can proof the evaluation of the instruction in smaller steps,
 to simplify the memory access down to a single preimage access:
 it's better to have more execution steps than more proof complexity.
+
+Note that slow mode and fast mode ALUs can be implemented exactly the same, just with different u64/u256 implementations.
+The slow mode matches the smart-contract behavior 1:1 and is useful for building the access-list
+and having a Go mirror of the smart-contract behavior for testing/debugging in general.
 
 ## RISC-V subset support
 

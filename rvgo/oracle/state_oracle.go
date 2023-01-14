@@ -1,4 +1,4 @@
-package rvgo
+package oracle
 
 import (
 	"fmt"
@@ -18,17 +18,24 @@ type VMStateOracle interface {
 type StateOracle struct {
 	data map[[32]byte][2][32]byte
 
-	accessList [][32]byte
+	accessList      [][32]byte
+	buildAccessList bool
 }
 
 var _ VMStateOracle = (*StateOracle)(nil)
 
 func NewStateOracle() *StateOracle {
-	return &StateOracle{data: make(map[[32]byte][2][32]byte)}
+	return &StateOracle{data: make(map[[32]byte][2][32]byte), buildAccessList: false}
+}
+
+func (s *StateOracle) BuildAccessList(build bool) {
+	s.buildAccessList = build
 }
 
 func (s *StateOracle) Get(key [32]byte) (a, b [32]byte) {
-	s.accessList = append(s.accessList, key)
+	if s.buildAccessList {
+		s.accessList = append(s.accessList, key)
+	}
 	ab, ok := s.data[key]
 	if !ok {
 		panic(fmt.Errorf("missing key %x", key))
