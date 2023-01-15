@@ -28,6 +28,7 @@ type VMState struct {
 func NewVMState() *VMState {
 	return &VMState{
 		Memory: make(map[uint64]*[1024]byte),
+		Heap:   1 << 28, // 0.25 GiB of program code space
 	}
 }
 

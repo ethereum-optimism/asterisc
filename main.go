@@ -21,7 +21,7 @@ func main() {
 	instructionSubStep := 10
 
 	so := oracle.NewStateOracle()
-	pre := slow.VMScratchpad{StateRoot: state.Merkleize(so)} // oracle will remember merkleized state
+	pre := slow.VMSubState{StateRoot: state.Merkleize(so)} // oracle will remember merkleized state
 	// run through agreed instruction sub-steps
 	for i := 0; i < instructionSubStep; i++ {
 		pre = slow.SubStep(pre, so)

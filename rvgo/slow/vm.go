@@ -9,9 +9,9 @@ import (
 	"github.com/protolambda/asterisc/rvgo/oracle"
 )
 
-type VMScratchpad struct {
-	SubIndex uint64 // step in the instruction execution
-	PC       U64    // PC counter
+type VMSubState struct {
+	SubIndex U64 // step in the instruction execution
+	PC       U64 // PC counter
 
 	Instr U64 // raw instruction
 
@@ -43,18 +43,18 @@ type VMScratchpad struct {
 }
 
 // sub index steps
-const (
-	StepLoadPC = iota
-	StepLoadInstr
-	StepLoadRs1
-	StepLoadRs2
-	StepOpcode
-	StepLoadSyscallArgs
-	StepRunSyscall
-	StepWriteSyscallRet
-	StepWriteRd
-	StepWritePC
-	StepFinal
+var (
+	StepLoadPC          = toU64(0)
+	StepLoadInstr       = toU64(1)
+	StepLoadRs1         = toU64(2)
+	StepLoadRs2         = toU64(3)
+	StepOpcode          = toU64(4)
+	StepLoadSyscallArgs = toU64(5)
+	StepRunSyscall      = toU64(6)
+	StepWriteSyscallRet = toU64(7)
+	StepWriteRd         = toU64(8)
+	StepWritePC         = toU64(9)
+	StepFinal           = toU64(10)
 )
 
 // tree:
@@ -122,7 +122,7 @@ func decodeU64(v []byte) (out U64) {
 	return
 }
 
-func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
+func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	// this first part with state stack machine can be written in solidity - it's heavy on memory/calldata interactions.
 	if s.StateStackGindex.Lt(&s.StateGindex) {
 		// READING MODE: if the stack gindex is lower than target, then traverse to target
@@ -257,6 +257,10 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 	rs1Value := s.Rs1Value
 	rs2Value := s.Rs2Value
 
+	syscallArgsI := s.SyscallArgsI
+	syscallRegs := s.SyscallRegs
+	subIndex := s.SubIndex
+
 	// write-only sub-state. All reading/processing happens in state machinery above
 	var gindex1 U256
 	var gindex2 U256
@@ -267,26 +271,26 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 	var offset uint8
 
 	// run the next step
-	switch s.SubIndex {
+	switch subIndex {
 	case StepLoadPC:
 		dest = destPc
 		size = toU64(4)
 		signed = false
 		gindex1 = pcGindex
-		s.SubIndex += 1
+		subIndex = add64(subIndex, toU64(1))
 	case StepLoadInstr:
 		dest = destInstr
 		gindex1 = makeMemGindex(s.PC)
 		size = toU64(4)
-		s.SubIndex += 1
+		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs1:
 		dest = destRs1Value
 		gindex1 = makeRegisterGindex(rs1)
-		s.SubIndex += 1
+		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs2:
 		dest = destRs2Value
 		gindex1 = makeRegisterGindex(rs2)
-		s.SubIndex += 1
+		subIndex = add64(subIndex, toU64(1))
 	case StepOpcode:
 		switch opcode.val() {
 		case 0b0000011: // memory loading
@@ -298,7 +302,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 			dest = destRdvalue
 			offset, gindex1, gindex2 = memToStateOp(memIndex, size)
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0100011: // memory storing
 			// SB, SH, SW, SD
 			imm := parseImmTypeS(instr)
@@ -307,7 +311,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 			memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 			offset, gindex1, gindex2 = memToStateOp(memIndex, size)
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWritePC
+			subIndex = StepWritePC
 		case 0b1100011: // branching
 			branchHit := toU64(0)
 			switch funct3.val() {
@@ -333,7 +337,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 				pc = add64(pc, shl64(signExtend64(imm, toU64(11)), toU64(1)))
 			}
 			// not like the other opcodes: nothing to write to rd register, and PC has already changed
-			s.SubIndex = StepWritePC
+			subIndex = StepWritePC
 		case 0b0010011: // immediate arithmetic and logic
 			imm := parseImmTypeI(instr)
 			switch funct3.val() {
@@ -360,7 +364,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 				rdValue = and64(rdValue, imm)
 			}
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0011011: // immediate arithmetic and logic signed 32 bit
 			imm := parseImmTypeI(instr)
 			switch funct3.val() {
@@ -378,7 +382,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 				}
 			}
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0110011: // register arithmetic and logic
 			switch funct7.val() {
 			case 1: // RV32M extension
@@ -451,7 +455,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 				}
 			}
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0111011: // register arithmetic and logic in 32 bits
 			switch funct7.val() {
 			case 1: // RV64M extension
@@ -509,37 +513,37 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 				}
 			}
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0110111: // LUI = Load upper immediate
 			imm := parseImmTypeU(instr)
 			rdValue = shl64(imm, toU64(12))
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0010111: // AUIPC = Add upper immediate to PC
 			imm := parseImmTypeU(instr)
 			rdValue = add64(pc, shl64(imm, toU64(12)))
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b1101111: // JAL = Jump and link
 			imm := parseImmTypeJ(instr)
 			rdValue = add64(pc, toU64(4))
 			pc = add64(pc, signExtend64(shl64(imm, toU64(1)), toU64(21))) // signed offset in multiples of 2 bytes
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b1100111: // JALR = Jump and link register
 			imm := parseImmTypeI(instr)
 			rdValue = add64(pc, toU64(4))
 			pc = and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1))) // least significant bit is set to 0
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b1110011:
 			switch funct3.val() {
 			case 0: // 000 = ECALL/EBREAK
 				switch shr64(instr, toU64(20)).val() { // I-type, top 12 bits
 				case 0: // imm12 = 000000000000 ECALL
-					s.SubIndex = StepLoadSyscallArgs
+					subIndex = StepLoadSyscallArgs
 				default: // imm12 = 000000000001 EBREAK
 					// ignore breakpoint
 					pc = add64(pc, toU64(4))
-					s.SubIndex = StepWriteRd
+					subIndex = StepWriteRd
 				}
 			default: // CSR instructions
 				switch funct3.val() {
@@ -552,7 +556,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 				case 7: // 111 = CSRRCI
 				}
 				pc = add64(pc, toU64(4))
-				s.SubIndex = StepWriteRd
+				subIndex = StepWriteRd
 			}
 
 			switch funct3.val() {
@@ -592,7 +596,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 			case 0x1c: // 11100 = AMOMAXU
 			}
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		case 0b0001111:
 			//// TODO: different layout of func data
 			//// "fm pred succ"
@@ -605,31 +609,30 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 			//case 0b001: // FENCE.I
 			//}
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWriteRd
+			subIndex = StepWriteRd
 		default:
 			panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
 		}
 	case StepLoadSyscallArgs:
-		switch s.SyscallArgsI {
+		switch syscallArgsI {
 		case 9: // keep loading register arguments until we have loaded them all
-			s.SubIndex += 1
+			subIndex = StepRunSyscall
 		default:
 			dest = destSysReg
-			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(s.SyscallArgsI)))
+			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(syscallArgsI)))
 			size = toU64(8)
 			signed = false
 			offset = 0
 		}
 	case StepRunSyscall:
 		// A7 is the EID, with syscall num, by SBI calling convention
-		switch s.SyscallRegs[7].val() {
+		switch syscallRegs[7].val() {
 		case 214: // brk
-			s.SyscallRegs[0] = shl64(toU64(1), toU64(30)) // set program break at 1 GiB
-			s.SyscallArgsI = 1
-			s.SubIndex = StepWriteSyscallRet
+			syscallRegs[0] = shl64(toU64(1), toU64(30)) // set program break at 1 GiB
+			syscallArgsI = 1
 		case 222: // mmap
-			addr := s.SyscallRegs[0]
-			length := s.SyscallRegs[1]
+			addr := syscallRegs[0]
+			length := syscallRegs[1]
 			// ignore: prot, flags, fd, offset
 			switch addr.val() {
 			case 0:
@@ -642,23 +645,22 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
 			}
-			s.SyscallRegs[1] = toU64(0) // no error
-			s.SyscallArgsI = 2
-			s.SubIndex = StepWriteSyscallRet
+			syscallRegs[1] = toU64(0) // no error
+			syscallArgsI = 2
 		default:
 			// TODO maybe revert if the syscall is unrecognized?
-			s.SyscallArgsI = 0
-			s.SubIndex = StepWriteSyscallRet
+			syscallArgsI = 0
 		}
+		subIndex = StepWriteSyscallRet
 	case StepWriteSyscallRet:
 		switch s.SyscallArgsI {
 		case 0: // keep writing register return values until we have written them all
 			pc = add64(pc, toU64(4))
-			s.SubIndex = StepWritePC
+			subIndex = StepWritePC
 		default:
-			s.SyscallArgsI -= 1
-			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(s.SyscallArgsI)))
-			value = s.SyscallRegs[s.SyscallArgsI]
+			syscallArgsI -= 1
+			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(syscallArgsI)))
+			value = syscallRegs[syscallArgsI]
 			size = toU64(8)
 			offset = 0
 		}
@@ -666,7 +668,7 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 		switch rd.val() {
 		case 0:
 			// never write to register 0, it must stay zero
-			s.SubIndex = StepWritePC
+			subIndex = StepWritePC
 		default:
 			gindex1 = makeRegisterGindex(rd)
 			value = rdValue
@@ -677,10 +679,11 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 	case StepFinal:
 		stateRoot := s.StateRoot
 		// zero out everything in preparation of next instruction
-		return VMScratchpad{StateRoot: stateRoot}
+		return VMSubState{StateRoot: stateRoot}
 	}
 
 	// encode sub-step state
+	s.SubIndex = subIndex
 	s.PC = pc
 	s.Instr = instr
 	s.Rs1Value = rs1Value
@@ -692,6 +695,8 @@ func SubStep(s VMScratchpad, so oracle.VMStateOracle) VMScratchpad {
 	s.Signed = signed
 	s.Size = uint8(size.val())
 	s.Dest = dest
+	s.SyscallArgsI = syscallArgsI
+	s.SyscallRegs = syscallRegs
 
 	return s
 }
