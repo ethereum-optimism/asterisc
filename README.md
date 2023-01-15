@@ -24,7 +24,7 @@ TODO
   - [x] change Go step code to use uint256 words
   - [x] split Go into fast and slow mode
   - [ ] support syscalls
-    - [ ] memory brk/mmap
+    - [x] memory brk/mmap
     - [ ] exit
     - [ ] extend w/ threading clone/futex/gettid/tgkil/tkill
     - [ ] extras

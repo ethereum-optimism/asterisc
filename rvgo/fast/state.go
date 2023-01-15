@@ -22,6 +22,7 @@ type VMState struct {
 	Registers [32]uint64
 	CSR       [2048]uint64
 	Exit      uint64
+	Heap      uint64 // for mmap to keep allocating new anon memory
 }
 
 func NewVMState() *VMState {
@@ -136,4 +137,15 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 		remaining := (end & pageAddrMask) + 1
 		copy(state.Memory[end>>pageAddrSize][:remaining], bytez[size-remaining:])
 	}
+}
+
+func (state *VMState) writeRegister(reg uint64, v uint64) {
+	if reg == 0 { // reg 0 must stay 0
+		// v is a HINT, but no hints are specified by standard spec, or used by us.
+		return
+	}
+	if reg >= 32 {
+		panic(fmt.Errorf("unknown register %d, cannot write %x", reg, v))
+	}
+	state.Registers[reg] = v
 }

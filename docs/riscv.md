@@ -139,3 +139,65 @@ Go emulators to diff-fuzz against maybe:
   - B: branching
   - U: upper-immediate
   - J: jumps
+
+## RiscV Supervisor Binary Interface
+
+https://github.com/riscv-non-isa/riscv-sbi-doc/blob/master/riscv-sbi.adoc
+
+The SBI is like a RiscV specific version of an EEI (Execution Environment Interface),
+describing the encoding of syscalls.
+
+Calling convention:
+
+- An ECALL is used as the control transfer instruction between the supervisor and the SEE.
+- a7 encodes the SBI extension ID (EID),
+- a6 encodes the SBI function ID (FID) for a given extension ID encoded in a7 for any SBI extension defined in or after
+  SBI v0.2.
+- All registers except a0 & a1 must be preserved across an SBI call by the callee.
+- SBI functions must return a pair of values in a0 and a1, with a0 returning an error code. This is analogous to
+  returning the C structure
+  ```c
+  struct sbiret {
+      long error;
+      long value;
+  };
+  ```
+
+In the name of compatibility, SBI extension IDs (EIDs) and SBI function IDs (FIDs) are encoded as signed 32-bit
+integers. When passed in registers these follow the standard above calling convention rules.
+
+The Table 1 below provides a list of Standard SBI error codes.
+Table 1. Standard SBI Errors
+
+| Error Type                  |  Value |
+|-----------------------------|--------|
+| `SBI_SUCCESS`               | 0      |
+| `SBI_ERR_FAILED`            | -1     |
+| `SBI_ERR_NOT_SUPPORTED`     | -2     |
+| `SBI_ERR_INVALID_PARAM`     | -3     |
+| `SBI_ERR_DENIED`            | -4     |
+| `SBI_ERR_INVALID_ADDRESS`   | -5     |
+| `SBI_ERR_ALREADY_AVAILABLE` | -6     |
+| `SBI_ERR_ALREADY_STARTED`   | -7     |
+| `SBI_ERR_ALREADY_STOPPED`   | -8     |
+
+An ECALL with an unsupported SBI extension ID (EID) or an unsupported SBI function ID (FID) must return the error code
+`SBI_ERR_NOT_SUPPORTED`.
+
+Every SBI function should prefer unsigned long as the data type. It keeps the specification simple and easily adaptable
+for all RISC-V ISA types. In case the data is defined as 32bit wide, higher privilege software must ensure that it only
+uses 32 bit data only.
+
+The Linux kernel implements this here:
+[`sbi.c`](https://github.com/torvalds/linux/blob/7c698440524117dca7534592db0e7f465ae4d0bb/arch/riscv/kernel/sbi.c#L25)
+
+Linux doesn't work quite like the SBI though.
+The SBI says ECALL returns `sbiret` which encodes a0 value encodes an error code, and a1 a value.
+But Linux seems to be more minimal/general, and (at least for the relevant syscalls in the Go runtime) 
+uses only the first `sbiret` field for both errors (special magic range) and valid values.
+
+For example, with `brk`:
+Returned addresses in a0 in range `(-4096, -1]` (a linux kernel reserved page that may never actually be exposed to unprivileged programs)
+are considered error codes, including by the Go runtime, see [here](https://github.com/golang/go/blob/ebb572d82f97d19d0016a49956eb1fddc658eb76/src/runtime/sys_linux_riscv64.s#L446)
+
+To be nice with the SBI we should still write back to both `a0` and `a1`, but simply write a `0` in `a1`.

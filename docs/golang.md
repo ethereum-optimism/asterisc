@@ -35,6 +35,8 @@ TODO:
 The Go runtime defines the following linux syscalls to be used by Go:
 [`sys_linux_riscv64.s`](https://github.com/golang/go/blob/master/src/runtime/sys_linux_riscv64.s)
 
+To read the Go assembler, see [this Go asm syntax doc](https://go.dev/doc/asm) (it's not as complete, but one of few resources).
+
 By supporting a minimal subset of these, most Go programs can be proven.
 The GC won't have to be disabled if concurrency is supported, and will then avoid growing the memory indefinitely.
 
