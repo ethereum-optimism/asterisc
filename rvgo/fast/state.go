@@ -102,7 +102,7 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 			so.Remember(registersRoot, csrRoot),                // 10, 11
 		),
 		so.Remember(
-			so.Remember(uint64AsBytes32(state.Exit), zeroHashes[0]), // 12, 13
+			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)), // 12, 13
 			zeroHashes[1], // 14, 15
 		),
 	)
