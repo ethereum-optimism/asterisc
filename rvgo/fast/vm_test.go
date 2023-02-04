@@ -13,7 +13,7 @@ func TestStep(t *testing.T) {
 	// TODO maybe load ELF sections for debugging
 	// TODO if step PC matches test symbol address, then log that we entered the test case
 
-	testSuiteELF, err := elf.Open("../../../riscv-tests/isa/rv64ui-p-add")
+	testSuiteELF, err := elf.Open("../../tests/riscv-tests/rv64ui-p/rv64ui-p-add")
 	require.NoError(t, err)
 	defer testSuiteELF.Close()
 
