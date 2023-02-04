@@ -39,6 +39,10 @@ func u32Mask() U64 {
 	return U64(shr(not(U256{}), toU256(224))) // 256-32 = 224
 }
 
+func mask32Signed64(v U64) U64 {
+	return signExtend64(and64(v, u32Mask()), toU64(31))
+}
+
 func u64Mod() U256 { // 1 << 64
 	return shl(toU256(1), toU256(64))
 }

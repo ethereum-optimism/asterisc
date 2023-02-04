@@ -32,6 +32,10 @@ func u32Mask() uint64 {
 	return 0xFFFF_FFFF
 }
 
+func mask32Signed64(v U64) U64 {
+	return signExtend64(and64(v, u32Mask()), toU64(31))
+}
+
 func signExtend64(v uint64, bit uint64) uint64 {
 	switch and64(v, shl64(1, bit)) {
 	case 0:

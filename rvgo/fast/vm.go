@@ -110,9 +110,9 @@ func Step(s *VMState) {
 		fmt.Printf("alu32 imm: 0x%x\n", imm)
 		switch funct3 {
 		case 0: // 000 = ADDIW
-			rdValue = signExtend64(and64(add64(rs1Value, imm), u32Mask()), toU64(31))
+			rdValue = mask32Signed64(add64(rs1Value, imm))
 		case 1: // 001 = SLLIW
-			rdValue = signExtend64(and64(shl64(rs1Value, and64(imm, toU64(0x1F))), u32Mask()), toU64(31))
+			rdValue = mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
 			switch funct7 {
@@ -206,34 +206,34 @@ func Step(s *VMState) {
 		case 1: // RV64M extension
 			switch funct3 {
 			case 0: // 000 = MULW
-				rdValue = signExtend64(and64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask()), toU64(31))
+				rdValue = mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 			case 4: // 100 = DIVW
 				switch rs2Value {
 				case 0:
 					rdValue = u64Mask()
 				default:
-					rdValue = signExtend64(and64(sdiv64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask()), toU64(31))
+					rdValue = mask32Signed64(sdiv64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
 				}
 			case 5: // 101 = DIVUW
 				switch rs2Value {
 				case 0:
 					rdValue = u64Mask()
 				default:
-					rdValue = and64(div64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask())
+					rdValue = mask32Signed64(div64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			case 6: // 110 = REMW
 				switch rs2Value {
 				case 0:
-					rdValue = and64(rs1Value, u32Mask())
+					rdValue = mask32Signed64(rs1Value)
 				default:
-					rdValue = and64(smod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask())
+					rdValue = mask32Signed64(smod64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
 				}
 			case 7: // 111 = REMUW
 				switch rs2Value {
 				case 0:
-					rdValue = and64(rs1Value, u32Mask())
+					rdValue = mask32Signed64(rs1Value)
 				default:
-					rdValue = and64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask())
+					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			}
 		default: // RV32M extension
@@ -241,12 +241,12 @@ func Step(s *VMState) {
 			case 0: // 000 = ADDW/SUBW
 				switch funct7 {
 				case 0x00: // 0000000 = ADDW
-					rdValue = signExtend64(and64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask()), toU64(31))
+					rdValue = mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				case 0x20: // 0100000 = SUBW
-					rdValue = signExtend64(and64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask()), toU64(31))
+					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			case 1: // 001 = SLLW
-				rdValue = signExtend64(and64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))), u32Mask()), toU64(31))
+				rdValue = mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
 			case 5: // 101 = SR~
 				shamt := and64(rs2Value, toU64(0x1F))
 				switch funct7 {
