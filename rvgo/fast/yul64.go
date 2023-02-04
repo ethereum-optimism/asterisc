@@ -12,6 +12,10 @@ func toU256(v uint8) U256 {
 
 func toU64(v uint8) U64 { return uint64(v) }
 
+func shortToU64(v uint16) U64 {
+	return uint64(v)
+}
+
 func u256ToU64(v U256) U64 {
 	return v.Uint64()
 }

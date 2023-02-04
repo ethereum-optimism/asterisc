@@ -110,15 +110,15 @@ var (
 )
 
 func encodePacked(v U64) (out [8]byte) {
-	binary.BigEndian.PutUint64(out[:], v.val())
+	binary.LittleEndian.PutUint64(out[:], v.val())
 	return
 }
 
 func decodeU64(v []byte) (out U64) {
-	if len(v) != 8 {
+	if len(v) > 8 {
 		panic("bad u64 decode")
 	}
-	(*U256)(&out).SetBytes8(v[:])
+	(*U256)(&out).SetUint64(binary.LittleEndian.Uint64(v) & ((1 << (len(v) * 8)) - 1)) // mask out the lower bytes to get the size of uint we want
 	return
 }
 
@@ -318,15 +318,15 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			case 0: // 000 = BEQ
 				branchHit = eq64(rs1Value, rs2Value)
 			case 1: // 001 = BNE
-				branchHit = not64(eq64(rs1Value, rs2Value))
+				branchHit = and64(not64(eq64(rs1Value, rs2Value)), toU64(1))
 			case 4: // 100 = BLT
 				branchHit = slt64(rs1Value, rs2Value)
 			case 5: // 101 = BGE
-				branchHit = not64(slt64(rs1Value, rs2Value))
+				branchHit = and64(not64(slt64(rs1Value, rs2Value)), toU64(1))
 			case 6: // 110 = BLTU
 				branchHit = lt64(rs1Value, rs2Value)
 			case 7: // 111 = BGEU
-				branchHit = not64(lt64(rs1Value, rs2Value))
+				branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
 			}
 			switch branchHit.val() {
 			case 0:
@@ -342,7 +342,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			imm := parseImmTypeI(instr)
 			switch funct3.val() {
 			case 0: // 000 = ADDI
-				rdValue = add64(rs1Value, signExtend64(imm, toU64(11)))
+				rdValue = add64(rs1Value, imm)
 			case 1: // 001 = SLLI
 				rdValue = shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
 			case 2: // 010 = SLTI
@@ -369,9 +369,9 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			imm := parseImmTypeI(instr)
 			switch funct3.val() {
 			case 0: // 000 = ADDIW
-				rdValue = add64(rs1Value, imm)
+				rdValue = signExtend64(and64(add64(rs1Value, imm), u32Mask()), toU64(31))
 			case 1: // 001 = SLLIW
-				rdValue = shl64(rs1Value, and64(imm, toU64(0x1F)))
+				rdValue = signExtend64(and64(shl64(rs1Value, and64(imm, toU64(0x1F))), u32Mask()), toU64(31))
 			case 5: // 101 = SR~
 				shamt := and64(imm, toU64(0x1F))
 				switch funct7.val() {
@@ -627,6 +627,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	case StepRunSyscall:
 		// A7 is the EID, with syscall num, by SBI calling convention
 		switch syscallRegs[7].val() {
+		// TODO exit syscall
 		case 214: // brk
 			syscallRegs[0] = shl64(toU64(1), toU64(30)) // set program break at 1 GiB
 			syscallArgsI = 1

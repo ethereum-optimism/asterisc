@@ -13,6 +13,7 @@ const (
 	pageAddrSize = 10
 	pageSize     = 1 << pageAddrSize
 	pageAddrMask = pageSize - 1
+	maxPageCount = 1 << (64 - pageAddrSize)
 )
 
 type VMState struct {
@@ -20,9 +21,13 @@ type VMState struct {
 	// sparse memory, pages of 1KB, keyed by page number: start memory address truncated by 10 bits.
 	Memory    map[uint64]*[pageSize]byte
 	Registers [32]uint64
-	CSR       [2048]uint64
-	Exit      uint64
-	Heap      uint64 // for mmap to keep allocating new anon memory
+
+	// 0xF14: mhartid  - riscv tests use this. Always hart 0, no parallelism supported
+	CSR [4096]uint64 // 12 bit addressing space
+
+	Exit   uint64
+	Exited bool
+	Heap   uint64 // for mmap to keep allocating new anon memory
 }
 
 func NewVMState() *VMState {
@@ -59,7 +64,7 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		return stack[stackDepth]
 	}
 	uint64AsBytes32 := func(v uint64) (out [32]byte) {
-		binary.BigEndian.PutUint64(out[:8], v)
+		binary.LittleEndian.PutUint64(out[:8], v)
 		return
 	}
 	merkleizePage := func(page *[1024]byte) [32]byte {
@@ -93,7 +98,7 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 	registersRoot := merkleize(5, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.Registers[index])
 	})
-	csrRoot := merkleize(11, func(index uint64) [32]byte {
+	csrRoot := merkleize(12, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.CSR[index])
 	})
 	return so.Remember(
@@ -108,18 +113,38 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 	)
 }
 
+func (state *VMState) loadOrCreatePage(pageIndex uint64) *[pageSize]byte {
+	if pageIndex >= maxPageCount {
+		panic("invalid page key")
+	}
+	p, ok := state.Memory[pageIndex]
+	if ok {
+		return p
+	}
+	p = &[pageSize]byte{}
+	state.Memory[pageIndex] = p
+	return p
+}
+
 func (state *VMState) loadMem(addr uint64, size uint64, signed bool) uint64 {
 	if size > 8 {
 		panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 	}
 	var out [8]byte
-	copy(out[:], state.Memory[addr>>pageAddrSize][addr&pageAddrMask:])
-	end := addr + size - 1
-	if addr>>pageAddrSize != end>>pageAddrSize { // if it spans across two pages. Can also wrap around total memory.
-		remaining := (end & pageAddrMask) + 1
-		copy(out[size-remaining:], state.Memory[end>>pageAddrSize][:remaining])
+	pageIndex := addr >> pageAddrSize
+	if _, ok := state.Memory[pageIndex]; !ok { // if page does not exist, then it's a 0 value
+		return 0
 	}
-	v := binary.BigEndian.Uint64(out[:])
+	copy(out[:], state.Memory[pageIndex][addr&pageAddrMask:])
+	end := addr + size - 1 // Can also wrap around total memory.
+	endPage := end >> pageAddrSize
+	if pageIndex != endPage { // if it spans across two pages.
+		if _, ok := state.Memory[endPage]; ok { // only if page exists, 0 otherwise
+			remaining := (end & pageAddrMask) + 1
+			copy(out[size-remaining:], state.Memory[endPage][:remaining])
+		}
+	}
+	v := binary.LittleEndian.Uint64(out[:]) & ((1 << (size * 8)) - 1)
 	if signed && v&((1<<(size<<3))>>1) == 1 { // if the last bit is set, then extend it to the full 64 bits
 		v |= 0xFFFF_FFFF_FFFF_FFFF << (size << 3)
 	} // otherwise just leave it zeroed
@@ -131,16 +156,25 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 		panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
 	}
 	var bytez [8]byte
-	binary.BigEndian.PutUint64(bytez[:], value)
-	copy(state.Memory[addr>>pageAddrSize][addr&pageAddrMask:], bytez[:size])
+	binary.LittleEndian.PutUint64(bytez[:], value)
+	pageIndex := addr >> pageAddrSize
+	if _, ok := state.Memory[pageIndex]; !ok { // create page if it does not exist
+		state.Memory[pageIndex] = &[pageSize]byte{}
+	}
+	copy(state.Memory[pageIndex][addr&pageAddrMask:], bytez[:size])
 	end := addr + size - 1
-	if addr>>pageAddrSize != end>>pageAddrSize { // if it spans across two pages. Can also wrap around total memory.
+	endPage := end >> pageAddrSize
+	if pageIndex != endPage { // if it spans across two pages. Can also wrap around total memory.
+		if _, ok := state.Memory[endPage]; !ok { // create page if it does not exist
+			state.Memory[endPage] = &[pageSize]byte{}
+		}
 		remaining := (end & pageAddrMask) + 1
-		copy(state.Memory[end>>pageAddrSize][:remaining], bytez[size-remaining:])
+		copy(state.Memory[endPage][:remaining], bytez[size-remaining:])
 	}
 }
 
 func (state *VMState) writeRegister(reg uint64, v uint64) {
+	fmt.Printf("rd write to %d value: 0x%x\n", reg, v)
 	if reg == 0 { // reg 0 must stay 0
 		// v is a HINT, but no hints are specified by standard spec, or used by us.
 		return

@@ -24,3 +24,16 @@ sync,                           -- sync load/stores
 nop,                            -- no-op instruction
 ```
 
+
+Disassembling `startup.s`:
+```
+mipsel-linux-gnu-objdump -D -m mips:isa32 -EB -b binary startup.bin
+```
+
+Compiling `startup.s`:
+```
+mipsel-linux-gnu-gcc -nostdlib -EL -c startup.s -o startup.o
+mipsel-linux-gnu-objdump -d startup.o
+# TODO: objcopy the section to a binary file
+
+```

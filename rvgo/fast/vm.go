@@ -3,6 +3,9 @@ package fast
 import "fmt"
 
 func Step(s *VMState) {
+	if s.Exited {
+		return
+	}
 	// memory operation arguments
 	var memIndex U64
 	var size U64
@@ -34,6 +37,7 @@ func Step(s *VMState) {
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
+		fmt.Printf("load - imm: 0x%x, signed: %v, size: %d, memIndex: 0x%x, rd: %d, rdValue: 0x%x\n", imm, signed, size, memIndex, rd, rdValue)
 	case 0b0100011: // memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
@@ -43,37 +47,41 @@ func Step(s *VMState) {
 		s.storeMem(memIndex, size, value)
 		pc = add64(pc, 4)
 		s.PC = pc
+		fmt.Printf("store - imm: 0x%x, size: %d, value: 0x%x, memIndex: 0x%x\n", imm, size, value, memIndex)
 	case 0b1100011: // branching
 		branchHit := toU64(0)
 		switch funct3 {
 		case 0: // 000 = BEQ
 			branchHit = eq64(rs1Value, rs2Value)
 		case 1: // 001 = BNE
-			branchHit = not64(eq64(rs1Value, rs2Value))
+			branchHit = and64(not64(eq64(rs1Value, rs2Value)), toU64(1))
 		case 4: // 100 = BLT
 			branchHit = slt64(rs1Value, rs2Value)
 		case 5: // 101 = BGE
-			branchHit = not64(slt64(rs1Value, rs2Value))
+			branchHit = and64(not64(slt64(rs1Value, rs2Value)), toU64(1))
 		case 6: // 110 = BLTU
 			branchHit = lt64(rs1Value, rs2Value)
 		case 7: // 111 = BGEU
-			branchHit = not64(lt64(rs1Value, rs2Value))
+			branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
 		}
 		switch branchHit {
 		case 0:
 			pc = add64(pc, toU64(4))
+			fmt.Println("branch miss")
 		default:
 			imm := parseImmTypeB(instr)
 			// imm12 is a signed offset, in multiples of 2 bytes
-			pc = add64(pc, shl64(signExtend64(imm, toU64(11)), toU64(1)))
+			pc = add64(pc, signExtend64(imm, toU64(11)))
+			fmt.Printf("branch hit, jumping %d\n", int64(signExtend64(imm, toU64(11))))
 		}
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		s.PC = pc
 	case 0b0010011: // immediate arithmetic and logic
 		imm := parseImmTypeI(instr)
+		fmt.Printf("alu64 imm: 0x%x\n", imm)
 		switch funct3 {
 		case 0: // 000 = ADDI
-			rdValue = add64(rs1Value, signExtend64(imm, toU64(11)))
+			rdValue = add64(rs1Value, imm)
 		case 1: // 001 = SLLI
 			rdValue = shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
 		case 2: // 010 = SLTI
@@ -99,11 +107,12 @@ func Step(s *VMState) {
 		s.PC = pc
 	case 0b0011011: // immediate arithmetic and logic signed 32 bit
 		imm := parseImmTypeI(instr)
+		fmt.Printf("alu32 imm: 0x%x\n", imm)
 		switch funct3 {
 		case 0: // 000 = ADDIW
-			rdValue = add64(rs1Value, imm)
+			rdValue = signExtend64(and64(add64(rs1Value, imm), u32Mask()), toU64(31))
 		case 1: // 001 = SLLIW
-			rdValue = shl64(rs1Value, and64(imm, toU64(0x1F)))
+			rdValue = signExtend64(and64(shl64(rs1Value, and64(imm, toU64(0x1F))), u32Mask()), toU64(31))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
 			switch funct7 {
@@ -117,6 +126,7 @@ func Step(s *VMState) {
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
 	case 0b0110011: // register arithmetic and logic
+		fmt.Printf("alu64 reg: rs1: %d rs2: %d\n", rs1, rs2)
 		switch funct7 {
 		case 1: // RV32M extension
 			switch funct3 {
@@ -191,6 +201,7 @@ func Step(s *VMState) {
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
 	case 0b0111011: // register arithmetic and logic in 32 bits
+		fmt.Printf("alu32 reg: rs1: %d rs2: %d\n", rs1, rs2)
 		switch funct7 {
 		case 1: // RV64M extension
 			switch funct3 {
@@ -255,23 +266,27 @@ func Step(s *VMState) {
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
+		fmt.Printf("LUI rd: %d value: 0x%x\n", rd, rdValue)
 	case 0b0010111: // AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
 		rdValue = add64(pc, shl64(imm, toU64(12)))
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
+		fmt.Printf("AUIPC rd: %d value: 0x%x\n", rd, rdValue)
 		s.PC = pc
 	case 0b1101111: // JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue = add64(pc, toU64(4))
-		pc = add64(pc, signExtend64(shl64(imm, toU64(1)), toU64(21))) // signed offset in multiples of 2 bytes
+		pc = add64(pc, signExtend64(imm, toU64(21))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 		s.writeRegister(rd, rdValue)
+		fmt.Printf("JAL rd: %d value: 0x%x\n", rd, rdValue)
 		s.PC = pc
 	case 0b1100111: // JALR = Jump and link register
 		imm := parseImmTypeI(instr)
 		rdValue = add64(pc, toU64(4))
 		pc = and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1))) // least significant bit is set to 0
 		s.writeRegister(rd, rdValue)
+		fmt.Printf("JALR rd: %d value: 0x%x\n", rd, rdValue)
 		s.PC = pc
 	case 0b1110011:
 		switch funct3 {
@@ -285,14 +300,39 @@ func Step(s *VMState) {
 				s.PC = pc
 			}
 		default: // CSR instructions
+			imm := parseCSSR(instr)
+			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
 			switch funct3 {
-			case 1: // 001 = CSRRW
-			case 2: // 010 = CSRRS  a.k.a. SYSTEM instruction
-				// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-			case 3: // 011 = CSRRC
+			case 1: // 001 = CSRRW = "atomic Read/Write bits in CSR"
+				s.CSR[imm] = rs1Value
+				if rd != 0 {
+					rdValue = s.CSR[imm]
+				}
+			case 2: // 010 = CSRRS = "atomic Read and Set bits in CSR"
+				rdValue = s.CSR[imm]
+				if rs1 != 0 {
+					s.CSR[imm] |= rs1Value
+				}
+			case 3: // 011 = CSRRC = "atomic Read and Clear Bits in CSR"
+				rdValue = s.CSR[imm]
+				if rs1 != 0 {
+					s.CSR[imm] &^= rs1Value
+				}
 			case 5: // 101 = CSRRWI
+				s.CSR[imm] = rs1 // rs1 is treated as 5 bit immediate value here
+				if rd != 0 {
+					rdValue = s.CSR[imm]
+				}
 			case 6: // 110 = CSRRSI
+				rdValue = s.CSR[imm]
+				if rs1 != 0 {
+					s.CSR[imm] |= rs1 // rs1 is treated as 5 bit immediate value here
+				}
 			case 7: // 111 = CSRRCI
+				rdValue = s.CSR[imm]
+				if rs1 != 0 {
+					s.CSR[imm] &^= rs1 // rs1 is treated as 5 bit immediate value here
+				}
 			}
 			pc = add64(pc, toU64(4))
 			s.writeRegister(rd, rdValue)
@@ -330,6 +370,7 @@ func Step(s *VMState) {
 		//	}
 		//case 0b001: // FENCE.I
 		//}
+		// We can no-op FENCE, there's nothing to synchronize
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
@@ -340,18 +381,23 @@ func Step(s *VMState) {
 }
 
 func sysCall(s *VMState) {
-	sycallRegs := s.Registers[10:18] // A0 to A7
-	switch sycallRegs[7] {
+	syscallRegs := s.Registers[10:18] // A0 to A7
+
+	fmt.Printf("syscall %d\n", syscallRegs[7])
+	switch syscallRegs[7] {
+	case 93: // exit
+		s.Exit = syscallRegs[0]
+		s.Exited = true
 	case 214: // brk
 		// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 		// brk(0) changes nothing about the memory, and returns the current page break
-		sycallRegs[0] = shl64(toU64(1), toU64(30)) // set program break at 1 GiB
+		syscallRegs[0] = shl64(toU64(1), toU64(30)) // set program break at 1 GiB
 	case 222: // mmap
 		// A0 = addr (hint)
-		addr := sycallRegs[0]
+		addr := syscallRegs[0]
 		// A1 = n (length)
-		length := sycallRegs[1]
+		length := syscallRegs[1]
 		// A2 = prot (memory protection type, can ignore)
 		// A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe assert the MAP_ANONYMOUS flag is set
 		// A4 = fd (file descriptor, can ignore because we support anon memory only)
@@ -362,11 +408,11 @@ func sysCall(s *VMState) {
 		case 0:
 			// no hint, allocate it ourselves, by as much as the requested length
 			s.Heap += length // increment heap with length
-			sycallRegs[0] = s.Heap
+			syscallRegs[0] = s.Heap
 		default:
 			// allow hinted memory address (leave it in A0 as return argument)
 		}
-		sycallRegs[1] = 0 // no error
+		syscallRegs[1] = 0 // no error
 	default:
 		// TODO maybe revert if the syscall is unrecognized?
 	}

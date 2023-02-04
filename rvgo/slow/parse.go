@@ -28,14 +28,14 @@ func parseImmTypeB(instr U64) U64 {
 }
 
 func parseImmTypeU(instr U64) U64 {
-	return signExtend64(shl64(shr64(instr, toU64(20)), toU64(12)), toU64(19))
+	return signExtend64(shr64(instr, toU64(12)), toU64(19))
 }
 
 func parseImmTypeJ(instr U64) U64 {
 	return signExtend64(
 		or64(
 			or64(
-				shl64(and64(shr64(instr, toU64(21)), toU64(0x1FF)), toU64(1)),
+				shl64(and64(shr64(instr, toU64(21)), shortToU64(0x1FF)), toU64(1)),
 				shl64(and64(shr64(instr, toU64(20)), toU64(1)), toU64(10)),
 			),
 			or64(
