@@ -117,9 +117,9 @@ func Step(s *VMState) {
 			shamt := and64(imm, toU64(0x1F))
 			switch funct7 {
 			case 0x00: // 0000000 = SRLIW
-				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
 			case 0x20: // 0100000 = SRAIW
-				rdValue = signExtend64(sar64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
 			}
 		}
 		pc = add64(pc, toU64(4))
@@ -251,9 +251,9 @@ func Step(s *VMState) {
 				shamt := and64(rs2Value, toU64(0x1F))
 				switch funct7 {
 				case 0x00: // 0000000 = SRLW
-					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
 				case 0x20: // 0100000 = SRAW
-					rdValue = signExtend64(sar64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
 				}
 			}
 		}
