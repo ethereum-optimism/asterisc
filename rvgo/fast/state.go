@@ -145,7 +145,7 @@ func (state *VMState) loadMem(addr uint64, size uint64, signed bool) uint64 {
 		}
 	}
 	v := binary.LittleEndian.Uint64(out[:]) & ((1 << (size * 8)) - 1)
-	if signed && v&((1<<(size<<3))>>1) == 1 { // if the last bit is set, then extend it to the full 64 bits
+	if signed && v&((1<<(size<<3))>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
 		v |= 0xFFFF_FFFF_FFFF_FFFF << (size << 3)
 	} // otherwise just leave it zeroed
 	return v

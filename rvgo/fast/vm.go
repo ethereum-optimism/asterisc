@@ -30,7 +30,7 @@ func Step(s *VMState) {
 	case 0b0000011: // memory loading
 		// LB, LH, LW, LD, LBU, LHU, LWU
 		imm := parseImmTypeI(instr)
-		signed = iszero64(and64(funct3, toU64(8)))      // 8 = 100 -> bitflag
+		signed = iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
 		size = shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		memIndex = add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue = s.loadMem(memIndex, size, signed)
@@ -100,7 +100,7 @@ func Step(s *VMState) {
 		case 6: // 110 = ORI
 			rdValue = or64(rs1Value, imm)
 		case 7: // 111 = ANDI
-			rdValue = and64(rdValue, imm)
+			rdValue = and64(rs1Value, imm)
 		}
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
@@ -174,7 +174,7 @@ func Step(s *VMState) {
 				case 0x00: // 0000000 = ADD
 					rdValue = add64(rs1Value, rs2Value)
 				case 0x20: // 0100000 = SUB
-					rdValue = sub64(rs1Value, rs1Value)
+					rdValue = sub64(rs1Value, rs2Value)
 				}
 			case 1: // 001 = SLL
 				rdValue = shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
@@ -183,7 +183,7 @@ func Step(s *VMState) {
 			case 3: // 011 = SLTU
 				rdValue = lt64(rs1Value, rs2Value)
 			case 4: // 100 = XOR
-				rdValue = xor64(rs1Value, rdValue)
+				rdValue = xor64(rs1Value, rs2Value)
 			case 5: // 101 = SR~
 				switch funct7 {
 				case 0x00: // 0000000 = SRL
@@ -269,7 +269,7 @@ func Step(s *VMState) {
 		fmt.Printf("LUI rd: %d value: 0x%x\n", rd, rdValue)
 	case 0b0010111: // AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
-		rdValue = add64(pc, shl64(imm, toU64(12)))
+		rdValue = add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
 		fmt.Printf("AUIPC rd: %d value: 0x%x\n", rd, rdValue)
