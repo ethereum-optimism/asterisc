@@ -174,7 +174,7 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 }
 
 func (state *VMState) writeRegister(reg uint64, v uint64) {
-	fmt.Printf("rd write to %d value: 0x%x\n", reg, v)
+	//fmt.Printf("rd write to %d value: 0x%x\n", reg, v)
 	if reg == 0 { // reg 0 must stay 0
 		// v is a HINT, but no hints are specified by standard spec, or used by us.
 		return

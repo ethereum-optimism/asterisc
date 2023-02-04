@@ -37,7 +37,6 @@ func Step(s *VMState) {
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
-		fmt.Printf("load - imm: 0x%x, signed: %v, size: %d, memIndex: 0x%x, rd: %d, rdValue: 0x%x\n", imm, signed, size, memIndex, rd, rdValue)
 	case 0b0100011: // memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
@@ -47,7 +46,6 @@ func Step(s *VMState) {
 		s.storeMem(memIndex, size, value)
 		pc = add64(pc, 4)
 		s.PC = pc
-		fmt.Printf("store - imm: 0x%x, size: %d, value: 0x%x, memIndex: 0x%x\n", imm, size, value, memIndex)
 	case 0b1100011: // branching
 		branchHit := toU64(0)
 		switch funct3 {
@@ -67,18 +65,15 @@ func Step(s *VMState) {
 		switch branchHit {
 		case 0:
 			pc = add64(pc, toU64(4))
-			fmt.Println("branch miss")
 		default:
 			imm := parseImmTypeB(instr)
 			// imm12 is a signed offset, in multiples of 2 bytes
 			pc = add64(pc, signExtend64(imm, toU64(11)))
-			fmt.Printf("branch hit, jumping %d\n", int64(signExtend64(imm, toU64(11))))
 		}
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		s.PC = pc
 	case 0b0010011: // immediate arithmetic and logic
 		imm := parseImmTypeI(instr)
-		fmt.Printf("alu64 imm: 0x%x\n", imm)
 		switch funct3 {
 		case 0: // 000 = ADDI
 			rdValue = add64(rs1Value, imm)
@@ -107,7 +102,6 @@ func Step(s *VMState) {
 		s.PC = pc
 	case 0b0011011: // immediate arithmetic and logic signed 32 bit
 		imm := parseImmTypeI(instr)
-		fmt.Printf("alu32 imm: 0x%x\n", imm)
 		switch funct3 {
 		case 0: // 000 = ADDIW
 			rdValue = mask32Signed64(add64(rs1Value, imm))
@@ -126,7 +120,6 @@ func Step(s *VMState) {
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
 	case 0b0110011: // register arithmetic and logic
-		fmt.Printf("alu64 reg: rs1: %d rs2: %d\n", rs1, rs2)
 		switch funct7 {
 		case 1: // RV32M extension
 			switch funct3 {
@@ -201,7 +194,6 @@ func Step(s *VMState) {
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
 	case 0b0111011: // register arithmetic and logic in 32 bits
-		fmt.Printf("alu32 reg: rs1: %d rs2: %d\n", rs1, rs2)
 		switch funct7 {
 		case 1: // RV64M extension
 			switch funct3 {
@@ -266,27 +258,23 @@ func Step(s *VMState) {
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
 		s.PC = pc
-		fmt.Printf("LUI rd: %d value: 0x%x\n", rd, rdValue)
 	case 0b0010111: // AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
 		rdValue = add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
 		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		fmt.Printf("AUIPC rd: %d value: 0x%x\n", rd, rdValue)
 		s.PC = pc
 	case 0b1101111: // JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue = add64(pc, toU64(4))
 		pc = add64(pc, signExtend64(imm, toU64(21))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 		s.writeRegister(rd, rdValue)
-		fmt.Printf("JAL rd: %d value: 0x%x\n", rd, rdValue)
 		s.PC = pc
 	case 0b1100111: // JALR = Jump and link register
 		imm := parseImmTypeI(instr)
 		rdValue = add64(pc, toU64(4))
 		pc = and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1))) // least significant bit is set to 0
 		s.writeRegister(rd, rdValue)
-		fmt.Printf("JALR rd: %d value: 0x%x\n", rd, rdValue)
 		s.PC = pc
 	case 0b1110011:
 		switch funct3 {
@@ -383,7 +371,6 @@ func Step(s *VMState) {
 func sysCall(s *VMState) {
 	syscallRegs := s.Registers[10:18] // A0 to A7
 
-	fmt.Printf("syscall %d\n", syscallRegs[7])
 	switch syscallRegs[7] {
 	case 93: // exit
 		s.Exit = syscallRegs[0]
