@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/protolambda/asterisc/rvgo/fast"
 )
 
 func forEachTestSuite(t *testing.T, path string, callItem func(t *testing.T, path string)) {
@@ -34,12 +36,12 @@ func runTestSuite(t *testing.T, path string) {
 	require.NoError(t, err)
 	defer testSuiteELF.Close()
 
-	vmState, err := LoadELF(testSuiteELF)
+	vmState, err := fast.LoadELF(testSuiteELF)
 	require.NoError(t, err, "must load test suite ELF binary")
 
 	for i := 0; i < 10_000; i++ {
 		//fmt.Printf("pc: 0x%x\n", vmState.PC)
-		Step(vmState)
+		fast.Step(vmState)
 		if vmState.Exited {
 			break
 		}
@@ -56,7 +58,7 @@ func TestStep(t *testing.T) {
 	// TODO maybe load ELF sections for debugging
 	// TODO if step PC matches test symbol address, then log that we entered the test case
 
-	testsPath := filepath.FromSlash("../../tests/riscv-tests")
+	testsPath := filepath.FromSlash("../tests/riscv-tests")
 
 	runTestCategory := func(name string) {
 		t.Run(name, func(t *testing.T) {
