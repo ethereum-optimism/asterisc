@@ -155,7 +155,6 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			s.StateValue = so.Remember(s.StateValue, prevSibling)
 		}
 		s.StateStackGindex = shr(s.StateStackGindex, toU256(1))
-		s.StateStackDepth += 1
 		if s.StateStackGindex == toU256(1) {
 			s.StateRoot = s.StateValue
 		}
@@ -278,19 +277,22 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	switch subIndex {
 	case StepLoadPC:
 		dest = destPc
-		size = toU64(4)
+		size = toU64(8)
 		signed = false
 		gindex1 = pcGindex
+		offset = 0
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadInstr:
 		dest = destInstr
 		gindex1 = makeMemGindex(s.PC)
+		offset = 0
 		fmt.Printf("%b\n", gindex1.ToBig())
 		size = toU64(4)
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs1:
 		dest = destRs1Value
 		gindex1 = makeRegisterGindex(rs1)
+		offset = 0
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs2:
 		dest = destRs2Value
@@ -648,6 +650,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 				size = toU64(8)
 				dest = destHeapIncr
 				gindex1 = heapGindex
+				offset = 0
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
 			}
@@ -678,12 +681,16 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		default:
 			dest = destNone
 			gindex1 = makeRegisterGindex(rd)
+			size = toU64(8)
+			offset = 0
 			value = rdValue
 		}
 		subIndex = add64(subIndex, toU64(1))
 	case StepWritePC:
 		dest = destNone
 		gindex1 = pcGindex
+		offset = 0
+		size = toU64(8)
 		value = pc
 		subIndex = add64(subIndex, toU64(1))
 	case StepFinal:

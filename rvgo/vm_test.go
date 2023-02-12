@@ -68,7 +68,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 	pre := slow.VMSubState{StateRoot: vmState.Merkleize(so)}
 
 	for i := 0; i < 10_000; i++ {
-		require.Equal(t, pre, slow.VMSubState{StateRoot: pre.StateRoot}, "vm state must be clean at start of instruction")
+		require.Equal(t, slow.VMSubState{StateRoot: pre.StateRoot}, pre, "vm state must be clean at start of instruction")
 		//fmt.Printf("pc: 0x%x\n", vmState.PC)
 
 		for i := 0; i < 1000; i++ {
@@ -89,12 +89,11 @@ func runSlowTestSuite(t *testing.T, path string) {
 			//post2 := slow.SubStep(pre, so2)
 			//require.Equal(t, post, post2, "need to reproduce same post-state with access list based oracle")
 
+			pre = post
 			// if the vm state is clean, the sub-step is done
 			if post == (slow.VMSubState{StateRoot: post.StateRoot}) {
 				break
 			}
-
-			pre = post
 		}
 
 		// Now run the same in fast mode
