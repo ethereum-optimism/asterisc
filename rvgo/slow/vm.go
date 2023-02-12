@@ -118,7 +118,9 @@ func decodeU64(v []byte) (out U64) {
 	if len(v) > 8 {
 		panic("bad u64 decode")
 	}
-	(*U256)(&out).SetUint64(binary.LittleEndian.Uint64(v) & ((1 << (len(v) * 8)) - 1)) // mask out the lower bytes to get the size of uint we want
+	var x [8]byte // pad to 8 bytes
+	copy(x[:], v)
+	(*U256)(&out).SetUint64(binary.LittleEndian.Uint64(x[:]) & ((1 << (len(v) * 8)) - 1)) // mask out the lower bytes to get the size of uint we want
 	return
 }
 
@@ -131,7 +133,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		}
 		s.StateStackGindex = shl(s.StateStackGindex, toU256(1))
 		a, b := so.Get(s.StateValue)
-		if eq(and(shr(s.StateGindex, toU256(s.StateStackDepth)), toU256(1)), toU256(1)) != (U256{}) {
+		if and(shr(s.StateGindex, toU256(s.StateStackDepth)), toU256(1)) != (U256{}) {
 			s.StateStackGindex = or(s.StateStackGindex, toU256(1))
 			s.StateValue = b
 			// keep track of where we have been, to use the trail to go back up the stack when writing
@@ -141,7 +143,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			// keep track of where we have been, to use the trail to go back up the stack when writing
 			s.StateStackHash = so.Remember(s.StateStackHash, b)
 		}
-		s.StateStackDepth += 1
+		s.StateStackDepth -= 1
 		return s
 	} else if s.StateStackGindex.Gt(&s.StateGindex) {
 		// WRITING MODE: if the stack gindex is higher than the target, then traverse back to root and update along the way
@@ -153,7 +155,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			s.StateValue = so.Remember(s.StateValue, prevSibling)
 		}
 		s.StateStackGindex = shr(s.StateStackGindex, toU256(1))
-		s.StateStackDepth -= 1
+		s.StateStackDepth += 1
 		if s.StateStackGindex == toU256(1) {
 			s.StateRoot = s.StateValue
 		}
@@ -165,6 +167,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		if s.Gindex1 != s.StateGindex {
 			// if we have not reached the gindex yet, then we need to start traversal to it
 			s.StateStackGindex = toU256(1)
+			s.StateStackDepth = uint8(s.Gindex1.BitLen()) - 2
 			s.StateGindex = s.Gindex1
 		} else {
 			s.Gindex1 = U256{}
@@ -193,6 +196,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		if s.Gindex2 != s.StateGindex {
 			// if we have not reached the gindex yet, then we need to start traversal to it
 			s.StateStackGindex = toU256(1)
+			s.StateStackDepth = uint8(s.Gindex2.BitLen()) - 2
 			s.StateGindex = s.Gindex2
 		} else {
 			s.Gindex2 = U256{}
@@ -221,12 +225,12 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 
 		if s.Signed {
 			topBitIndex := (s.Size << 3) - 1
-			val = signExtend64(decodeU64(s.Scratch[:8]), toU64(topBitIndex))
+			val = signExtend64(val, toU64(topBitIndex))
 		}
 
 		switch s.Dest {
 		case destPc:
-			s.Instr = val
+			s.PC = val
 		case destInstr:
 			s.Instr = val
 		case destRs1Value:
@@ -281,6 +285,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	case StepLoadInstr:
 		dest = destInstr
 		gindex1 = makeMemGindex(s.PC)
+		fmt.Printf("%b\n", gindex1.ToBig())
 		size = toU64(4)
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs1:
@@ -334,7 +339,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			default:
 				imm := parseImmTypeB(instr)
 				// imm12 is a signed offset, in multiples of 2 bytes
-				pc = add64(pc, shl64(signExtend64(imm, toU64(11)), toU64(1)))
+				pc = add64(pc, signExtend64(imm, toU64(11)))
 			}
 			// not like the other opcodes: nothing to write to rd register, and PC has already changed
 			subIndex = StepWritePC
@@ -496,12 +501,12 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 				case 0: // 000 = ADDW/SUBW
 					switch funct7.val() {
 					case 0x00: // 0000000 = ADDW
-						rdValue = signExtend64(and64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask()), toU64(31))
+						rdValue = mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 					case 0x20: // 0100000 = SUBW
-						rdValue = signExtend64(and64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())), u32Mask()), toU64(31))
+						rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 					}
 				case 1: // 001 = SLLW
-					rdValue = signExtend64(and64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))), u32Mask()), toU64(31))
+					rdValue = mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
 				case 5: // 101 = SR~
 					shamt := and64(rs2Value, toU64(0x1F))
 					switch funct7.val() {
@@ -527,7 +532,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		case 0b1101111: // JAL = Jump and link
 			imm := parseImmTypeJ(instr)
 			rdValue = add64(pc, toU64(4))
-			pc = add64(pc, signExtend64(shl64(imm, toU64(1)), toU64(21))) // signed offset in multiples of 2 bytes
+			pc = add64(pc, signExtend64(imm, toU64(21))) // signed offset in multiples of 2 bytes
 			subIndex = StepWriteRd
 		case 0b1100111: // JALR = Jump and link register
 			imm := parseImmTypeI(instr)
@@ -660,6 +665,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			subIndex = StepWritePC
 		default:
 			syscallArgsI -= 1
+			dest = destNone
 			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(syscallArgsI)))
 			value = syscallRegs[syscallArgsI]
 			size = toU64(8)
@@ -669,14 +675,17 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		switch rd.val() {
 		case 0:
 			// never write to register 0, it must stay zero
-			subIndex = StepWritePC
 		default:
+			dest = destNone
 			gindex1 = makeRegisterGindex(rd)
 			value = rdValue
 		}
+		subIndex = add64(subIndex, toU64(1))
 	case StepWritePC:
+		dest = destNone
 		gindex1 = pcGindex
 		value = pc
+		subIndex = add64(subIndex, toU64(1))
 	case StepFinal:
 		stateRoot := s.StateRoot
 		// zero out everything in preparation of next instruction

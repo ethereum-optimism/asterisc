@@ -16,7 +16,8 @@ type VMStateOracle interface {
 }
 
 type StateOracle struct {
-	data map[[32]byte][2][32]byte
+	data    map[[32]byte][2][32]byte
+	reverse map[[2][32]byte][32]byte
 
 	accessList      [][32]byte
 	buildAccessList bool
@@ -25,11 +26,16 @@ type StateOracle struct {
 var _ VMStateOracle = (*StateOracle)(nil)
 
 func NewStateOracle() *StateOracle {
-	return &StateOracle{data: make(map[[32]byte][2][32]byte), buildAccessList: false}
+	return &StateOracle{
+		data:            make(map[[32]byte][2][32]byte),
+		reverse:         make(map[[2][32]byte][32]byte),
+		buildAccessList: false,
+	}
 }
 
 func (s *StateOracle) BuildAccessList(build bool) {
 	s.buildAccessList = build
+	s.accessList = [][32]byte{}
 }
 
 func (s *StateOracle) Get(key [32]byte) (a, b [32]byte) {
@@ -44,8 +50,16 @@ func (s *StateOracle) Get(key [32]byte) (a, b [32]byte) {
 }
 
 func (s *StateOracle) Remember(left [32]byte, right [32]byte) [32]byte {
+	// cache is faster than hashing again
+	value := [2][32]byte{left, right}
+	if key, ok := s.reverse[value]; ok {
+		fmt.Printf("%x %x -> %x\n", left[:], right[:], key[:])
+		return key
+	}
 	key := crypto.Keccak256Hash(left[:], right[:])
-	s.data[key] = [2][32]byte{left, right}
+	fmt.Printf("%x %x -> %x\n", left[:], right[:], key[:])
+	s.data[key] = value
+	s.reverse[value] = key
 	return key
 }
 

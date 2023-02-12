@@ -11,9 +11,10 @@ import (
 // memory merkleization will look the same regardless of page size past 32.
 const (
 	pageAddrSize = 10
+	pageKeySize  = 64 - pageAddrSize
 	pageSize     = 1 << pageAddrSize
 	pageAddrMask = pageSize - 1
-	maxPageCount = 1 << (64 - pageAddrSize)
+	maxPageCount = 1 << pageKeySize
 )
 
 type VMState struct {
@@ -44,20 +45,22 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 	}
 	pageBranches := make(map[uint64]struct{})
 	for pageKey := range state.Memory {
-		for i := 0; i < 64-pageAddrSize; i++ {
-			gindex := (1 << (64 - pageAddrSize - i)) | (pageKey >> i)
+		pageGindex := (1 << pageKeySize) | pageKey
+		for i := 0; i < pageKeySize; i++ {
+			gindex := pageGindex >> i
 			pageBranches[gindex] = struct{}{}
 		}
 	}
 	merkleize := func(stackDepth uint64, getItem func(index uint64) [32]byte) [32]byte {
 		stack := make([][32]byte, stackDepth+1)
-		for i := uint64(0); i < pageSize/32; i += 1 {
-			for j := uint64(0); j < pageAddrSize; j++ {
+		for i := uint64(0); i < (1 << stackDepth); i++ {
+			v := getItem(i)
+			for j := uint64(0); j <= stackDepth; j++ {
 				if i&(1<<j) == 0 {
-					stack[j] = getItem(i)
+					stack[j] = v
 					break
 				} else {
-					stack[j+1] = so.Remember(stack[j], getItem(i))
+					v = so.Remember(stack[j], v)
 				}
 			}
 		}
@@ -68,14 +71,14 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		return
 	}
 	merkleizePage := func(page *[1024]byte) [32]byte {
-		return merkleize(pageAddrSize, func(index uint64) [32]byte {
+		return merkleize(pageAddrSize-5, func(index uint64) [32]byte { // 32 byte leaf values (5 bits)
 			return *(*[32]byte)(page[index*32 : index*32+32])
 		})
 	}
 	var merkleizeMemory func(gindex uint64, depth uint64) [32]byte
 	merkleizeMemory = func(gindex uint64, depth uint64) [32]byte {
-		if depth == 64-pageAddrSize {
-			pageKey := gindex & ((1 << (64 - pageAddrSize)) - 1)
+		if depth == pageKeySize {
+			pageKey := gindex & ((1 << pageKeySize) - 1)
 			return merkleizePage(state.Memory[pageKey])
 		}
 		left := gindex << 1
@@ -84,20 +87,22 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		if _, ok := pageBranches[left]; ok {
 			leftRoot = merkleizeMemory(left, depth+1)
 		} else {
-			leftRoot = zeroHashes[64-pageAddrSize-depth]
+			leftRoot = zeroHashes[pageKeySize-depth+(pageAddrSize-5)]
 		}
 		if _, ok := pageBranches[right]; ok {
 			rightRoot = merkleizeMemory(right, depth+1)
 		} else {
-			rightRoot = zeroHashes[64-pageAddrSize-depth]
+			rightRoot = zeroHashes[pageKeySize-depth+(pageAddrSize-5)]
 		}
 		return so.Remember(leftRoot, rightRoot)
 	}
 
-	memoryRoot := merkleizeMemory(1, 0)
+	fmt.Println("----- start registers -----")
 	registersRoot := merkleize(5, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.Registers[index])
 	})
+	fmt.Println("----- end registers -----")
+	memoryRoot := merkleizeMemory(1, 0)
 	csrRoot := merkleize(12, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.CSR[index])
 	})
