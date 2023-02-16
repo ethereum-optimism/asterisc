@@ -66,6 +66,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 
 	so := oracle.NewStateOracle()
 	pre := slow.VMSubState{StateRoot: vmState.Merkleize(so)}
+	so.BuildAccessList(true)
 
 	for i := 0; i < 10_000; i++ {
 		require.Equal(t, slow.VMSubState{StateRoot: pre.StateRoot}, pre, "vm state must be clean at start of instruction")
@@ -73,7 +74,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 
 		for i := 0; i < 1000; i++ {
 			// build access list while we run the sub-step on the full oracle data
-			so.BuildAccessList(true)
+			//so.BuildAccessList(true)
 			post := slow.SubStep(pre, so)
 			fmt.Println()
 			fmt.Println("------------")
@@ -82,6 +83,8 @@ func runSlowTestSuite(t *testing.T, path string) {
 			fmt.Printf("state stack depth:  %d\n", post.StateStackDepth)
 			fmt.Printf("state stack gindex: %b\n", post.StateStackGindex.ToBig())
 			fmt.Printf("state gindex:       %b\n", post.StateGindex.ToBig())
+
+			//fmt.Println(so.Dump(post.StateRoot))
 
 			// now run the step again, but on the access-list version of the oracle
 			//al := so.AccessList()

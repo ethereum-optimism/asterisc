@@ -250,8 +250,11 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	rdValue := s.RdValue
 	pc := s.PC
 	instr := s.Instr
+	fmt.Printf("slow PC: %s\n", (*uint256.Int)(&pc).Hex())
+	fmt.Printf("slow INSTR: %s\n", (*uint256.Int)(&instr).Hex())
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
+	fmt.Printf("slow OPCODE: %s\n", (*uint256.Int)(&opcode).Hex())
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
 	rs1 := parseRs1(instr) // source register 1 index
@@ -284,8 +287,8 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadInstr:
 		dest = destInstr
-		gindex1 = makeMemGindex(s.PC)
-		offset = 0
+		offset, gindex1, gindex2 = memToStateOp(pc, toU64(4))
+		signed = false
 		fmt.Printf("%b\n", gindex1.ToBig())
 		size = toU64(4)
 		subIndex = add64(subIndex, toU64(1))

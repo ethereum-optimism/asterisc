@@ -1,6 +1,8 @@
 package fast
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func Step(s *VMState) {
 	if s.Exited {
@@ -16,8 +18,12 @@ func Step(s *VMState) {
 
 	pc := s.PC
 	instr := s.loadMem(pc, 4, false) // raw instruction
+
+	fmt.Printf("fast PC: %x\n", pc)
+	fmt.Printf("fast INSTR: %x\n", instr)
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
+	fmt.Printf("fast OPCODE: %x\n", opcode)
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
 	rs1 := parseRs1(instr) // source register 1 index
