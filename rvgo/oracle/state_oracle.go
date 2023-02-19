@@ -128,6 +128,30 @@ func (s *StateOracle) Dump(stateRoot [32]byte) string {
 	return out.String()
 }
 
+func (s *StateOracle) Diff(a [32]byte, b [32]byte, gindex uint64) {
+	if a == b {
+		return
+	}
+	vA, okA := s.data[a]
+	vB, okB := s.data[b]
+	if okA {
+		if okB {
+			s.Diff(vA[0], vB[0], gindex<<1)
+			s.Diff(vA[1], vB[1], (gindex<<1)|1)
+		} else {
+			fmt.Printf("%b: a = (%x, %x), b missing\n", gindex, vA[0], vA[1])
+		}
+	} else {
+		if okB {
+			fmt.Printf("%b: b = (%x, %x), a missing\n", gindex, vB[0], vB[1])
+		} else {
+			if a != b {
+				fmt.Printf("%b: different:\n  a = %x\n  b = %x\n", gindex, a, b)
+			}
+		}
+	}
+}
+
 var _ VMStateOracle = (*StateOracle)(nil)
 
 func NewStateOracle() *StateOracle {
@@ -162,7 +186,7 @@ func (s *StateOracle) Remember(left [32]byte, right [32]byte) [32]byte {
 		return key
 	}
 	key := crypto.Keccak256Hash(left[:], right[:])
-	fmt.Printf("%x %x -> %x\n", left[:], right[:], key[:])
+	//fmt.Printf("%x %x -> %x\n", left[:], right[:], key[:])
 	s.data[key] = value
 	s.reverse[value] = key
 	return key

@@ -87,6 +87,13 @@ func makeRegisterGindex(register U64) U256 {
 	return or(shl(registersGindex, toU256(5)), U256(register))
 }
 
+func makeCSRGindex(num U64) U256 {
+	if x := U256(num); x.Uint64() >= 4096 {
+		panic("there are only 4096 valid CSR registers")
+	}
+	return or(shl(csrGindex, toU256(12)), U256(num))
+}
+
 func memToStateOp(memIndex U64, size U64) (offset uint8, gindex1, gindex2 U256) {
 	gindex1 = makeMemGindex(memIndex)
 	offset = uint8(and64(memIndex, toU64(31)).val())
@@ -107,6 +114,9 @@ var (
 	destRdvalue  = toU64(5)
 	destSysReg   = toU64(6)
 	destHeapIncr = toU64(7)
+	destCSRRW    = toU64(8)
+	destCSRRS    = toU64(9)
+	destCSRRC    = toU64(10)
 )
 
 func encodePacked(v U64) (out [8]byte) {
@@ -125,6 +135,8 @@ func decodeU64(v []byte) (out U64) {
 }
 
 func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
+	//fmt.Printf("STATE rdvalue %x\n", s.RdValue.val())
+	//fmt.Printf("STATE value %x\n", s.Value.val())
 	// this first part with state stack machine can be written in solidity - it's heavy on memory/calldata interactions.
 	if s.StateStackGindex.Lt(&s.StateGindex) {
 		// READING MODE: if the stack gindex is lower than target, then traverse to target
@@ -171,8 +183,23 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		} else {
 			s.Gindex1 = U256{}
 
-			// special case: increment before writing, and remember as first syscall reg
-			if s.Dest == destHeapIncr {
+			switch s.Dest {
+			case destCSRRW:
+				// special case: CSRRW - read and write bits
+				s.RdValue = decodeU64(s.StateValue[:8])
+				s.Dest = destNone
+			case destCSRRS:
+				// special case: CSRRS - read and set bits
+				s.RdValue = decodeU64(s.StateValue[:8])
+				s.Value = or64(s.RdValue, s.Value) // set bits
+				s.Dest = destNone
+			case destCSRRC:
+				// special case: CSRRC - read and clear bits
+				s.RdValue = decodeU64(s.StateValue[:8])
+				s.Value = and64(s.RdValue, not64(s.Value)) // clear bits
+				s.Dest = destNone
+			case destHeapIncr:
+				// special case: increment before writing, and remember as first syscall reg
 				s.Value = add64(s.Value, decodeU64(s.StateValue[:8]))
 				s.SyscallRegs[0] = s.Value
 				s.Dest = destNone
@@ -182,6 +209,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			if s.Dest == destNone { // writing
 				// note: StateValue holds the old 32 bytes, some of which may stay the same
 				v := encodePacked(s.Value)
+				//fmt.Printf("writing %x\n", s.Value.val())
 				copy(s.StateValue[s.Offset:], v[:s.Size])
 				s.StateGindex = toU256(1)
 			} else { // reading
@@ -235,7 +263,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		case destRs1Value:
 			s.Rs1Value = val
 		case destRs2Value:
-			s.Rs1Value = val
+			s.Rs2Value = val
 		case destRdvalue:
 			s.RdValue = val
 		case destSysReg:
@@ -250,11 +278,11 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	rdValue := s.RdValue
 	pc := s.PC
 	instr := s.Instr
-	fmt.Printf("slow PC: %s\n", (*uint256.Int)(&pc).Hex())
-	fmt.Printf("slow INSTR: %s\n", (*uint256.Int)(&instr).Hex())
+	//fmt.Printf("slow PC: %s\n", (*uint256.Int)(&pc).Hex())
+	//fmt.Printf("slow INSTR: %s\n", (*uint256.Int)(&instr).Hex())
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
-	fmt.Printf("slow OPCODE: %s\n", (*uint256.Int)(&opcode).Hex())
+	//fmt.Printf("slow OPCODE: %s\n", (*uint256.Int)(&opcode).Hex())
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
 	rs1 := parseRs1(instr) // source register 1 index
@@ -262,6 +290,8 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	funct7 := parseFunct7(instr)
 	rs1Value := s.Rs1Value
 	rs2Value := s.Rs2Value
+	//fmt.Printf("slow rs1 value: %s\n", (*uint256.Int)(&rs1Value).Hex())
+	//fmt.Printf("slow rs2 value: %s\n", (*uint256.Int)(&rs2Value).Hex())
 
 	syscallArgsI := s.SyscallArgsI
 	syscallRegs := s.SyscallRegs
@@ -275,6 +305,8 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	var value U64
 	var dest U64
 	var offset uint8
+	//fmt.Printf("sub-step %d\n", subIndex.val())
+	//fmt.Println("reset value")
 
 	// run the next step
 	switch subIndex {
@@ -289,17 +321,21 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		dest = destInstr
 		offset, gindex1, gindex2 = memToStateOp(pc, toU64(4))
 		signed = false
-		fmt.Printf("%b\n", gindex1.ToBig())
 		size = toU64(4)
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs1:
 		dest = destRs1Value
 		gindex1 = makeRegisterGindex(rs1)
 		offset = 0
+		signed = false
+		size = toU64(8)
 		subIndex = add64(subIndex, toU64(1))
 	case StepLoadRs2:
 		dest = destRs2Value
 		gindex1 = makeRegisterGindex(rs2)
+		offset = 0
+		signed = false
+		size = toU64(8)
 		subIndex = add64(subIndex, toU64(1))
 	case StepOpcode:
 		switch opcode.val() {
@@ -319,6 +355,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 			size = shl64(toU64(1), funct3)
 			value = rs2Value
 			memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
+			dest = destNone
 			offset, gindex1, gindex2 = memToStateOp(memIndex, size)
 			pc = add64(pc, toU64(4))
 			subIndex = StepWritePC
@@ -365,7 +402,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 				switch funct7.val() {
 				case 0x00: // 0000000 = SRLI
 					rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
-				case 0x20: // 0100000 == SRAI
+				case 0x20: // 0100000 = SRAI
 					rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
 				}
 			case 6: // 110 = ORI
@@ -556,36 +593,25 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 					subIndex = StepWriteRd
 				}
 			default: // CSR instructions
-				switch funct3.val() {
-				case 1: // 001 = CSRRW
-				case 2: // 010 = CSRRS  a.k.a. SYSTEM instruction
-					// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-				case 3: // 011 = CSRRC
-				case 5: // 101 = CSRRWI
-				case 6: // 110 = CSRRSI
-				case 7: // 111 = CSRRCI
+				imm := parseCSSR(instr)
+				value = rs1
+				if iszero64(and64(funct3, toU64(4))) {
+					value = rs1Value
 				}
+				switch and64(funct3, toU64(3)).val() {
+				case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
+					dest = destCSRRW
+				case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
+					dest = destCSRRS
+				case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
+					dest = destCSRRC // v=0 will be no-op
+				}
+				offset = 0
+				size = toU64(8)
+				gindex1 = makeCSRGindex(imm)
+				// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
 				pc = add64(pc, toU64(4))
 				subIndex = StepWriteRd
-			}
-
-			switch funct3.val() {
-			case 0: // 000 = ECALL/EBREAK
-				// TODO: I type instruction
-				//000000000000 1110011 ECALL
-				//000000000001 1110011 EBREAK
-			case 1: // 001 = CSRRW
-			case 2: // 010 = CSRRS  a.k.a. SYSTEM instruction
-				// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-			case 3: // 011 = CSRRC
-			case 5: // 101 = CSRRWI
-			case 6: // 110 = CSRRSI
-			case 7: // 111 = CSRRCI
-			}
-			switch funct3.val() {
-			case 0:
-				// syscall
-			default:
 			}
 		case 0b0101111: // RV32A and RV32A atomic operations extension
 			// TODO atomic operations
@@ -625,7 +651,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 		}
 	case StepLoadSyscallArgs:
 		switch syscallArgsI {
-		case 9: // keep loading register arguments until we have loaded them all
+		case 8: // keep loading register arguments until we have loaded them all
 			subIndex = StepRunSyscall
 		default:
 			dest = destSysReg
@@ -708,6 +734,7 @@ func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
 	s.Instr = instr
 	s.Rs1Value = rs1Value
 	s.Rs2Value = rs2Value
+	s.RdValue = rdValue
 	s.Gindex1 = gindex1
 	s.Gindex2 = gindex2
 	s.Offset = offset

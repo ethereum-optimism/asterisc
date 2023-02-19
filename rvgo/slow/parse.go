@@ -70,3 +70,7 @@ func parseRs2(instr U64) U64 {
 func parseFunct7(instr U64) U64 {
 	return shr64(instr, toU64(25))
 }
+
+func parseCSSR(instr U64) U64 {
+	return shr64(instr, toU64(20))
+}

@@ -97,11 +97,9 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		return so.Remember(leftRoot, rightRoot)
 	}
 
-	fmt.Println("----- start registers -----")
 	registersRoot := merkleize(5, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.Registers[index])
 	})
-	fmt.Println("----- end registers -----")
 	memoryRoot := merkleizeMemory(1, 0)
 	csrRoot := merkleize(12, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.CSR[index])

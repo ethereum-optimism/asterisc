@@ -19,11 +19,11 @@ func Step(s *VMState) {
 	pc := s.PC
 	instr := s.loadMem(pc, 4, false) // raw instruction
 
-	fmt.Printf("fast PC: %x\n", pc)
-	fmt.Printf("fast INSTR: %x\n", instr)
+	//fmt.Printf("fast PC: %x\n", pc)
+	//fmt.Printf("fast INSTR: %x\n", instr)
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
-	fmt.Printf("fast OPCODE: %x\n", opcode)
+	//fmt.Printf("fast OPCODE: %x\n", opcode)
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
 	rs1 := parseRs1(instr) // source register 1 index
@@ -31,6 +31,9 @@ func Step(s *VMState) {
 	funct7 := parseFunct7(instr)
 	rs1Value := s.Registers[rs1] // loaded source registers. Only load if rs1/rs2 are not zero.
 	rs2Value := s.Registers[rs2]
+
+	//fmt.Printf("fast rs1 value: %x\n", rs1Value)
+	//fmt.Printf("fast rs2 value: %x\n", rs2Value)
 
 	switch opcode {
 	case 0b0000011: // memory loading
@@ -295,39 +298,20 @@ func Step(s *VMState) {
 			}
 		default: // CSR instructions
 			imm := parseCSSR(instr)
-			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-			switch funct3 {
-			case 1: // 001 = CSRRW = "atomic Read/Write bits in CSR"
-				s.CSR[imm] = rs1Value
-				if rd != 0 {
-					rdValue = s.CSR[imm]
-				}
-			case 2: // 010 = CSRRS = "atomic Read and Set bits in CSR"
-				rdValue = s.CSR[imm]
-				if rs1 != 0 {
-					s.CSR[imm] |= rs1Value
-				}
-			case 3: // 011 = CSRRC = "atomic Read and Clear Bits in CSR"
-				rdValue = s.CSR[imm]
-				if rs1 != 0 {
-					s.CSR[imm] &^= rs1Value
-				}
-			case 5: // 101 = CSRRWI
-				s.CSR[imm] = rs1 // rs1 is treated as 5 bit immediate value here
-				if rd != 0 {
-					rdValue = s.CSR[imm]
-				}
-			case 6: // 110 = CSRRSI
-				rdValue = s.CSR[imm]
-				if rs1 != 0 {
-					s.CSR[imm] |= rs1 // rs1 is treated as 5 bit immediate value here
-				}
-			case 7: // 111 = CSRRCI
-				rdValue = s.CSR[imm]
-				if rs1 != 0 {
-					s.CSR[imm] &^= rs1 // rs1 is treated as 5 bit immediate value here
-				}
+			rdValue = s.CSR[imm] // rd=0 will be no-op
+			value = rs1
+			if iszero64(and64(funct3, toU64(4))) {
+				value = rs1Value
 			}
+			switch and64(funct3, toU64(3)) {
+			case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
+				s.CSR[imm] = value
+			case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
+				s.CSR[imm] |= value // v=0 will be no-op
+			case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
+				s.CSR[imm] &^= value // v=0 will be no-op
+			}
+			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
 			pc = add64(pc, toU64(4))
 			s.writeRegister(rd, rdValue)
 			s.PC = pc

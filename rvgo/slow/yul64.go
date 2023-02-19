@@ -92,7 +92,7 @@ func div64(x, y U64) (out U64) {
 }
 
 func sdiv64(x, y U64) (out U64) { // note: signed overflow semantics are the same between Go and EVM assembly
-	out = u256ToU64(sdiv(U256(x), U256(y)))
+	out = u256ToU64(sdiv(signExtend64To256(x), signExtend64To256(y)))
 	return
 }
 
@@ -102,7 +102,7 @@ func mod64(x, y U64) (out U64) {
 }
 
 func smod64(x, y U64) (out U64) {
-	out = u256ToU64(smod(U256(x), U256(y)))
+	out = u256ToU64(smod(signExtend64To256(x), signExtend64To256(y)))
 	return
 }
 

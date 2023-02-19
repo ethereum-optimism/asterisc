@@ -70,19 +70,19 @@ func runSlowTestSuite(t *testing.T, path string) {
 
 	for i := 0; i < 10_000; i++ {
 		require.Equal(t, slow.VMSubState{StateRoot: pre.StateRoot}, pre, "vm state must be clean at start of instruction")
-		//fmt.Printf("pc: 0x%x\n", vmState.PC)
+		fmt.Printf("next step - pc: 0x%x\n", vmState.PC)
 
 		for i := 0; i < 1000; i++ {
 			// build access list while we run the sub-step on the full oracle data
 			//so.BuildAccessList(true)
 			post := slow.SubStep(pre, so)
-			fmt.Println()
-			fmt.Println("------------")
-			fmt.Printf("state sub step: %d\n", post.SubIndex)
-			fmt.Printf("state value: %x\n", post.StateValue[:])
-			fmt.Printf("state stack depth:  %d\n", post.StateStackDepth)
-			fmt.Printf("state stack gindex: %b\n", post.StateStackGindex.ToBig())
-			fmt.Printf("state gindex:       %b\n", post.StateGindex.ToBig())
+			//fmt.Println()
+			//fmt.Println("------------")
+			//fmt.Printf("state sub step: %d\n", post.SubIndex)
+			//fmt.Printf("state value: %x\n", post.StateValue[:])
+			//fmt.Printf("state stack depth:  %d\n", post.StateStackDepth)
+			//fmt.Printf("state stack gindex: %b\n", post.StateStackGindex.ToBig())
+			//fmt.Printf("state gindex:       %b\n", post.StateGindex.ToBig())
 
 			//fmt.Println(so.Dump(post.StateRoot))
 
@@ -102,7 +102,11 @@ func runSlowTestSuite(t *testing.T, path string) {
 		// Now run the same in fast mode
 		fast.Step(vmState)
 
-		require.Equal(t, pre.StateRoot, vmState.Merkleize(so), "slow state must match fast state")
+		fastRoot := vmState.Merkleize(so)
+		if pre.StateRoot != fastRoot {
+			so.Diff(pre.StateRoot, fastRoot, 1)
+		}
+		require.Equal(t, fmt.Sprintf("%x", pre.StateRoot), fmt.Sprintf("%x", fastRoot), "slow state must match fast state")
 
 		if vmState.Exited {
 			break
