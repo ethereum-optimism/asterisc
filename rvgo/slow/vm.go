@@ -60,10 +60,10 @@ func memToStateOp(memIndex U64, size U64) (offset uint8, gindex1, gindex2 U256) 
 var (
 	destRead     = toU64(0)
 	destWrite    = toU64(1)
-	destHeapIncr = toU64(7)
-	destCSRRW    = toU64(8)
-	destCSRRS    = toU64(9)
-	destCSRRC    = toU64(10)
+	destHeapIncr = toU64(2)
+	destCSRRW    = toU64(3)
+	destCSRRS    = toU64(4)
+	destCSRRC    = toU64(5)
 )
 
 func encodePacked(v U64) (out [8]byte) {
