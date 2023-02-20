@@ -254,7 +254,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 
 			// brk(0) changes nothing about the memory, and returns the current page break
 			v := shl64(toU64(1), toU64(30)) // set program break at 1 GiB
-			writeRegister(toU64(0), v)
+			writeRegister(toU64(10), v)
 		case 222: // mmap
 			// A0 = addr (hint)
 			addr := loadRegister(toU64(10))
@@ -283,6 +283,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 	pc := getPC()
 	instr := loadMem(pc, toU64(4), false)
 
+	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
@@ -576,7 +577,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
 				writeCSR(imm, value)
 			case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
-				writeCSR(imm, or64(rdValue, value))
+				writeCSR(imm, or64(rdValue, value)) // v=0 will be no-op
 			case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
 				writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
 			}
@@ -617,6 +618,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		//	}
 		//case 0b001: // FENCE.I
 		//}
+		// We can no-op FENCE, there's nothing to synchronize
 		pc = add64(pc, toU64(4))
 		//writeRegister(rd, rdValue)
 		setPC(pc)

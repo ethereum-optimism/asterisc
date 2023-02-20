@@ -176,6 +176,26 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 	}
 }
 
+func (state *VMState) getPC() uint64 {
+	return state.PC
+}
+
+func (state *VMState) setPC(pc uint64) {
+	state.PC = pc
+}
+
+func (state *VMState) loadRegister(reg uint64) uint64 {
+	return state.Registers[reg]
+}
+
+func (state *VMState) writeCSR(num uint64, v uint64) {
+	state.CSR[num] = v
+}
+
+func (state *VMState) readCSR(num uint64) uint64 {
+	return state.CSR[num]
+}
+
 func (state *VMState) writeRegister(reg uint64, v uint64) {
 	//fmt.Printf("rd write to %d value: 0x%x\n", reg, v)
 	if reg == 0 { // reg 0 must stay 0
