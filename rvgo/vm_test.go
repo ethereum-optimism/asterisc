@@ -2,7 +2,6 @@ package fast
 
 import (
 	"debug/elf"
-	"fmt"
 	"github.com/protolambda/asterisc/rvgo/oracle"
 	"github.com/protolambda/asterisc/rvgo/slow"
 	"os"
@@ -66,12 +65,17 @@ func runSlowTestSuite(t *testing.T, path string) {
 
 	so := oracle.NewStateOracle()
 	pre := vmState.Merkleize(so)
-	so.BuildAccessList(true)
+
+	maxAccessListLen := 0
 
 	for i := 0; i < 10_000; i++ {
-		fmt.Printf("next step - pc: 0x%x\n", vmState.PC)
+		so.BuildAccessList(true)
+		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
 		post := slow.Step(pre, so)
+
+		al := so.AccessList()
+		alo := &oracle.AccessListOracle{AccessList: al}
 
 		// Now run the same in fast mode
 		fast.Step(vmState)
@@ -82,12 +86,13 @@ func runSlowTestSuite(t *testing.T, path string) {
 			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
 		}
 
-		al := so.AccessList()
-		alo := &oracle.AccessListOracle{AccessList: al}
 		post2 := slow.Step(pre, alo)
 		if post2 != fastRoot {
 			so.Diff(post2, fastRoot, 1)
 			t.Fatalf("access-list slow state %x must match fast state %x", post2, fastRoot)
+		}
+		if len(al) > maxAccessListLen {
+			maxAccessListLen = len(al)
 		}
 
 		pre = post
@@ -96,6 +101,9 @@ func runSlowTestSuite(t *testing.T, path string) {
 			break
 		}
 	}
+
+	t.Logf("max access-list length: %d", maxAccessListLen)
+
 	require.True(t, vmState.Exited, "ran out of steps")
 	if vmState.Exit != 0 {
 		testCaseNum := vmState.Exit >> 1

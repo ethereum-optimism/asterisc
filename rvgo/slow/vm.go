@@ -193,7 +193,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			write(targetGindex, rootGindex, stateValue, stateStackHash)
 		case destRead:
 			a := decodeU64(stateValue[0:secondChunkBytes.val()])
-			out = or64(shl64(out, shl64(secondChunkBytes, toU64(3))), a)
+			out = or64(shl64(a, shl64(firstChunkBytes, toU64(3))), out)
 		}
 		return
 	}

@@ -222,6 +222,7 @@ func (al *AccessListOracle) Get(key [32]byte) (a, b [32]byte) {
 	if access.Key != key {
 		panic("key mismatch")
 	}
+	al.Index += 1
 	return access.Value[0], access.Value[1]
 }
 
