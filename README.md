@@ -8,7 +8,7 @@ Or spelled out in asterisks: `******* amzing` (when it's complete :P)
 
 ## Work in progress
 
-This project is a work in progress. Maybe 20% complete.
+This project is a work in progress. Maybe 50% complete.
 
 TODO
 - [ ] Go:
@@ -25,7 +25,7 @@ TODO
   - [x] split Go into fast and slow mode
   - [ ] support syscalls
     - [x] memory brk/mmap
-    - [ ] exit
+    - [x] exit
     - [ ] extend w/ threading clone/futex/gettid/tgkil/tkill
     - [ ] extras
   - [ ] implement pre-image oracle by swapping a special memory region for the requested preimage
@@ -49,14 +49,12 @@ and emulates the disputed step inside the EVM to determine the correct state aft
 
 Asterisc consists of two parts:
 - `rvgo`: Go implementation of Risc-V emulator with tooling
-  - Fast-mode: Emulate 1 instruction per step
-  - Slow-mode: Run a single instruction in many *minimal* steps
-  - Tooling: merkleize VM state, collect access-list of a slow-mode step
+  - Fast-mode: Emulate 1 instruction per step, directly on a VM state
+  - Slow-mode: Emulate 1 instruction per step, on a VM state-oracle.
+  - Tooling: merkleize VM state, collect access-list of a slow-mode step, diff VM merkle-trees
 - `rvsol`: Solidity/Yul mirror of Go Risc-V slow-mode step that runs with access-list as input
 
-All VM state is merkleized into a single big binary merkle-trie.
-The state-root is then wrapped with some flat scratchpad data which maintains the intra-instruction 
-state when running in slow-mode or solidity.
+All VM state is merkleized into a single big structured binary merkle-trie.
 
 ### Why use Yul in solidity?
 
@@ -71,10 +69,6 @@ The use of YUL / "solidity assembly" is very convenient because:
 
 Emulating a program on top of merkleized key-value backed memory is expensive.
 When bisecting a program trace, you only need to produce a commitment to a few intermediate states, not all of them.
-
-However, once an instruction is reached, you can proof the evaluation of the instruction in smaller steps,
-to simplify the memory access down to a single preimage access:
-it's better to have more execution steps than more proof complexity.
 
 Note that slow mode and fast mode ALUs can be implemented exactly the same, just with different u64/u256 implementations.
 The slow mode matches the smart-contract behavior 1:1 and is useful for building the access-list
@@ -112,9 +106,7 @@ but doing so should stay stupid-simple & not negatively affect its primary purpo
 
 ## Asterisc status
 
-This is not an official Optimism or OP-Labs project, although it may become one in the future.
-This started as a toy-project by [@protolambda](https://github.com/protolambda/) during holidays to dive deep into
-Risc-V, the Go compiler and runtime, and fraud-proof VMs in general. And it then continued during weekends / spare time.
+This project is not (yet) a production-ready fault-proof system, and is developed during spare-time only.
 
 The end-game (pre-ZK) is for Ethereum L2 optimistic rollups to embed multiple fraud-proof modules to function as a "committee":
 if one of the members is corrupted due to a bug/vulnerability, then the system as a whole stays stable without rollbacks or human intervention.
