@@ -118,6 +118,10 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			}
 			stateStackGindex = shr(stateStackGindex, toU256(1))
 			if stateStackGindex == toU256(1) {
+				//if d, ok := so.(oracle.Differ); ok {
+				//	fmt.Println("state change")
+				//	d.Diff(stateRoot, stateValue, 1)
+				//}
 				stateRoot = stateValue
 			}
 		}
@@ -215,6 +219,10 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 	}
 
 	writeRegister := func(num U64, val U64) {
+		if iszero64(num) { // reg 0 must stay 0
+			// v is a HINT, but no hints are specified by standard spec, or used by us.
+			return
+		}
 		mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite, val)
 	}
 

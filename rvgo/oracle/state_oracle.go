@@ -17,6 +17,10 @@ type VMStateOracle interface {
 	Remember(left [32]byte, right [32]byte) [32]byte
 }
 
+type Differ interface {
+	Diff(a [32]byte, b [32]byte, gindex uint64)
+}
+
 type StateOracle struct {
 	data    map[[32]byte][2][32]byte
 	reverse map[[2][32]byte][32]byte

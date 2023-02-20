@@ -79,8 +79,17 @@ func runSlowTestSuite(t *testing.T, path string) {
 		fastRoot := vmState.Merkleize(so)
 		if post != fastRoot {
 			so.Diff(post, fastRoot, 1)
+			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
 		}
-		require.Equal(t, fmt.Sprintf("%x", post), fmt.Sprintf("%x", fastRoot), "slow state must match fast state")
+
+		al := so.AccessList()
+		alo := &oracle.AccessListOracle{AccessList: al}
+		post2 := slow.Step(pre, alo)
+		if post2 != fastRoot {
+			so.Diff(post2, fastRoot, 1)
+			t.Fatalf("access-list slow state %x must match fast state %x", post2, fastRoot)
+		}
+
 		pre = post
 
 		if vmState.Exited {
