@@ -19,11 +19,8 @@ func Step(s *VMState) {
 	pc := s.PC
 	instr := s.loadMem(pc, 4, false) // raw instruction
 
-	//fmt.Printf("fast PC: %x\n", pc)
-	//fmt.Printf("fast INSTR: %x\n", instr)
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
-	//fmt.Printf("fast OPCODE: %x\n", opcode)
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
 	rs1 := parseRs1(instr) // source register 1 index
@@ -32,6 +29,9 @@ func Step(s *VMState) {
 	rs1Value := s.Registers[rs1] // loaded source registers. Only load if rs1/rs2 are not zero.
 	rs2Value := s.Registers[rs2]
 
+	//fmt.Printf("fast PC: %x\n", pc)
+	//fmt.Printf("fast INSTR: %x\n", instr)
+	//fmt.Printf("fast OPCODE: %x\n", opcode)
 	//fmt.Printf("fast rs1 value: %x\n", rs1Value)
 	//fmt.Printf("fast rs2 value: %x\n", rs2Value)
 
@@ -291,6 +291,8 @@ func Step(s *VMState) {
 			switch shr64(instr, toU64(20)) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				sysCall(s)
+				pc = add64(pc, toU64(4))
+				s.PC = pc
 			default: // imm12 = 000000000001 EBREAK
 				// ignore breakpoint
 				pc = add64(pc, toU64(4))
@@ -393,5 +395,4 @@ func sysCall(s *VMState) {
 	default:
 		// TODO maybe revert if the syscall is unrecognized?
 	}
-	s.PC += 4
 }

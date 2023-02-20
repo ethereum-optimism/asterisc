@@ -9,54 +9,6 @@ import (
 	"github.com/protolambda/asterisc/rvgo/oracle"
 )
 
-type VMSubState struct {
-	SubIndex U64 // step in the instruction execution
-	PC       U64 // PC counter
-
-	Instr U64 // raw instruction
-
-	RdValue  U64 // destination register value to write
-	Rs1Value U64 // loaded source registers. Only load if rs1/rs2 are not zero.
-	Rs2Value U64 //
-
-	SyscallArgsI uint8
-	SyscallRegs  [8]U64 // load up to 6 syscall register args: A0,A1,A2,A3,A4,A5 and A6 (FID), A7 (EID)
-
-	StateRoot [32]byte // commits to state as structured binary tree
-
-	// State machine
-	StateGindex      U256     // target
-	StateStackHash   [32]byte // hash of previous traversed stack and last stack element
-	StateStackGindex U256     // to navigate the state loading/writing
-	StateStackDepth  uint8
-	StateValue       [32]byte
-
-	Scratch [8]byte
-
-	Gindex1 U256  // first leaf to read from or write to
-	Gindex2 U256  // second leaf to read from or write to
-	Offset  uint8 // offset: value might start anywhere in Gindex1 leaf, and overflow to Gindex2 leaf
-	Value   U64   // value to write
-	Signed  bool  // if value to read should be sign-extended
-	Size    uint8 // size of value to read, may be 1, 2, 4 or 8 bytes
-	Dest    U64   // destination to load a value back into
-}
-
-// sub index steps
-var (
-	StepLoadPC          = toU64(0)
-	StepLoadInstr       = toU64(1)
-	StepLoadRs1         = toU64(2)
-	StepLoadRs2         = toU64(3)
-	StepOpcode          = toU64(4)
-	StepLoadSyscallArgs = toU64(5)
-	StepRunSyscall      = toU64(6)
-	StepWriteSyscallRet = toU64(7)
-	StepWriteRd         = toU64(8)
-	StepWritePC         = toU64(9)
-	StepFinal           = toU64(10)
-)
-
 // tree:
 // ```
 //
@@ -106,13 +58,8 @@ func memToStateOp(memIndex U64, size U64) (offset uint8, gindex1, gindex2 U256) 
 }
 
 var (
-	destNone     = toU64(0)
-	destPc       = toU64(1)
-	destInstr    = toU64(2)
-	destRs1Value = toU64(3)
-	destRs2Value = toU64(4)
-	destRdvalue  = toU64(5)
-	destSysReg   = toU64(6)
+	destRead     = toU64(0)
+	destWrite    = toU64(1)
 	destHeapIncr = toU64(7)
 	destCSRRW    = toU64(8)
 	destCSRRS    = toU64(9)
@@ -134,616 +81,540 @@ func decodeU64(v []byte) (out U64) {
 	return
 }
 
-func SubStep(s VMSubState, so oracle.VMStateOracle) VMSubState {
-	//fmt.Printf("STATE rdvalue %x\n", s.RdValue.val())
-	//fmt.Printf("STATE value %x\n", s.Value.val())
-	// this first part with state stack machine can be written in solidity - it's heavy on memory/calldata interactions.
-	if s.StateStackGindex.Lt(&s.StateGindex) {
+func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
+	stateRoot = s
+	read := func(stateStackGindex U256, stateGindex U256, stateStackDepth uint8) (stateValue [32]byte, stateStackHash [32]byte) {
 		// READING MODE: if the stack gindex is lower than target, then traverse to target
-		if s.StateStackGindex.Eq(uint256.NewInt(1)) {
-			s.StateValue = s.StateRoot
+		for stateStackGindex.Lt(&stateGindex) {
+			if stateStackGindex.Eq(uint256.NewInt(1)) {
+				stateValue = stateRoot
+			}
+			stateStackGindex = shl(stateStackGindex, toU256(1))
+			a, b := so.Get(stateValue)
+			if and(shr(stateGindex, toU256(stateStackDepth)), toU256(1)) != (U256{}) {
+				stateStackGindex = or(stateStackGindex, toU256(1))
+				stateValue = b
+				// keep track of where we have been, to use the trail to go back up the stack when writing
+				stateStackHash = so.Remember(stateStackHash, a)
+			} else {
+				stateValue = a
+				// keep track of where we have been, to use the trail to go back up the stack when writing
+				stateStackHash = so.Remember(stateStackHash, b)
+			}
+			stateStackDepth -= 1
 		}
-		s.StateStackGindex = shl(s.StateStackGindex, toU256(1))
-		a, b := so.Get(s.StateValue)
-		if and(shr(s.StateGindex, toU256(s.StateStackDepth)), toU256(1)) != (U256{}) {
-			s.StateStackGindex = or(s.StateStackGindex, toU256(1))
-			s.StateValue = b
-			// keep track of where we have been, to use the trail to go back up the stack when writing
-			s.StateStackHash = so.Remember(s.StateStackHash, a)
-		} else {
-			s.StateValue = a
-			// keep track of where we have been, to use the trail to go back up the stack when writing
-			s.StateStackHash = so.Remember(s.StateStackHash, b)
-		}
-		s.StateStackDepth -= 1
-		return s
-	} else if s.StateStackGindex.Gt(&s.StateGindex) {
+		return
+	}
+
+	write := func(stateStackGindex U256, stateGindex U256, stateValue [32]byte, stateStackHash [32]byte) {
 		// WRITING MODE: if the stack gindex is higher than the target, then traverse back to root and update along the way
-		prevStackHash, prevSibling := so.Get(s.StateStackHash)
-		s.StateStackHash = prevStackHash
-		if eq(and(s.StateStackGindex, toU256(1)), toU256(1)) != (U256{}) {
-			s.StateValue = so.Remember(prevSibling, s.StateValue)
-		} else {
-			s.StateValue = so.Remember(s.StateValue, prevSibling)
-		}
-		s.StateStackGindex = shr(s.StateStackGindex, toU256(1))
-		if s.StateStackGindex == toU256(1) {
-			s.StateRoot = s.StateValue
-		}
-		return s
-	}
-
-	// if we want to read/write a value at the given gindex, then try.
-	if s.Gindex1 != (U256{}) {
-		if s.Gindex1 != s.StateGindex {
-			// if we have not reached the gindex yet, then we need to start traversal to it
-			s.StateStackGindex = toU256(1)
-			s.StateStackDepth = uint8(s.Gindex1.BitLen()) - 2
-			s.StateGindex = s.Gindex1
-		} else {
-			s.Gindex1 = U256{}
-
-			switch s.Dest {
-			case destCSRRW:
-				// special case: CSRRW - read and write bits
-				s.RdValue = decodeU64(s.StateValue[:8])
-				s.Dest = destNone
-			case destCSRRS:
-				// special case: CSRRS - read and set bits
-				s.RdValue = decodeU64(s.StateValue[:8])
-				s.Value = or64(s.RdValue, s.Value) // set bits
-				s.Dest = destNone
-			case destCSRRC:
-				// special case: CSRRC - read and clear bits
-				s.RdValue = decodeU64(s.StateValue[:8])
-				s.Value = and64(s.RdValue, not64(s.Value)) // clear bits
-				s.Dest = destNone
-			case destHeapIncr:
-				// special case: increment before writing, and remember as first syscall reg
-				s.Value = add64(s.Value, decodeU64(s.StateValue[:8]))
-				s.SyscallRegs[0] = s.Value
-				s.Dest = destNone
+		for stateStackGindex.Gt(&stateGindex) {
+			prevStackHash, prevSibling := so.Get(stateStackHash)
+			stateStackHash = prevStackHash
+			if eq(and(stateStackGindex, toU256(1)), toU256(1)) != (U256{}) {
+				stateValue = so.Remember(prevSibling, stateValue)
+			} else {
+				stateValue = so.Remember(stateValue, prevSibling)
 			}
-
-			// we reached the value, now load/write it
-			if s.Dest == destNone { // writing
-				// note: StateValue holds the old 32 bytes, some of which may stay the same
-				v := encodePacked(s.Value)
-				//fmt.Printf("writing %x\n", s.Value.val())
-				copy(s.StateValue[s.Offset:], v[:s.Size])
-				s.StateGindex = toU256(1)
-			} else { // reading
-				copy(s.Scratch[:], s.StateValue[s.Offset:])
+			stateStackGindex = shr(stateStackGindex, toU256(1))
+			if stateStackGindex == toU256(1) {
+				stateRoot = stateValue
 			}
 		}
-		return s
 	}
 
-	if s.Gindex2 != (U256{}) {
-		if s.Gindex2 != s.StateGindex {
-			// if we have not reached the gindex yet, then we need to start traversal to it
-			s.StateStackGindex = toU256(1)
-			s.StateStackDepth = uint8(s.Gindex2.BitLen()) - 2
-			s.StateGindex = s.Gindex2
-		} else {
-			s.Gindex2 = U256{}
+	mutate := func(gindex1 U256, gindex2 U256, offset uint8, size U64, dest U64, value U64) (out U64) {
+		// if we have not reached the gindex yet, then we need to start traversal to it
+		rootGindex := toU256(1)
+		stateStackDepth := uint8(gindex1.BitLen()) - 2
+		targetGindex := gindex1
 
-			firstChunkBytes := 32 - s.Offset
-			if firstChunkBytes > s.Size {
-				firstChunkBytes = s.Size
+		stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
+
+		switch dest {
+		case destCSRRW:
+			// special case: CSRRW - read and write bits
+			out = decodeU64(stateValue[:8])
+			dest = destWrite
+		case destCSRRS:
+			// special case: CSRRS - read and set bits
+			out = decodeU64(stateValue[:8])
+			value = or64(out, value) // set bits
+			dest = destWrite
+		case destCSRRC:
+			// special case: CSRRC - read and clear bits
+			out = decodeU64(stateValue[:8])
+			value = and64(out, not64(value)) // clear bits
+			dest = destWrite
+		case destHeapIncr:
+			// special case: increment before writing, and output result
+			value = add64(value, decodeU64(stateValue[:8]))
+			out = value
+			dest = destWrite
+		}
+
+		firstChunkBytes := sub64(toU64(32), toU64(offset))
+		if gt64(firstChunkBytes, size) != (U64{}) {
+			firstChunkBytes = size
+		}
+
+		// we reached the value, now load/write it
+		switch dest {
+		case destWrite:
+			// note: stateValue holds the old 32 bytes, some of which may stay the same
+			v := encodePacked(value)
+			copy(stateValue[offset:], v[:size.val()])
+			write(targetGindex, rootGindex, stateValue, stateStackHash)
+		case destRead:
+			out = decodeU64(stateValue[offset : uint64(offset)+firstChunkBytes.val()])
+		}
+
+		if gindex2 == (U256{}) {
+			return
+		}
+
+		stateStackDepth = uint8(gindex2.BitLen()) - 2
+		targetGindex = gindex2
+
+		stateValue, stateStackHash = read(rootGindex, targetGindex, stateStackDepth)
+
+		secondChunkBytes := sub64(size, firstChunkBytes)
+
+		// we reached the value, now load/write it
+		switch dest {
+		case destWrite:
+			// note: StateValue holds the old 32 bytes, some of which may stay the same
+			v := encodePacked(value)
+			copy(stateValue[:secondChunkBytes.val()], v[firstChunkBytes.val():size.val()])
+			write(targetGindex, rootGindex, stateValue, stateStackHash)
+		case destRead:
+			a := decodeU64(stateValue[0:secondChunkBytes.val()])
+			out = or64(shl64(out, shl64(secondChunkBytes, toU64(3))), a)
+		}
+		return
+	}
+
+	loadMem := func(addr U64, size U64, signed bool) (out U64) {
+		offset, gindex1, gindex2 := memToStateOp(addr, size)
+		out = mutate(gindex1, gindex2, offset, size, destRead, U64{})
+		if signed {
+			topBitIndex := sub64(shl64(size, toU64(3)), toU64(1))
+			out = signExtend64(out, topBitIndex)
+		}
+		return
+	}
+
+	storeMem := func(addr U64, size U64, value U64) {
+		offset, gindex1, gindex2 := memToStateOp(addr, size)
+		mutate(gindex1, gindex2, offset, size, destWrite, value)
+	}
+
+	loadRegister := func(num U64) (out U64) {
+		out = mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead, U64{})
+		return
+	}
+
+	writeRegister := func(num U64, val U64) {
+		mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite, val)
+	}
+
+	getPC := func() U64 {
+		return mutate(pcGindex, toU256(0), 0, toU64(8), destRead, U64{})
+	}
+
+	setPC := func(pc U64) {
+		mutate(pcGindex, toU256(0), 0, toU64(8), destWrite, pc)
+	}
+
+	readCSR := func(num U64) (out U64) {
+		out = mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead, U64{})
+		return
+	}
+
+	writeCSR := func(num U64, v U64) {
+		mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite, v)
+	}
+
+	sysCall := func() {
+		a7 := loadRegister(toU64(17))
+		switch a7.val() {
+		case 93: // exit
+			a0 := loadRegister(toU64(0))
+			mutate(exitGindex, toU256(0), 0, toU64(8), destWrite, a0)
+		case 214: // brk
+			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
+
+			// brk(0) changes nothing about the memory, and returns the current page break
+			v := shl64(toU64(1), toU64(30)) // set program break at 1 GiB
+			writeRegister(toU64(0), v)
+		case 222: // mmap
+			// A0 = addr (hint)
+			addr := loadRegister(toU64(10))
+			// A1 = n (length)
+			length := loadRegister(toU64(11))
+			// A2 = prot (memory protection type, can ignore)
+			// A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe assert the MAP_ANONYMOUS flag is set
+			// A4 = fd (file descriptor, can ignore because we support anon memory only)
+			// A5 = offset (offset in file, we don't support any non-anon memory, so we can ignore this)
+
+			// ignore: prot, flags, fd, offset
+			switch addr.val() {
+			case 0:
+				// no hint, allocate it ourselves, by as much as the requested length
+				heap := mutate(heapGindex, toU256(0), 0, toU64(8), destHeapIncr, length)
+				writeRegister(toU64(10), heap)
+			default:
+				// allow hinted memory address (leave it in A0 as return argument)
 			}
-			secondChunkBytes := s.Size - firstChunkBytes
-
-			// we reached the value, now load/write it
-			if s.Dest == destNone { // writing
-				// note: StateValue holds the old 32 bytes, some of which may stay the same
-				v := encodePacked(s.Value)
-				copy(s.StateValue[:secondChunkBytes], v[firstChunkBytes:s.Size])
-				s.StateGindex = toU256(1)
-			} else { // reading
-				copy(s.Scratch[firstChunkBytes:], s.StateValue[:secondChunkBytes])
-			}
+			writeRegister(toU64(11), toU64(0)) // no error
+		default:
+			// TODO maybe revert if the syscall is unrecognized?
 		}
-		return s
 	}
 
-	if s.Dest != destNone { // complete reading work if any
-		val := decodeU64(s.Scratch[:s.Size])
+	pc := getPC()
+	instr := loadMem(pc, toU64(4), false)
 
-		if s.Signed {
-			topBitIndex := (s.Size << 3) - 1
-			val = signExtend64(val, toU64(topBitIndex))
-		}
-
-		switch s.Dest {
-		case destPc:
-			s.PC = val
-		case destInstr:
-			s.Instr = val
-		case destRs1Value:
-			s.Rs1Value = val
-		case destRs2Value:
-			s.Rs2Value = val
-		case destRdvalue:
-			s.RdValue = val
-		case destSysReg:
-			s.SyscallRegs[s.SyscallArgsI] = val
-			s.SyscallArgsI += 1
-		}
-		s.Dest = destNone
-		return s
-	}
-
-	// unpacked sub-step state
-	rdValue := s.RdValue
-	pc := s.PC
-	instr := s.Instr
-	//fmt.Printf("slow PC: %s\n", (*uint256.Int)(&pc).Hex())
-	//fmt.Printf("slow INSTR: %s\n", (*uint256.Int)(&instr).Hex())
-	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
-	//fmt.Printf("slow OPCODE: %s\n", (*uint256.Int)(&opcode).Hex())
 	rd := parseRd(instr) // destination register index
 	funct3 := parseFunct3(instr)
 	rs1 := parseRs1(instr) // source register 1 index
 	rs2 := parseRs2(instr) // source register 2 index
 	funct7 := parseFunct7(instr)
-	rs1Value := s.Rs1Value
-	rs2Value := s.Rs2Value
-	//fmt.Printf("slow rs1 value: %s\n", (*uint256.Int)(&rs1Value).Hex())
-	//fmt.Printf("slow rs2 value: %s\n", (*uint256.Int)(&rs2Value).Hex())
+	rs1Value := loadRegister(rs1)
+	rs2Value := loadRegister(rs2)
 
-	syscallArgsI := s.SyscallArgsI
-	syscallRegs := s.SyscallRegs
-	subIndex := s.SubIndex
+	//fmt.Printf("slow PC: %x\n", pc)
+	//fmt.Printf("slow INSTR: %x\n", instr)
+	//fmt.Printf("slow OPCODE: %x\n", opcode)
+	//fmt.Printf("slow rs1 value: %x\n", rs1Value)
+	//fmt.Printf("slow rs2 value: %x\n", rs2Value)
 
-	// write-only sub-state. All reading/processing happens in state machinery above
-	var gindex1 U256
-	var gindex2 U256
-	var size U64
-	var signed bool
-	var value U64
-	var dest U64
-	var offset uint8
-	//fmt.Printf("sub-step %d\n", subIndex.val())
-	//fmt.Println("reset value")
-
-	// run the next step
-	switch subIndex {
-	case StepLoadPC:
-		dest = destPc
-		size = toU64(8)
-		signed = false
-		gindex1 = pcGindex
-		offset = 0
-		subIndex = add64(subIndex, toU64(1))
-	case StepLoadInstr:
-		dest = destInstr
-		offset, gindex1, gindex2 = memToStateOp(pc, toU64(4))
-		signed = false
-		size = toU64(4)
-		subIndex = add64(subIndex, toU64(1))
-	case StepLoadRs1:
-		dest = destRs1Value
-		gindex1 = makeRegisterGindex(rs1)
-		offset = 0
-		signed = false
-		size = toU64(8)
-		subIndex = add64(subIndex, toU64(1))
-	case StepLoadRs2:
-		dest = destRs2Value
-		gindex1 = makeRegisterGindex(rs2)
-		offset = 0
-		signed = false
-		size = toU64(8)
-		subIndex = add64(subIndex, toU64(1))
-	case StepOpcode:
-		switch opcode.val() {
-		case 0b0000011: // memory loading
-			// LB, LH, LW, LD, LBU, LHU, LWU
-			imm := parseImmTypeI(instr)
-			signed = iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
-			size = shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
-			memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-			dest = destRdvalue
-			offset, gindex1, gindex2 = memToStateOp(memIndex, size)
+	switch opcode.val() {
+	case 0b0000011: // memory loading
+		// LB, LH, LW, LD, LBU, LHU, LWU
+		imm := parseImmTypeI(instr)
+		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
+		size := shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
+		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
+		rdValue := loadMem(memIndex, size, signed)
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0100011: // memory storing
+		// SB, SH, SW, SD
+		imm := parseImmTypeS(instr)
+		size := shl64(toU64(1), funct3)
+		value := rs2Value
+		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
+		storeMem(memIndex, size, value)
+		pc = add64(pc, toU64(4))
+		setPC(pc)
+	case 0b1100011: // branching
+		branchHit := toU64(0)
+		switch funct3.val() {
+		case 0: // 000 = BEQ
+			branchHit = eq64(rs1Value, rs2Value)
+		case 1: // 001 = BNE
+			branchHit = and64(not64(eq64(rs1Value, rs2Value)), toU64(1))
+		case 4: // 100 = BLT
+			branchHit = slt64(rs1Value, rs2Value)
+		case 5: // 101 = BGE
+			branchHit = and64(not64(slt64(rs1Value, rs2Value)), toU64(1))
+		case 6: // 110 = BLTU
+			branchHit = lt64(rs1Value, rs2Value)
+		case 7: // 111 = BGEU
+			branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
+		}
+		switch branchHit.val() {
+		case 0:
 			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0100011: // memory storing
-			// SB, SH, SW, SD
-			imm := parseImmTypeS(instr)
-			size = shl64(toU64(1), funct3)
-			value = rs2Value
-			memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-			dest = destNone
-			offset, gindex1, gindex2 = memToStateOp(memIndex, size)
-			pc = add64(pc, toU64(4))
-			subIndex = StepWritePC
-		case 0b1100011: // branching
-			branchHit := toU64(0)
-			switch funct3.val() {
-			case 0: // 000 = BEQ
-				branchHit = eq64(rs1Value, rs2Value)
-			case 1: // 001 = BNE
-				branchHit = and64(not64(eq64(rs1Value, rs2Value)), toU64(1))
-			case 4: // 100 = BLT
-				branchHit = slt64(rs1Value, rs2Value)
-			case 5: // 101 = BGE
-				branchHit = and64(not64(slt64(rs1Value, rs2Value)), toU64(1))
-			case 6: // 110 = BLTU
-				branchHit = lt64(rs1Value, rs2Value)
-			case 7: // 111 = BGEU
-				branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
+		default:
+			imm := parseImmTypeB(instr)
+			// imm12 is a signed offset, in multiples of 2 bytes
+			pc = add64(pc, signExtend64(imm, toU64(11)))
+		}
+		// not like the other opcodes: nothing to write to rd register, and PC has already changed
+		setPC(pc)
+	case 0b0010011: // immediate arithmetic and logic
+		imm := parseImmTypeI(instr)
+		var rdValue U64
+		switch funct3.val() {
+		case 0: // 000 = ADDI
+			rdValue = add64(rs1Value, imm)
+		case 1: // 001 = SLLI
+			rdValue = shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+		case 2: // 010 = SLTI
+			rdValue = slt64(rs1Value, imm)
+		case 3: // 011 = SLTIU
+			rdValue = lt64(rs1Value, imm)
+		case 4: // 100 = XORI
+			rdValue = xor64(rs1Value, imm)
+		case 5: // 101 = SR~
+			switch funct7.val() {
+			case 0x00: // 0000000 = SRLI
+				rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+			case 0x20: // 0100000 = SRAI
+				rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
 			}
-			switch branchHit.val() {
-			case 0:
-				pc = add64(pc, toU64(4))
-			default:
-				imm := parseImmTypeB(instr)
-				// imm12 is a signed offset, in multiples of 2 bytes
-				pc = add64(pc, signExtend64(imm, toU64(11)))
+		case 6: // 110 = ORI
+			rdValue = or64(rs1Value, imm)
+		case 7: // 111 = ANDI
+			rdValue = and64(rs1Value, imm)
+		}
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0011011: // immediate arithmetic and logic signed 32 bit
+		imm := parseImmTypeI(instr)
+		var rdValue U64
+		switch funct3.val() {
+		case 0: // 000 = ADDIW
+			rdValue = mask32Signed64(add64(rs1Value, imm))
+		case 1: // 001 = SLLIW
+			rdValue = mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
+		case 5: // 101 = SR~
+			shamt := and64(imm, toU64(0x1F))
+			switch funct7.val() {
+			case 0x00: // 0000000 = SRLIW
+				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+			case 0x20: // 0100000 = SRAIW
+				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
 			}
-			// not like the other opcodes: nothing to write to rd register, and PC has already changed
-			subIndex = StepWritePC
-		case 0b0010011: // immediate arithmetic and logic
-			imm := parseImmTypeI(instr)
+		}
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0110011: // register arithmetic and logic
+		var rdValue U64
+		switch funct7.val() {
+		case 1: // RV32M extension
 			switch funct3.val() {
-			case 0: // 000 = ADDI
-				rdValue = add64(rs1Value, imm)
-			case 1: // 001 = SLLI
-				rdValue = shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
-			case 2: // 010 = SLTI
-				rdValue = slt64(rs1Value, imm)
-			case 3: // 011 = SLTIU
-				rdValue = lt64(rs1Value, imm)
-			case 4: // 100 = XORI
-				rdValue = xor64(rs1Value, imm)
-			case 5: // 101 = SR~
-				switch funct7.val() {
-				case 0x00: // 0000000 = SRLI
-					rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
-				case 0x20: // 0100000 = SRAI
-					rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+			case 0: // 000 = MUL: signed x signed
+				rdValue = mul64(rs1Value, rs2Value)
+			case 1: // 001 = MULH: upper bits of signed x signed
+				rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value)), toU256(64)))
+			case 2: // 010 = MULHSU: upper bits of signed x unsigned
+				rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+			case 3: // 011 = MULHU: upper bits of unsigned x unsigned
+				rdValue = u256ToU64(shr(mul(u64ToU256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+			case 4: // 100 = DIV
+				switch rs2Value.val() {
+				case 0:
+					rdValue = u64Mask()
+				default:
+					rdValue = sdiv64(rs1Value, rs2Value)
 				}
-			case 6: // 110 = ORI
-				rdValue = or64(rs1Value, imm)
-			case 7: // 111 = ANDI
-				rdValue = and64(rs1Value, imm)
+			case 5: // 101 = DIVU
+				switch rs2Value.val() {
+				case 0:
+					rdValue = u64Mask()
+				default:
+					rdValue = div64(rs1Value, rs2Value)
+				}
+			case 6: // 110 = REM
+				switch rs2Value.val() {
+				case 0:
+					rdValue = rs1Value
+				default:
+					rdValue = smod64(rs1Value, rs2Value)
+				}
+			case 7: // 111 = REMU
+				switch rs2Value.val() {
+				case 0:
+					rdValue = rs1Value
+				default:
+					rdValue = mod64(rs1Value, rs2Value)
+				}
 			}
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0011011: // immediate arithmetic and logic signed 32 bit
-			imm := parseImmTypeI(instr)
+		default:
 			switch funct3.val() {
-			case 0: // 000 = ADDIW
-				rdValue = mask32Signed64(add64(rs1Value, imm))
-			case 1: // 001 = SLLIW
-				rdValue = mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
-			case 5: // 101 = SR~
-				shamt := and64(imm, toU64(0x1F))
+			case 0: // 000 = ADD/SUB
 				switch funct7.val() {
-				case 0x00: // 0000000 = SRLIW
+				case 0x00: // 0000000 = ADD
+					rdValue = add64(rs1Value, rs2Value)
+				case 0x20: // 0100000 = SUB
+					rdValue = sub64(rs1Value, rs2Value)
+				}
+			case 1: // 001 = SLL
+				rdValue = shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
+			case 2: // 010 = SLT
+				rdValue = slt64(rs1Value, rs2Value)
+			case 3: // 011 = SLTU
+				rdValue = lt64(rs1Value, rs2Value)
+			case 4: // 100 = XOR
+				rdValue = xor64(rs1Value, rs2Value)
+			case 5: // 101 = SR~
+				switch funct7.val() {
+				case 0x00: // 0000000 = SRL
+					rdValue = shr64(rs1Value, and64(rs2Value, toU64(0x3F))) // logical: fill with zeroes
+				case 0x20: // 0100000 = SRA
+					rdValue = sar64(rs1Value, and64(rs2Value, toU64(0x3F))) // arithmetic: sign bit is extended
+				}
+			case 6: // 110 = OR
+				rdValue = or64(rs1Value, rs2Value)
+			case 7: // 111 = AND
+				rdValue = and64(rs1Value, rs2Value)
+			}
+		}
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0111011: // register arithmetic and logic in 32 bits
+		var rdValue U64
+		switch funct7.val() {
+		case 1: // RV64M extension
+			switch funct3.val() {
+			case 0: // 000 = MULW
+				rdValue = mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+			case 4: // 100 = DIVW
+				switch rs2Value.val() {
+				case 0:
+					rdValue = u64Mask()
+				default:
+					rdValue = mask32Signed64(sdiv64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
+				}
+			case 5: // 101 = DIVUW
+				switch rs2Value.val() {
+				case 0:
+					rdValue = u64Mask()
+				default:
+					rdValue = mask32Signed64(div64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+				}
+			case 6: // 110 = REMW
+				switch rs2Value.val() {
+				case 0:
+					rdValue = mask32Signed64(rs1Value)
+				default:
+					rdValue = mask32Signed64(smod64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
+				}
+			case 7: // 111 = REMUW
+				switch rs2Value.val() {
+				case 0:
+					rdValue = mask32Signed64(rs1Value)
+				default:
+					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+				}
+			}
+		default: // RV32M extension
+			switch funct3.val() {
+			case 0: // 000 = ADDW/SUBW
+				switch funct7.val() {
+				case 0x00: // 0000000 = ADDW
+					rdValue = mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+				case 0x20: // 0100000 = SUBW
+					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+				}
+			case 1: // 001 = SLLW
+				rdValue = mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
+			case 5: // 101 = SR~
+				shamt := and64(rs2Value, toU64(0x1F))
+				switch funct7.val() {
+				case 0x00: // 0000000 = SRLW
 					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
-				case 0x20: // 0100000 = SRAIW
+				case 0x20: // 0100000 = SRAW
 					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
 				}
 			}
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0110011: // register arithmetic and logic
-			switch funct7.val() {
-			case 1: // RV32M extension
-				switch funct3.val() {
-				case 0: // 000 = MUL: signed x signed
-					rdValue = mul64(rs1Value, rs2Value)
-				case 1: // 001 = MULH: upper bits of signed x signed
-					rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value)), toU256(64)))
-				case 2: // 010 = MULHSU: upper bits of signed x unsigned
-					rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
-				case 3: // 011 = MULHU: upper bits of unsigned x unsigned
-					rdValue = u256ToU64(shr(mul(u64ToU256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
-				case 4: // 100 = DIV
-					switch rs2Value.val() {
-					case 0:
-						rdValue = u64Mask()
-					default:
-						rdValue = sdiv64(rs1Value, rs2Value)
-					}
-				case 5: // 101 = DIVU
-					switch rs2Value.val() {
-					case 0:
-						rdValue = u64Mask()
-					default:
-						rdValue = div64(rs1Value, rs2Value)
-					}
-				case 6: // 110 = REM
-					switch rs2Value.val() {
-					case 0:
-						rdValue = rs1Value
-					default:
-						rdValue = smod64(rs1Value, rs2Value)
-					}
-				case 7: // 111 = REMU
-					switch rs2Value.val() {
-					case 0:
-						rdValue = rs1Value
-					default:
-						rdValue = mod64(rs1Value, rs2Value)
-					}
-				}
-			default:
-				switch funct3.val() {
-				case 0: // 000 = ADD/SUB
-					switch funct7.val() {
-					case 0x00: // 0000000 = ADD
-						rdValue = add64(rs1Value, rs2Value)
-					case 0x20: // 0100000 = SUB
-						rdValue = sub64(rs1Value, rs2Value)
-					}
-				case 1: // 001 = SLL
-					rdValue = shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
-				case 2: // 010 = SLT
-					rdValue = slt64(rs1Value, rs2Value)
-				case 3: // 011 = SLTU
-					rdValue = lt64(rs1Value, rs2Value)
-				case 4: // 100 = XOR
-					rdValue = xor64(rs1Value, rs2Value)
-				case 5: // 101 = SR~
-					switch funct7.val() {
-					case 0x00: // 0000000 = SRL
-						rdValue = shr64(rs1Value, and64(rs2Value, toU64(0x3F))) // logical: fill with zeroes
-					case 0x20: // 0100000 = SRA
-						rdValue = sar64(rs1Value, and64(rs2Value, toU64(0x3F))) // arithmetic: sign bit is extended
-					}
-				case 6: // 110 = OR
-					rdValue = or64(rs1Value, rs2Value)
-				case 7: // 111 = AND
-					rdValue = and64(rs1Value, rs2Value)
-				}
-			}
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0111011: // register arithmetic and logic in 32 bits
-			switch funct7.val() {
-			case 1: // RV64M extension
-				switch funct3.val() {
-				case 0: // 000 = MULW
-					rdValue = mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-				case 4: // 100 = DIVW
-					switch rs2Value.val() {
-					case 0:
-						rdValue = u64Mask()
-					default:
-						rdValue = mask32Signed64(sdiv64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
-					}
-				case 5: // 101 = DIVUW
-					switch rs2Value.val() {
-					case 0:
-						rdValue = u64Mask()
-					default:
-						rdValue = mask32Signed64(div64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-					}
-				case 6: // 110 = REMW
-					switch rs2Value.val() {
-					case 0:
-						rdValue = mask32Signed64(rs1Value)
-					default:
-						rdValue = mask32Signed64(smod64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
-					}
-				case 7: // 111 = REMUW
-					switch rs2Value.val() {
-					case 0:
-						rdValue = mask32Signed64(rs1Value)
-					default:
-						rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-					}
-				}
-			default: // RV32M extension
-				switch funct3.val() {
-				case 0: // 000 = ADDW/SUBW
-					switch funct7.val() {
-					case 0x00: // 0000000 = ADDW
-						rdValue = mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-					case 0x20: // 0100000 = SUBW
-						rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-					}
-				case 1: // 001 = SLLW
-					rdValue = mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
-				case 5: // 101 = SR~
-					shamt := and64(rs2Value, toU64(0x1F))
-					switch funct7.val() {
-					case 0x00: // 0000000 = SRLW
-						rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
-					case 0x20: // 0100000 = SRAW
-						rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
-					}
-				}
-			}
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0110111: // LUI = Load upper immediate
-			imm := parseImmTypeU(instr)
-			rdValue = shl64(imm, toU64(12))
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0010111: // AUIPC = Add upper immediate to PC
-			imm := parseImmTypeU(instr)
-			rdValue = add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b1101111: // JAL = Jump and link
-			imm := parseImmTypeJ(instr)
-			rdValue = add64(pc, toU64(4))
-			pc = add64(pc, signExtend64(imm, toU64(21))) // signed offset in multiples of 2 bytes
-			subIndex = StepWriteRd
-		case 0b1100111: // JALR = Jump and link register
-			imm := parseImmTypeI(instr)
-			rdValue = add64(pc, toU64(4))
-			pc = and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1))) // least significant bit is set to 0
-			subIndex = StepWriteRd
-		case 0b1110011:
-			switch funct3.val() {
-			case 0: // 000 = ECALL/EBREAK
-				switch shr64(instr, toU64(20)).val() { // I-type, top 12 bits
-				case 0: // imm12 = 000000000000 ECALL
-					subIndex = StepLoadSyscallArgs
-				default: // imm12 = 000000000001 EBREAK
-					// ignore breakpoint
-					pc = add64(pc, toU64(4))
-					subIndex = StepWriteRd
-				}
-			default: // CSR instructions
-				imm := parseCSSR(instr)
-				value = rs1
-				if iszero64(and64(funct3, toU64(4))) {
-					value = rs1Value
-				}
-				switch and64(funct3, toU64(3)).val() {
-				case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
-					dest = destCSRRW
-				case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
-					dest = destCSRRS
-				case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
-					dest = destCSRRC // v=0 will be no-op
-				}
-				offset = 0
-				size = toU64(8)
-				gindex1 = makeCSRGindex(imm)
-				// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
+		}
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0110111: // LUI = Load upper immediate
+		imm := parseImmTypeU(instr)
+		rdValue := shl64(imm, toU64(12))
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0010111: // AUIPC = Add upper immediate to PC
+		imm := parseImmTypeU(instr)
+		rdValue := add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
+		pc = add64(pc, toU64(4))
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b1101111: // JAL = Jump and link
+		imm := parseImmTypeJ(instr)
+		rdValue := add64(pc, toU64(4))
+		pc = add64(pc, signExtend64(imm, toU64(21))) // signed offset in multiples of 2 bytes
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b1100111: // JALR = Jump and link register
+		imm := parseImmTypeI(instr)
+		rdValue := add64(pc, toU64(4))
+		pc = and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1))) // least significant bit is set to 0
+		writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b1110011:
+		switch funct3.val() {
+		case 0: // 000 = ECALL/EBREAK
+			switch shr64(instr, toU64(20)).val() { // I-type, top 12 bits
+			case 0: // imm12 = 000000000000 ECALL
+				sysCall()
 				pc = add64(pc, toU64(4))
-				subIndex = StepWriteRd
+				setPC(pc)
+			default: // imm12 = 000000000001 EBREAK
+				// ignore breakpoint
+				pc = add64(pc, toU64(4))
+				setPC(pc)
 			}
-		case 0b0101111: // RV32A and RV32A atomic operations extension
-			// TODO atomic operations
-			// 0b010 == RV32A W variants
-			// 0b011 == RV64A D variants
-			//size := 1 << funct3
-			switch shr64(and64(funct7, toU64(0x1F)), toU64(2)).val() {
-			case 0x0: // 00000 = AMOADD
-			case 0x1: // 00001 = AMOSWAP
-			case 0x2: // 00010 = LR
-			case 0x3: // 00011 = SC
-			case 0x4: // 00100 = AMOXOR
-			case 0x8: // 01000 = AMOOR
-			case 0xc: // 01100 = AMOAND
-			case 0x10: // 10000 = AMOMIN
-			case 0x14: // 10100 = AMOMAX
-			case 0x18: // 11000 = AMOMINU
-			case 0x1c: // 11100 = AMOMAXU
+		default: // CSR instructions
+			imm := parseCSSR(instr)
+			rdValue := readCSR(imm)
+			value := rs1
+			if iszero64(and64(funct3, toU64(4))) {
+				value = rs1Value
 			}
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		case 0b0001111:
-			//// TODO: different layout of func data
-			//// "fm pred succ"
-			//switch funct3 {
-			//case 0b000:
-			//	switch funct7 {
-			//	case 0b1000001: // FENCE.TSO
-			//	default: // FENCE
-			//	}
-			//case 0b001: // FENCE.I
-			//}
-			pc = add64(pc, toU64(4))
-			subIndex = StepWriteRd
-		default:
-			panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
-		}
-	case StepLoadSyscallArgs:
-		switch syscallArgsI {
-		case 8: // keep loading register arguments until we have loaded them all
-			subIndex = StepRunSyscall
-		default:
-			dest = destSysReg
-			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(syscallArgsI)))
-			size = toU64(8)
-			signed = false
-			offset = 0
-		}
-	case StepRunSyscall:
-		// A7 is the EID, with syscall num, by SBI calling convention
-		switch syscallRegs[7].val() {
-		// TODO exit syscall
-		case 214: // brk
-			syscallRegs[0] = shl64(toU64(1), toU64(30)) // set program break at 1 GiB
-			syscallArgsI = 1
-		case 222: // mmap
-			addr := syscallRegs[0]
-			length := syscallRegs[1]
-			// ignore: prot, flags, fd, offset
-			switch addr.val() {
-			case 0:
-				// no hint, allocate it ourselves, by as much as the requested length
-				value = length // increment heap with length
-				signed = false
-				size = toU64(8)
-				dest = destHeapIncr
-				gindex1 = heapGindex
-				offset = 0
-			default:
-				// allow hinted memory address (leave it in A0 as return argument)
+			switch and64(funct3, toU64(3)).val() {
+			case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
+				writeCSR(imm, value)
+			case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
+				writeCSR(imm, or64(rdValue, value))
+			case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
+				writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
 			}
-			syscallRegs[1] = toU64(0) // no error
-			syscallArgsI = 2
-		default:
-			// TODO maybe revert if the syscall is unrecognized?
-			syscallArgsI = 0
-		}
-		subIndex = StepWriteSyscallRet
-	case StepWriteSyscallRet:
-		switch s.SyscallArgsI {
-		case 0: // keep writing register return values until we have written them all
+			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
 			pc = add64(pc, toU64(4))
-			subIndex = StepWritePC
-		default:
-			syscallArgsI -= 1
-			dest = destNone
-			gindex1 = makeRegisterGindex(add64(toU64(10), toU64(syscallArgsI)))
-			value = syscallRegs[syscallArgsI]
-			size = toU64(8)
-			offset = 0
+			writeRegister(rd, rdValue)
+			setPC(pc)
 		}
-	case StepWriteRd:
-		switch rd.val() {
-		case 0:
-			// never write to register 0, it must stay zero
-		default:
-			dest = destNone
-			gindex1 = makeRegisterGindex(rd)
-			size = toU64(8)
-			offset = 0
-			value = rdValue
+	case 0b0101111: // RV32A and RV32A atomic operations extension
+		// TODO atomic operations
+		// 0b010 == RV32A W variants
+		// 0b011 == RV64A D variants
+		//size := 1 << funct3
+		switch shr64(and64(funct7, toU64(0x1F)), toU64(2)).val() {
+		case 0x0: // 00000 = AMOADD
+		case 0x1: // 00001 = AMOSWAP
+		case 0x2: // 00010 = LR
+		case 0x3: // 00011 = SC
+		case 0x4: // 00100 = AMOXOR
+		case 0x8: // 01000 = AMOOR
+		case 0xc: // 01100 = AMOAND
+		case 0x10: // 10000 = AMOMIN
+		case 0x14: // 10100 = AMOMAX
+		case 0x18: // 11000 = AMOMINU
+		case 0x1c: // 11100 = AMOMAXU
 		}
-		subIndex = add64(subIndex, toU64(1))
-	case StepWritePC:
-		dest = destNone
-		gindex1 = pcGindex
-		offset = 0
-		size = toU64(8)
-		value = pc
-		subIndex = add64(subIndex, toU64(1))
-	case StepFinal:
-		stateRoot := s.StateRoot
-		// zero out everything in preparation of next instruction
-		return VMSubState{StateRoot: stateRoot}
+		pc = add64(pc, toU64(4))
+		//writeRegister(rd, rdValue)
+		setPC(pc)
+	case 0b0001111:
+		//// TODO: different layout of func data
+		//// "fm pred succ"
+		//switch funct3 {
+		//case 0b000:
+		//	switch funct7 {
+		//	case 0b1000001: // FENCE.TSO
+		//	default: // FENCE
+		//	}
+		//case 0b001: // FENCE.I
+		//}
+		pc = add64(pc, toU64(4))
+		//writeRegister(rd, rdValue)
+		setPC(pc)
+	default:
+		panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
 	}
 
-	// encode sub-step state
-	s.SubIndex = subIndex
-	s.PC = pc
-	s.Instr = instr
-	s.Rs1Value = rs1Value
-	s.Rs2Value = rs2Value
-	s.RdValue = rdValue
-	s.Gindex1 = gindex1
-	s.Gindex2 = gindex2
-	s.Offset = offset
-	s.Value = value
-	s.Signed = signed
-	s.Size = uint8(size.val())
-	s.Dest = dest
-	s.SyscallArgsI = syscallArgsI
-	s.SyscallRegs = syscallRegs
-
-	return s
+	return
 }

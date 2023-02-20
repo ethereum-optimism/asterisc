@@ -65,48 +65,23 @@ func runSlowTestSuite(t *testing.T, path string) {
 	require.NoError(t, err, "must load test suite ELF binary")
 
 	so := oracle.NewStateOracle()
-	pre := slow.VMSubState{StateRoot: vmState.Merkleize(so)}
+	pre := vmState.Merkleize(so)
 	so.BuildAccessList(true)
 
 	for i := 0; i < 10_000; i++ {
-		require.Equal(t, slow.VMSubState{StateRoot: pre.StateRoot}, pre, "vm state must be clean at start of instruction")
 		fmt.Printf("next step - pc: 0x%x\n", vmState.PC)
 
-		for i := 0; i < 1000; i++ {
-			// build access list while we run the sub-step on the full oracle data
-			//so.BuildAccessList(true)
-			post := slow.SubStep(pre, so)
-			//fmt.Println()
-			//fmt.Println("------------")
-			//fmt.Printf("state sub step: %d\n", post.SubIndex)
-			//fmt.Printf("state value: %x\n", post.StateValue[:])
-			//fmt.Printf("state stack depth:  %d\n", post.StateStackDepth)
-			//fmt.Printf("state stack gindex: %b\n", post.StateStackGindex.ToBig())
-			//fmt.Printf("state gindex:       %b\n", post.StateGindex.ToBig())
-
-			//fmt.Println(so.Dump(post.StateRoot))
-
-			// now run the step again, but on the access-list version of the oracle
-			//al := so.AccessList()
-			//so2 := &oracle.AccessListOracle{AccessList: al}
-			//post2 := slow.SubStep(pre, so2)
-			//require.Equal(t, post, post2, "need to reproduce same post-state with access list based oracle")
-
-			pre = post
-			// if the vm state is clean, the sub-step is done
-			if post == (slow.VMSubState{StateRoot: post.StateRoot}) {
-				break
-			}
-		}
+		post := slow.Step(pre, so)
 
 		// Now run the same in fast mode
 		fast.Step(vmState)
 
 		fastRoot := vmState.Merkleize(so)
-		if pre.StateRoot != fastRoot {
-			so.Diff(pre.StateRoot, fastRoot, 1)
+		if post != fastRoot {
+			so.Diff(post, fastRoot, 1)
 		}
-		require.Equal(t, fmt.Sprintf("%x", pre.StateRoot), fmt.Sprintf("%x", fastRoot), "slow state must match fast state")
+		require.Equal(t, fmt.Sprintf("%x", post), fmt.Sprintf("%x", fastRoot), "slow state must match fast state")
+		pre = post
 
 		if vmState.Exited {
 			break
