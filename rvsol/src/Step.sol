@@ -332,7 +332,7 @@ contract Step {
 
                 let firstChunkBytes := sub64(toU64(32), toU64(offset))
                 if gt64(firstChunkBytes, size) {
-                    firstChunkBytes = size
+                    firstChunkBytes := size
                 }
 
                 // we reached the value, now load/write it
@@ -370,14 +370,15 @@ contract Step {
                     let a := decodeU64(stateValue[0:secondChunkBytes.val()])
                     out := or64(shl64(a, shl64(firstChunkBytes, toU64(3))), out)
                 }
+
             }
 
             function loadMem(addr, size, signed) -> out {
-                offset, gindex1, gindex2 := memToStateOp(addr, size)
-                out = mutate(gindex1, gindex2, offset, size, destRead, U64{})
+                let offset, gindex1, gindex2 := memToStateOp(addr, size)
+                out := mutate(gindex1, gindex2, offset, size, destRead, 0)
                 if signed {
-                    topBitIndex := sub64(shl64(size, toU64(3)), toU64(1))
-                    out = signExtend64(out, topBitIndex)
+                    let topBitIndex := sub64(shl64(size, toU64(3)), toU64(1))
+                    out := signExtend64(out, topBitIndex)
                 }
             }
 
@@ -386,8 +387,8 @@ contract Step {
                 mutate(gindex1, gindex2, offset, size, destWrite, value)
             }
 
-            function loadRegister(num U64) -> out {
-                out := mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead, U64{})
+            function loadRegister(num) -> out {
+                out := mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead, 0)
             }
 
             function writeRegister(num, val) {
@@ -399,7 +400,7 @@ contract Step {
             }
 
             function getPC() -> out {
-                out := mutate(pcGindex, toU256(0), 0, toU64(8), destRead, U64{})
+                out := mutate(pcGindex, toU256(0), 0, toU64(8), destRead, 0)
             }
 
             function setPC(pc) {
@@ -407,14 +408,14 @@ contract Step {
             }
 
             function readCSR(num) -> out {
-                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead, U64{})
+                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead, 0)
             }
 
             function writeCSR(num, v) {
                 mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite, v)
             }
 
-            function sysCall {
+            function sysCall() {
                 let a7 := loadRegister(toU64(17))
                 switch a7
                 case 93 { // exit
@@ -506,7 +507,7 @@ contract Step {
                 } case 6 { // 110 = BLTU
                     branchHit := lt64(rs1Value, rs2Value)
                 } case 7 { // 111 := BGEU
-                    branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
+                    branchHit := and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
                 }
                 switch branchHit
                 case 0 {
@@ -535,9 +536,9 @@ contract Step {
                 } case 5 { // 101 = SR~
                     switch funct7
                     case 0x00 { // 0000000 = SRLI
-                        rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+                        rdValue := shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
                     } case 0x20 { // 0100000 = SRAI
-                        rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+                        rdValue := sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
                     }
                 } case 6 { // 110 = ORI
                     rdValue := or64(rs1Value, imm)
@@ -734,7 +735,7 @@ contract Step {
                     let rdValue := readCSR(imm)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
-                        value = rs1Value
+                        value := rs1Value
                     }
                     switch and64(funct3, toU64(3))
                     case 1 { // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
