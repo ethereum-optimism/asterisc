@@ -68,26 +68,24 @@ func Step(s *VMState) {
 	//fmt.Printf("fast rs2 value: %x\n", rs2Value)
 
 	switch opcode {
-	case 0b0000011: // memory loading
+	case 0x03: // 000_0011: memory loading
 		// LB, LH, LW, LD, LBU, LHU, LWU
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
 		size := shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := s.loadMem(memIndex, size, signed)
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0100011: // memory storing
+		s.setPC(add64(pc, toU64(4)))
+	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
 		size := shl64(toU64(1), funct3)
 		value := rs2Value
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		s.storeMem(memIndex, size, value)
-		pc = add64(pc, toU64(4))
-		s.setPC(pc)
-	case 0b1100011: // branching
+		s.setPC(add64(pc, toU64(4)))
+	case 0x63: // 110_0011: branching
 		branchHit := toU64(0)
 		switch funct3 {
 		case 0: // 000 = BEQ
@@ -112,8 +110,8 @@ func Step(s *VMState) {
 			pc = add64(pc, signExtend64(imm, toU64(11)))
 		}
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
-		s.PC = pc
-	case 0b0010011: // immediate arithmetic and logic
+		s.setPC(pc)
+	case 0x13: // 001_0011: immediate arithmetic and logic
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3 {
@@ -139,10 +137,9 @@ func Step(s *VMState) {
 		case 7: // 111 = ANDI
 			rdValue = and64(rs1Value, imm)
 		}
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0011011: // immediate arithmetic and logic signed 32 bit
+		s.setPC(add64(pc, toU64(4)))
+	case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3 {
@@ -159,10 +156,9 @@ func Step(s *VMState) {
 				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
 			}
 		}
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0110011: // register arithmetic and logic
+		s.setPC(add64(pc, toU64(4)))
+	case 0x33: // 011_0011: register arithmetic and logic
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV32M extension
@@ -234,10 +230,9 @@ func Step(s *VMState) {
 				rdValue = and64(rs1Value, rs2Value)
 			}
 		}
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0111011: // register arithmetic and logic in 32 bits
+		s.setPC(add64(pc, toU64(4)))
+	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV64M extension
@@ -294,49 +289,42 @@ func Step(s *VMState) {
 				}
 			}
 		}
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0110111: // LUI = Load upper immediate
+		s.setPC(add64(pc, toU64(4)))
+	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
 		rdValue := shl64(imm, toU64(12))
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0010111: // AUIPC = Add upper immediate to PC
+		s.setPC(add64(pc, toU64(4)))
+	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
 		rdValue := add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
-		pc = add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b1101111: // JAL = Jump and link
+		s.setPC(add64(pc, toU64(4)))
+	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
-		pc = add64(pc, signExtend64(imm, toU64(21))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b1100111: // JALR = Jump and link register
+		s.setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
+	case 0x67: // 110_0111: JALR = Jump and link register
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
-		pc = and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1))) // least significant bit is set to 0
 		s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b1110011:
+		s.setPC(and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
+	case 0x73: // 111_0011: environment things
 		switch funct3 {
 		case 0: // 000 = ECALL/EBREAK
 			switch shr64(instr, toU64(20)) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				sysCall()
-				pc = add64(pc, toU64(4))
-				s.setPC(pc)
+				s.setPC(add64(pc, toU64(4)))
 			default: // imm12 = 000000000001 EBREAK
 				// ignore breakpoint
-				pc = add64(pc, toU64(4))
-				s.setPC(pc)
+				s.setPC(add64(pc, toU64(4)))
 			}
 		default: // CSR instructions
 			imm := parseCSSR(instr)
-			rdValue := s.readCSR(imm) // rd=0 will be no-op
+			rdValue := s.readCSR(imm)
 			value := rs1
 			if iszero64(and64(funct3, toU64(4))) {
 				value = rs1Value
@@ -350,11 +338,10 @@ func Step(s *VMState) {
 				s.writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
 			}
 			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-			pc = add64(pc, toU64(4))
 			s.writeRegister(rd, rdValue)
-			s.setPC(pc)
+			s.setPC(add64(pc, toU64(4)))
 		}
-	case 0b0101111: // RV32A and RV32A atomic operations extension
+	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
 		// TODO atomic operations
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
@@ -372,10 +359,9 @@ func Step(s *VMState) {
 		case 0x18: // 11000 = AMOMINU
 		case 0x1c: // 11100 = AMOMAXU
 		}
-		pc = add64(pc, toU64(4))
 		//s.writeRegister(rd, rdValue)
-		s.setPC(pc)
-	case 0b0001111:
+		s.setPC(add64(pc, toU64(4)))
+	case 0x0F: // 000_1111: fence
 		//// TODO: different layout of func data
 		//// "fm pred succ"
 		//switch funct3 {
@@ -387,9 +373,8 @@ func Step(s *VMState) {
 		//case 0b001: // FENCE.I
 		//}
 		// We can no-op FENCE, there's nothing to synchronize
-		pc = add64(pc, toU64(4))
 		//s.writeRegister(rd, rdValue)
-		s.setPC(pc)
+		s.setPC(add64(pc, toU64(4)))
 	default:
 		panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
 	}
