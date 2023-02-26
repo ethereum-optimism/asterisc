@@ -474,8 +474,8 @@ contract Step {
             //fmt.Printf("slow rs1 value: %x\n", rs1Value)
             //fmt.Printf("slow rs2 value: %x\n", rs2Value)
 
-            switch opcode {
-            case 0x03: // 000_0011: memory loading
+            switch opcode
+            case 0x03 { // 000_0011: memory loading
                 // LB, LH, LW, LD, LBU, LHU, LWU
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
@@ -484,7 +484,7 @@ contract Step {
                 let rdValue := loadMem(memIndex, size, signed)
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x23: // 010_0011: memory storing
+            } case 0x23 { // 010_0011: memory storing
                 // SB, SH, SW, SD
                 let imm := parseImmTypeS(instr)
                 let size := shl64(toU64(1), funct3)
@@ -492,300 +492,299 @@ contract Step {
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 storeMem(memIndex, size, value)
                 setPC(add64(pc, toU64(4)))
-            case 0x63: // 110_0011: branching
+            } case 0x63 { // 110_0011: branching
                 let branchHit := toU64(0)
-                switch funct3 {
-                case 0: // 000 = BEQ
+                switch funct3
+                case 0 { // 000 = BEQ
                     branchHit := eq64(rs1Value, rs2Value)
-                case 1: // 001 = BNE
+                } case 1 { // 001 = BNE
                     branchHit := and64(not64(eq64(rs1Value, rs2Value)), toU64(1))
-                case 4: // 100 = BLT
+                } case 4 { // 100 = BLT
                     branchHit := slt64(rs1Value, rs2Value)
-                case 5: // 101 = BGE
+                } case 5 { // 101 = BGE
                     branchHit := and64(not64(slt64(rs1Value, rs2Value)), toU64(1))
-                case 6: // 110 = BLTU
+                } case 6 { // 110 = BLTU
                     branchHit := lt64(rs1Value, rs2Value)
-                case 7: // 111 := BGEU
+                } case 7 { // 111 := BGEU
                     branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
                 }
-                switch branchHit {
-                case 0:
+                switch branchHit
+                case 0 {
                     pc := add64(pc, toU64(4))
-                default:
+                } default {
                     imm := parseImmTypeB(instr)
                     // imm12 is a signed offset, in multiples of 2 bytes
                     pc := add64(pc, signExtend64(imm, toU64(11)))
                 }
                 // not like the other opcodes: nothing to write to rd register, and PC has already changed
                 setPC(pc)
-            case 0x13: // 001_0011: immediate arithmetic and logic
+            } case 0x13 { // 001_0011: immediate arithmetic and logic
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
-                switch funct3.val() {
-                case 0: // 000 = ADDI
+                switch funct3
+                case 0 { // 000 = ADDI
                     rdValue := add64(rs1Value, imm)
-                case 1: // 001 = SLLI
+                } case 1 { // 001 = SLLI
                     rdValue := shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
-                case 2: // 010 = SLTI
+                } case 2 { // 010 = SLTI
                     rdValue := slt64(rs1Value, imm)
-                case 3: // 011 = SLTIU
+                } case 3 { // 011 = SLTIU
                     rdValue := lt64(rs1Value, imm)
-                case 4: // 100 = XORI
+                } case 4 { // 100 = XORI
                     rdValue := xor64(rs1Value, imm)
-                case 5: // 101 = SR~
-                    switch funct7 {
-                    case 0x00: // 0000000 = SRLI
+                } case 5 { // 101 = SR~
+                    switch funct7
+                    case 0x00 { // 0000000 = SRLI
                         rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
-                    case 0x20: // 0100000 = SRAI
+                    } case 0x20 { // 0100000 = SRAI
                         rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
                     }
-                case 6: // 110 = ORI
+                } case 6 { // 110 = ORI
                     rdValue := or64(rs1Value, imm)
-                case 7: // 111 = ANDI
+                } case 7 { // 111 = ANDI
                     rdValue := and64(rs1Value, imm)
                 }
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
+            } case 0x1B { // 001_1011: immediate arithmetic and logic signed 32 bit
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
-                switch funct3 {
-                case 0: // 000 = ADDIW
+                switch funct3
+                case 0 { // 000 = ADDIW
                     rdValue := mask32Signed64(add64(rs1Value, imm))
-                case 1: // 001 = SLLIW
+                } case 1 { // 001 = SLLIW
                     rdValue := mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
-                case 5: // 101 = SR~
+                } case 5 { // 101 = SR~
                     let shamt := and64(imm, toU64(0x1F))
-                    switch funct7 {
-                    case 0x00: // 0000000 = SRLIW
+                    switch funct7
+                    case 0x00 { // 0000000 = SRLIW
                         rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
-                    case 0x20: // 0100000 = SRAIW
+                    } case 0x20 { // 0100000 = SRAIW
                         rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
                     }
                 }
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x33: // 011_0011: register arithmetic and logic
+            } case 0x33 { // 011_0011: register arithmetic and logic
                 let rdValue := 0
-                switch funct7 {
-                case 1: // RV32M extension
-                    switch funct3 {
-                    case 0: // 000 = MUL: signed x signed
+                switch funct7
+                case 1 { // RV32M extension
+                    switch funct3
+                    case 0 { // 000 = MUL: signed x signed
                         rdValue := mul64(rs1Value, rs2Value)
-                    case 1: // 001 = MULH: upper bits of signed x signed
+                    } case 1 { // 001 = MULH: upper bits of signed x signed
                         rdValue := u256ToU64(shr(mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value)), toU256(64)))
-                    case 2: // 010 = MULHSU: upper bits of signed x unsigned
+                    } case 2 { // 010 = MULHSU: upper bits of signed x unsigned
                         rdValue := u256ToU64(shr(mul(signExtend64To256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
-                    case 3: // 011 = MULHU: upper bits of unsigned x unsigned
+                    } case 3 { // 011 = MULHU: upper bits of unsigned x unsigned
                         rdValue := u256ToU64(shr(mul(u64ToU256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
-                    case 4: // 100 = DIV
-                        switch rs2Value {
-                        case 0:
+                    } case 4 { // 100 = DIV
+                        switch rs2Value
+                        case 0 {
                             rdValue := u64Mask()
-                        default:
+                        } default {
                             rdValue := sdiv64(rs1Value, rs2Value)
                         }
-                    case 5: // 101 = DIVU
-                        switch rs2Value {
-                        case 0:
+                    } case 5 { // 101 = DIVU
+                        switch rs2Value
+                        case 0 {
                             rdValue := u64Mask()
-                        default:
+                        } default {
                             rdValue := div64(rs1Value, rs2Value)
                         }
-                    case 6: // 110 = REM
-                        switch rs2Value {
-                        case 0:
+                    } case 6 { // 110 = REM
+                        switch rs2Value
+                        case 0 {
                             rdValue := rs1Value
-                        default:
+                        } default {
                             rdValue := smod64(rs1Value, rs2Value)
                         }
-                    case 7: // 111 = REMU
-                        switch rs2Value {
-                        case 0:
+                    } case 7 { // 111 = REMU
+                        switch rs2Value
+                        case 0 {
                             rdValue := rs1Value
-                        default:
+                        } default {
                             rdValue := mod64(rs1Value, rs2Value)
                         }
                     }
-                default:
-                    switch funct3 {
-                    case 0: // 000 = ADD/SUB
-                        switch funct7 {
-                        case 0x00: // 0000000 = ADD
+                } default {
+                    switch funct3
+                    case 0 { // 000 = ADD/SUB
+                        switch funct7
+                        case 0x00 { // 0000000 = ADD
                             rdValue := add64(rs1Value, rs2Value)
-                        case 0x20: // 0100000 = SUB
+                        } case 0x20 { // 0100000 = SUB
                             rdValue := sub64(rs1Value, rs2Value)
                         }
-                    case 1: // 001 = SLL
+                    } case 1 { // 001 = SLL
                         rdValue := shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
-                    case 2: // 010 = SLT
+                    } case 2 { // 010 = SLT
                         rdValue := slt64(rs1Value, rs2Value)
-                    case 3: // 011 = SLTU
+                    } case 3 { // 011 = SLTU
                         rdValue := lt64(rs1Value, rs2Value)
-                    case 4: // 100 = XOR
+                    } case 4 { // 100 = XOR
                         rdValue := xor64(rs1Value, rs2Value)
-                    case 5: // 101 = SR~
-                        switch funct7 {
-                        case 0x00: // 0000000 = SRL
+                    } case 5 { // 101 = SR~
+                        switch funct7
+                        case 0x00 { // 0000000 = SRL
                             rdValue := shr64(rs1Value, and64(rs2Value, toU64(0x3F))) // logical: fill with zeroes
-                        case 0x20: // 0100000 = SRA
+                        } case 0x20 { // 0100000 = SRA
                             rdValue := sar64(rs1Value, and64(rs2Value, toU64(0x3F))) // arithmetic: sign bit is extended
                         }
-                    case 6: // 110 = OR
+                    } case 6 { // 110 = OR
                         rdValue := or64(rs1Value, rs2Value)
-                    case 7: // 111 = AND
+                    } case 7 { // 111 = AND
                         rdValue := and64(rs1Value, rs2Value)
                     }
                 }
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
+            } case 0x3B { // 011_1011: register arithmetic and logic in 32 bits
                 let rdValue := 0
-                switch funct7 {
-                case 1: // RV64M extension
-                    switch funct3 {
-                    case 0: // 000 = MULW
+                switch funct7
+                case 1 { // RV64M extension
+                    switch funct3
+                    case 0 { // 000 = MULW
                         rdValue := mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-                    case 4: // 100 = DIVW
-                        switch rs2Value {
-                        case 0:
+                    } case 4 { // 100 = DIVW
+                        switch rs2Value
+                        case 0 {
                             rdValue := u64Mask()
-                        default:
+                        } default {
                             rdValue := mask32Signed64(sdiv64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
                         }
-                    case 5: // 101 = DIVUW
-                        switch rs2Value {
-                        case 0:
+                    } case 5 { // 101 = DIVUW
+                        switch rs2Value
+                        case 0 {
                             rdValue := u64Mask()
-                        default:
+                        } default {
                             rdValue := mask32Signed64(div64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
-                    case 6: // 110 = REMW
-                        switch rs2Value {
-                        case 0:
+                    } case 6 { // 110 = REMW
+                        switch rs2Value
+                        case 0 {
                             rdValue := mask32Signed64(rs1Value)
-                        default:
+                        } default {
                             rdValue := mask32Signed64(smod64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
                         }
-                    case 7: // 111 = REMUW
-                        switch rs2Value {
-                        case 0:
+                    } case 7 { // 111 = REMUW
+                        switch rs2Value
+                        case 0 {
                             rdValue := mask32Signed64(rs1Value)
-                        default:
+                        } default {
                             rdValue := mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
                     }
-                default: // RV32M extension
-                    switch funct3 {
-                    case 0: // 000 = ADDW/SUBW
-                        switch funct7 {
-                        case 0x00: // 0000000 = ADDW
+                } default { // RV32M extension
+                    switch funct3
+                    case 0 { // 000 = ADDW/SUBW
+                        switch funct7
+                        case 0x00 { // 0000000 = ADDW
                             rdValue := mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-                        case 0x20: // 0100000 = SUBW
+                        } case 0x20 { // 0100000 = SUBW
                             rdValue := mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
-                    case 1: // 001 = SLLW
+                    } case 1 { // 001 = SLLW
                         rdValue := mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
-                    case 5: // 101 = SR~
+                    } case 5 { // 101 = SR~
                         let shamt := and64(rs2Value, toU64(0x1F))
-                        switch funct7 {
-                        case 0x00: // 0000000 = SRLW
+                        switch funct7
+                        case 0x00 { // 0000000 = SRLW
                             rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
-                        case 0x20: // 0100000 = SRAW
+                        } case 0x20 { // 0100000 = SRAW
                             rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
                         }
                     }
                 }
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x37: // 011_0111: LUI = Load upper immediate
+            } case 0x37 { // 011_0111: LUI = Load upper immediate
                 let imm := parseImmTypeU(instr)
                 let rdValue := shl64(imm, toU64(12))
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
+            } case 0x17 { // 001_0111: AUIPC = Add upper immediate to PC
                 let imm := parseImmTypeU(instr)
                 let rdValue := add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x6F: // 110_1111: JAL = Jump and link
+            } case 0x6F { // 110_1111: JAL = Jump and link
                 let imm := parseImmTypeJ(instr)
                 let rdValue := add64(pc, toU64(4))
                 writeRegister(rd, rdValue)
                 setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes
-            case 0x67: // 110_0111: JALR = Jump and link register
+            } case 0x67 { // 110_0111: JALR = Jump and link register
                 let imm := parseImmTypeI(instr)
                 let rdValue := add64(pc, toU64(4))
                 writeRegister(rd, rdValue)
                 setPC(and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
-            case 0x73: // 111_0011: environment things
-                switch funct3 {
-                case 0: // 000 = ECALL/EBREAK
-                    switch shr64(instr, toU64(20)) { // I-type, top 12 bits
-                    case 0: // imm12 = 000000000000 ECALL
+            } case 0x73 { // 111_0011: environment things
+                switch funct3
+                case 0 { // 000 = ECALL/EBREAK
+                    switch shr64(instr, toU64(20)) // I-type, top 12 bits
+                    case 0 { // imm12 = 000000000000 ECALL
                         sysCall()
                         setPC(add64(pc, toU64(4)))
-                    default: // imm12 = 000000000001 EBREAK
+                    } default { // imm12 = 000000000001 EBREAK
                         // ignore breakpoint
                         setPC(add64(pc, toU64(4)))
                     }
-                default: // CSR instructions
+                } default { // CSR instructions
                     let imm := parseCSSR(instr)
                     let rdValue := readCSR(imm)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
                         value = rs1Value
                     }
-                    switch and64(funct3, toU64(3)) {
-                    case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
+                    switch and64(funct3, toU64(3))
+                    case 1 { // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
                         writeCSR(imm, value)
-                    case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
+                    } case 2 { // ?10 = CSRRS = "atomic Read and Set bits in CSR"
                         writeCSR(imm, or64(rdValue, value)) // v=0 will be no-op
-                    case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
+                    } case 3 { // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
                         writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
                     }
                     // TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
                     writeRegister(rd, rdValue)
                     setPC(add64(pc, toU64(4)))
                 }
-            case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
+            } case 0x2F { // 010_1111: RV32A and RV32A atomic operations extension
                 // TODO atomic operations
                 // 0b010 == RV32A W variants
                 // 0b011 == RV64A D variants
                 //size := 1 << funct3
-                switch shr64(and64(funct7, toU64(0x1F)), toU64(2)) {
-                case 0x0: // 00000 = AMOADD
-                case 0x1: // 00001 = AMOSWAP
-                case 0x2: // 00010 = LR
-                case 0x3: // 00011 = SC
-                case 0x4: // 00100 = AMOXOR
-                case 0x8: // 01000 = AMOOR
-                case 0xc: // 01100 = AMOAND
-                case 0x10: // 10000 = AMOMIN
-                case 0x14: // 10100 = AMOMAX
-                case 0x18: // 11000 = AMOMINU
-                case 0x1c: // 11100 = AMOMAXU
+                switch shr64(and64(funct7, toU64(0x1F)), toU64(2))
+                case 0x0 { // 00000 = AMOADD
+                } case 0x1 { // 00001 = AMOSWAP
+                } case 0x2 { // 00010 = LR
+                } case 0x3 { // 00011 = SC
+                } case 0x4 { // 00100 = AMOXOR
+                } case 0x8 { // 01000 = AMOOR
+                } case 0xc { // 01100 = AMOAND
+                } case 0x10 { // 10000 = AMOMIN
+                } case 0x14 { // 10100 = AMOMAX
+                } case 0x18 { // 11000 = AMOMINU
+                } case 0x1c { // 11100 = AMOMAXU
                 }
                 //writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            case 0x0F: // 000_1111: fence
+            } case 0x0F { // 000_1111: fence
                 //// TODO: different layout of func data
                 //// "fm pred succ"
-                //switch funct3 {
-                //case 0b000:
-                //	switch funct7 {
-                //	case 0b1000001: // FENCE.TSO
-                //	default: // FENCE
+                //switch funct3
+                //case 0 {  // 000
+                //	switch funct7
+                //	case 0x41 { // 100_0001 = FENCE.TSO
+                //	} default { // FENCE
                 //	}
-                //case 0b001: // FENCE.I
+                //} case 1 { // 001: FENCE.I
                 //}
                 // We can no-op FENCE, there's nothing to synchronize
                 //writeRegister(rd, rdValue)
                 setPC(add64(pc, toU64(4)))
-            default:
-                panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
+            } default {
+                revert(0, 0) // TODO memory output: unknown opcode: %b full instruction: %b", opcode, instr
             }
-
         }
 
         return;
