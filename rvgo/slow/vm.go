@@ -162,15 +162,24 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			firstChunkBytes = size
 		}
 
+		base := b32asBEWord(stateValue)
 		// we reached the value, now load/write it
 		switch dest {
 		case destWrite:
-			// note: stateValue holds the old 32 bytes, some of which may stay the same
-			v := encodePacked(value)
-			copy(stateValue[offset:], v[:size.val()])
-			write(targetGindex, rootGindex, stateValue, stateStackHash)
+			for i := uint8(0); i < uint8(firstChunkBytes.val()); i++ {
+				shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
+				valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
+				maskByte := shl(toU256(0xff), shamt)
+				value = shr64(value, toU64(8))
+				base = or(and(base, not(maskByte)), valByte)
+			}
+			write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
 		case destRead:
-			out = decodeU64(stateValue[offset : uint64(offset)+firstChunkBytes.val()])
+			for i := uint8(0); i < uint8(firstChunkBytes.val()); i++ {
+				shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
+				valByte := U64(and(shr(base, shamt), toU256(0xff)))
+				out = or64(out, shl64(valByte, shl64(toU64(i), toU64(3))))
+			}
 		}
 
 		if gindex2 == (U256{}) {
@@ -184,16 +193,25 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 
 		secondChunkBytes := sub64(size, firstChunkBytes)
 
+		base = b32asBEWord(stateValue)
 		// we reached the value, now load/write it
 		switch dest {
 		case destWrite:
 			// note: StateValue holds the old 32 bytes, some of which may stay the same
-			v := encodePacked(value)
-			copy(stateValue[:secondChunkBytes.val()], v[firstChunkBytes.val():size.val()])
-			write(targetGindex, rootGindex, stateValue, stateStackHash)
+			for i := uint64(0); i < secondChunkBytes.val(); i++ {
+				shamt := shl(toU256(31-uint8(i)), toU256(3))
+				valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
+				maskByte := shl(toU256(0xff), shamt)
+				value = shr64(value, toU64(8))
+				base = or(and(base, not(maskByte)), valByte)
+			}
+			write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
 		case destRead:
-			a := decodeU64(stateValue[0:secondChunkBytes.val()])
-			out = or64(shl64(a, shl64(firstChunkBytes, toU64(3))), out)
+			for i := uint8(0); i < uint8(secondChunkBytes.val()); i++ {
+				shamt := shl(sub(toU256(31), toU256(i)), toU256(3))
+				valByte := U64(and(shr(base, shamt), toU256(0xff)))
+				out = or64(out, shl64(valByte, shl64(add64(toU64(i), firstChunkBytes), toU64(3))))
+			}
 		}
 		return
 	}

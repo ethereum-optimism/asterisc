@@ -309,25 +309,25 @@ contract Step {
                 case 3 { // destCSRRW
                     // special case: CSRRW - read and write bits
                     out := stateValue
-                    dest := destWrite
+                    dest := destWrite()
                 }
                 case 4 { // destCSRRS
                     // special case: CSRRS - read and set bits
                     out := stateValue
                     value := or64(out, value) // set bits
-                    dest := destWrite
+                    dest := destWrite()
                 }
                 case 5 { // destCSRRC
                     // special case: CSRRC - read and clear bits
                     out := stateValue
                     value := and64(out, not64(value)) // clear bits
-                    dest := destWrite
+                    dest := destWrite()
                 }
                 case 2 { // destHeapIncr
                     // special case: increment before writing, and output result
                     value := add64(value, stateValue)
                     out := value
-                    dest := destWrite
+                    dest := destWrite()
                 }
 
                 let firstChunkBytes := sub64(toU64(32), toU64(offset))
@@ -335,19 +335,28 @@ contract Step {
                     firstChunkBytes := size
                 }
 
+                let base := b32asBEWord(stateValue)
                 // we reached the value, now load/write it
                 switch dest
                 case 1 { // destWrite
-                    // note: stateValue holds the old 32 bytes, some of which may stay the same
-                    let v := encodePacked(value)
-                    copy(stateValue[offset:], v[:size.val()])
-                    write(targetGindex, rootGindex, stateValue, stateStackHash)
+                    for { let i := 0 } lt(i, firstChunkBytes) { i := add(i, 1) } {
+                        let shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
+                        let valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
+                        let maskByte := shl(toU256(0xff), shamt)
+                        value := shr64(value, toU64(8))
+                        base := or(and(base, not(maskByte)), valByte)
+                    }
+                    write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
                 }
                 case 0 { // destRead
-                    out := decodeU64(stateValue[offset : uint64(offset)+firstChunkBytes.val()])
+                    for { let i := 0 } lt(i, firstChunkBytes) { i := add(i, 1) } {
+                        let shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
+                        let valByte := U64(and(shr(base, shamt), toU256(0xff)))
+                        out := or64(out, shl64(valByte, shl64(toU64(i), toU64(3))))
+                    }
                 }
 
-                if gindex2 == 0 {
+                if iszero(gindex2) {
                     leave
                 }
 
@@ -358,24 +367,32 @@ contract Step {
 
                 let secondChunkBytes := sub64(size, firstChunkBytes)
 
+                base := b32asBEWord(stateValue)
                 // we reached the value, now load/write it
                 switch dest
                 case 1 { // destWrite
                     // note: StateValue holds the old 32 bytes, some of which may stay the same
-                    let v := encodePacked(value)
-                    copy(stateValue[:secondChunkBytes.val()], v[firstChunkBytes.val():size.val()])
-                    write(targetGindex, rootGindex, stateValue, stateStackHash)
+                    for { let i := 0 } lt(i, secondChunkBytes) { i := add(i, 1) } {
+                        let shamt := shl(toU256(sub(31, i)), toU256(3))
+                        let valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
+                        let maskByte := shl(toU256(0xff), shamt)
+                        value := shr64(value, toU64(8))
+                        base := or(and(base, not(maskByte)), valByte)
+                    }
+                    write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
                 }
                 case 0 { // destRead
-                    let a := decodeU64(stateValue[0:secondChunkBytes.val()])
-                    out := or64(shl64(a, shl64(firstChunkBytes, toU64(3))), out)
+                    for { let i := 0 } lt(i, secondChunkBytes) { i := add(i, 1) } {
+                        let shamt := shl(sub(toU256(31), toU256(i)), toU256(3))
+                        let valByte := U64(and(shr(base, shamt), toU256(0xff)))
+                        out := or64(out, shl64(valByte, shl64(add64(toU64(i), firstChunkBytes), toU64(3))))
+                    }
                 }
-
             }
 
             function loadMem(addr, size, signed) -> out {
                 let offset, gindex1, gindex2 := memToStateOp(addr, size)
-                out := mutate(gindex1, gindex2, offset, size, destRead, 0)
+                out := mutate(gindex1, gindex2, offset, size, destRead(), 0)
                 if signed {
                     let topBitIndex := sub64(shl64(size, toU64(3)), toU64(1))
                     out := signExtend64(out, topBitIndex)
@@ -384,11 +401,11 @@ contract Step {
 
             function storeMem(addr, size, value) {
                 offset, gindex1, gindex2 := memToStateOp(addr, size)
-                mutate(gindex1, gindex2, offset, size, destWrite, value)
+                mutate(gindex1, gindex2, offset, size, destWrite(), value)
             }
 
             function loadRegister(num) -> out {
-                out := mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead, 0)
+                out := mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead(), 0)
             }
 
             function writeRegister(num, val) {
@@ -396,23 +413,23 @@ contract Step {
                     // v is a HINT, but no hints are specified by standard spec, or used by us.
                     leave
                 }
-                mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite, val)
+                mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite(), val)
             }
 
             function getPC() -> out {
-                out := mutate(pcGindex, toU256(0), 0, toU64(8), destRead, 0)
+                out := mutate(pcGindex, toU256(0), 0, toU64(8), destRead(), 0)
             }
 
             function setPC(pc) {
-                mutate(pcGindex, toU256(0), 0, toU64(8), destWrite, pc)
+                mutate(pcGindex, toU256(0), 0, toU64(8), destWrite(), pc)
             }
 
             function readCSR(num) -> out {
-                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead, 0)
+                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead(), 0)
             }
 
             function writeCSR(num, v) {
-                mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite, v)
+                mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite(), v)
             }
 
             function sysCall() {
@@ -420,7 +437,7 @@ contract Step {
                 switch a7
                 case 93 { // exit
                     let a0 := loadRegister(toU64(0))
-                    mutate(exitGindex, toU256(0), 0, toU64(8), destWrite, a0)
+                    mutate(exitGindex, toU256(0), 0, toU64(8), destWrite(), a0)
                 }
                 case 214 { // brk
                     // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
@@ -443,7 +460,7 @@ contract Step {
                     switch addr
                     case 0 {
                         // no hint, allocate it ourselves, by as much as the requested length
-                        heap := mutate(heapGindex, toU256(0), 0, toU64(8), destHeapIncr, length)
+                        heap := mutate(heapGindex, toU256(0), 0, toU64(8), destHeapIncr(), length)
                         writeRegister(toU64(10), heap)
                     }
                     default {
