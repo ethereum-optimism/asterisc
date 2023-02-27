@@ -4,9 +4,8 @@ pragma solidity ^0.8.13;
 
 contract Step {
 
-
-
-    //
+    // Executes a single RISC-V instruction, starting from the given state-root s,
+    // using state-oracle witness data soData, and outputs a new state-root.
     function step(bytes32 calldata s, bytes calldata soData) public pure view returns (bytes32 stateRoot) {
         stateRoot = s;
 
@@ -390,6 +389,35 @@ contract Step {
                 }
             }
 
+            function makeMemGindex(byteIndex) -> out {
+                // memory is packed in 32 byte leaf values. = 5 bits, thus 64-5=59 bit path
+                out := or(shl(memoryGindex(), toU256(59)), shr(U256(byteIndex), toU256(5)))
+            }
+
+            function makeRegisterGindex(register) -> out {
+                if gt(register, 31) {
+                    revert(0, 0) // there are only 32 valid registers
+                }
+                out := or(shl(registersGindex(), toU256(5)), U256(register))
+            }
+
+            function makeCSRGindex(num) -> out {
+                if gt(num, 4095) {
+                    revert(0, 0) // there are only 4096 valid CSR registers
+                }
+                out := or(shl(csrGindex(), toU256(12)), U256(num))
+            }
+
+            function memToStateOp(memIndex, size) -> offset, gindex1, gindex2 {
+                gindex1 := makeMemGindex(memIndex)
+                offset := and64(memIndex, toU64(31))
+                gindex2 := 0
+                if iszero(lt(add(toU256(offset), U256(size)), toU256(32))) { // if offset+size >= 32, then it spans into the next memory chunk
+                    // note: intentional overflow, circular 64 bit memory is part of riscv5 spec (chapter 1.4)
+                    gindex2 := makeMemGindex(add64(memIndex, sub64(size, toU64(1))))
+                }
+            }
+
             function loadMem(addr, size, signed) -> out {
                 let offset, gindex1, gindex2 := memToStateOp(addr, size)
                 out := mutate(gindex1, gindex2, offset, size, destRead(), 0)
@@ -417,11 +445,11 @@ contract Step {
             }
 
             function getPC() -> out {
-                out := mutate(pcGindex, toU256(0), 0, toU64(8), destRead(), 0)
+                out := mutate(pcGindex(), toU256(0), 0, toU64(8), destRead(), 0)
             }
 
             function setPC(pc) {
-                mutate(pcGindex, toU256(0), 0, toU64(8), destWrite(), pc)
+                mutate(pcGindex(), toU256(0), 0, toU64(8), destWrite(), pc)
             }
 
             function readCSR(num) -> out {
@@ -437,7 +465,7 @@ contract Step {
                 switch a7
                 case 93 { // exit
                     let a0 := loadRegister(toU64(0))
-                    mutate(exitGindex, toU256(0), 0, toU64(8), destWrite(), a0)
+                    mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0)
                 }
                 case 214 { // brk
                     // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
@@ -460,7 +488,7 @@ contract Step {
                     switch addr
                     case 0 {
                         // no hint, allocate it ourselves, by as much as the requested length
-                        heap := mutate(heapGindex, toU256(0), 0, toU64(8), destHeapIncr(), length)
+                        heap := mutate(heapGindex(), toU256(0), 0, toU64(8), destHeapIncr(), length)
                         writeRegister(toU64(10), heap)
                     }
                     default {

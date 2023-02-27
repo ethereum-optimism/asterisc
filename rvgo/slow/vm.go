@@ -28,8 +28,8 @@ var (
 )
 
 func makeMemGindex(byteIndex U64) U256 {
-	// memory is packed in 32 byte leaf values
-	return or(shl(memoryGindex, toU256(64-5)), shr(U256(byteIndex), toU256(5)))
+	// memory is packed in 32 byte leaf values. = 5 bits, thus 64-5=59 bit path
+	return or(shl(memoryGindex, toU256(59)), shr(U256(byteIndex), toU256(5)))
 }
 
 func makeRegisterGindex(register U64) U256 {
