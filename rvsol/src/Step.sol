@@ -9,17 +9,31 @@ contract Step {
     function step(bytes32 calldata s, bytes calldata soData) public pure view returns (bytes32 stateRoot) {
         stateRoot = s;
 
+        uint256 memory soDataIndex = 4 + 32 + 32 + 32;  // selector, stateroot, offset, length
+
         assembly {
+            function hash(a, b) -> h {
+                mstore(0, a)
+                mstore(0x20, b)
+                h := keccak256(0, 0x40)
+            }
+
             function soGet(key) -> a, b {
-                // TODO increment memory counter, and load relevant length/data
-                if not(eq(d.length, 64)) { revert(0, 0) }  // TODO fix length lookup
-                if not(eq(keccak256(d), key)) { revert(0, 0) }  // TODO fix hashing
-                a, b := unpack(d)  // TODO unpack data
+                let i := mload(soDataIndex)
+                let a := calldataload(i)
+                i := add(i, 0x20)
+                let b := calldataload(i)
+                i := add(i, 0x20)
+                h := hash(a, b)
+                // TODO: we can check i is after offset and within length, but it buys us nothing
+                if not(eq(h, key)) { revert(0, 0) }
+                mstore(soDataIndex, i)
             }
 
             function soRemember(a, b) -> h {
+                // Use the memory scratchpad for hashing input
+                h := hash(a, b)
                 // TODO: we can event-log the (a,b) so we can fill the state-oracle with rvsol like with rvgo
-                h := keccak256(a, b)
             }
 
             // tree:
@@ -252,8 +266,7 @@ contract Step {
                 // READING MODE: if the stack gindex is lower than target, then traverse to target
                 for {} lt(stateStackGindex, stateGindex) {} {
                     if eq(stateStackGindex, 1) {
-                        stateValue := 123  // TODO mload stateRoot
-                        // stateValue = stateRoot  // TODO
+                        stateValue := mload(stateRoot)
                     }
                     stateStackGindex := shl(stateStackGindex, toU256(1))
                     let a, b := soGet(stateValue)
@@ -287,11 +300,7 @@ contract Step {
                     }
                     stateStackGindex := shr(stateStackGindex, toU256(1))
                     if eq(stateStackGindex, toU256(1)) {
-                        //if d, ok := so.(oracle.Differ); ok {
-                        //	fmt.Println("state change")
-                        //	d.Diff(stateRoot, stateValue, 1)
-                        //}
-                        stateRoot := stateValue
+                        mstore(stateRoot, stateValue)
                     }
                 }
             }
