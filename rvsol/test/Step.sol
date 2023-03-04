@@ -12,7 +12,7 @@ contract CounterTest is Test {
     }
 
     function testStep() public {
-        out = stepper.step();
+        bytes32 out = stepper.step(bytes32(uint256(0)), new bytes(0));
 //        assertEq(out.abc, 1);
     }
 }

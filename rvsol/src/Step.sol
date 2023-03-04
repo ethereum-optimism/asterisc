@@ -6,12 +6,16 @@ contract Step {
 
     // Executes a single RISC-V instruction, starting from the given state-root s,
     // using state-oracle witness data soData, and outputs a new state-root.
-    function step(bytes32 calldata s, bytes calldata soData) public pure view returns (bytes32 stateRoot) {
+    function step(bytes32 s, bytes calldata soData) public pure returns (bytes32 stateRoot) {
         stateRoot = s;
 
-        uint256 memory soDataIndex = 4 + 32 + 32 + 32;  // selector, stateroot, offset, length
-
         assembly {
+            function stateRootMemAddr() -> out {
+                out := 0x80 // TODO is this correct?
+            }
+            function soDataIndex() -> out {
+                out := 100 // 4 + 32 + 32 + 32 = selector, stateroot, offset, length
+            }
             function hash(a, b) -> h {
                 mstore(0, a)
                 mstore(0x20, b)
@@ -19,15 +23,15 @@ contract Step {
             }
 
             function soGet(key) -> a, b {
-                let i := mload(soDataIndex)
-                let a := calldataload(i)
+                let i := mload(soDataIndex())
+                a := calldataload(i)
                 i := add(i, 0x20)
-                let b := calldataload(i)
+                b := calldataload(i)
                 i := add(i, 0x20)
-                h := hash(a, b)
+                let h := hash(a, b)
                 // TODO: we can check i is after offset and within length, but it buys us nothing
                 if not(eq(h, key)) { revert(0, 0) }
-                mstore(soDataIndex, i)
+                mstore(soDataIndex(), i)
             }
 
             function soRemember(a, b) -> h {
@@ -60,11 +64,22 @@ contract Step {
             function destCSRRS() -> out { out := 4 }
             function destCSRRC() -> out { out := 5 }
 
+            function b32asBEWord(v) -> out {
+                out := v
+            }
+            function beWordAsB32(v) -> out {
+                out := v
+            }
+
             // type casts, no-op in yul
             function U64(v) -> out {
                 out := v
             }
             function U256(v) -> out {
+                out := v
+            }
+
+            function toU256(v) -> out {
                 out := v
             }
 
@@ -168,24 +183,85 @@ contract Step {
             }
 
             function add64(x, y) -> out {
-                out := U64(mod(add(U256(x), y), u64Mod()))
+                out := U64(mod(add(U256(x), U256(y)), u64Mod()))
             }
 
             function sub64(x, y) -> out {
-                out := U64(mod(sub(U256(x), y), u64Mod()))
+                out := U64(mod(sub(U256(x), U256(y)), u64Mod()))
             }
 
             function mul64(x, y) -> out {
-                out := u256ToU64(mul(U256(x), y))
+                out := u256ToU64(mul(U256(x), U256(y)))
             }
 
             function div64(x, y) -> out {
-                out := u256ToU64(div(U256(x), y))
+                out := u256ToU64(div(U256(x), U256(y)))
             }
 
             function sdiv64(x, y) -> out { // note: signed overflow semantics are the same between Go and EVM assembly
                 out := u256ToU64(sdiv(signExtend64To256(x), signExtend64To256(y)))
             }
+
+            function mod64(x, y) -> out {
+                out := U64(mod(U256(x), U256(y)))
+            }
+
+            function smod64(x, y) -> out {
+                out := u256ToU64(smod(signExtend64To256(x), signExtend64To256(y)))
+            }
+
+            function not64(x) -> out {
+                out := u256ToU64(not(U256(x)))
+            }
+
+            function lt64(x, y) -> out {
+                out := U64(lt(U256(x), U256(y)))
+            }
+
+            function gt64(x, y) -> out {
+                out := U64(gt(U256(x), U256(y)))
+            }
+
+            function slt64(x, y) -> out {
+                out := U64(slt(signExtend64To256(x), signExtend64To256(y)))
+            }
+
+            function sgt64(x, y) -> out {
+                out := U64(sgt(signExtend64To256(x), signExtend64To256(y)))
+            }
+
+            function eq64(x, y) -> out {
+                out := U64(eq(U256(x), U256(y)))
+            }
+
+            function iszero64(x) -> out {
+                out := iszero(U256(x))
+            }
+
+            function and64(x, y) -> out {
+                out := U64(and(U256(x), U256(y)))
+            }
+
+            function or64(x, y) -> out {
+                out := U64(or(U256(x), U256(y)))
+            }
+
+            function xor64(x, y) -> out {
+                out := U64(xor(U256(x), U256(y)))
+            }
+
+            function shl64(x, y) -> out {
+                out := u256ToU64(shl(U256(x), U256(y)))
+            }
+
+            function shr64(x, y) -> out {
+                out := U64(shr(U256(x), U256(y)))
+            }
+
+            function sar64(x, y) -> out {
+                out := u256ToU64(sar(signExtend64To256(x), U256(y)))
+            }
+
 
             //
             // Parse - functions to parse RISC-V instructions - see parse.go
@@ -266,7 +342,7 @@ contract Step {
                 // READING MODE: if the stack gindex is lower than target, then traverse to target
                 for {} lt(stateStackGindex, stateGindex) {} {
                     if eq(stateStackGindex, 1) {
-                        stateValue := mload(stateRoot)
+                        stateValue := mload(stateRootMemAddr())
                     }
                     stateStackGindex := shl(stateStackGindex, toU256(1))
                     let a, b := soGet(stateValue)
@@ -289,7 +365,7 @@ contract Step {
             function write(stateStackGindex, stateGindex, stateValue, stateStackHash) {
                 // WRITING MODE: if the stack gindex is higher than the target, then traverse back to root and update along the way
                 for {} gt(stateStackGindex, stateGindex) {} {
-                    prevStackHash, prevSibling := soGet(stateStackHash)
+                    let prevStackHash, prevSibling := soGet(stateStackHash)
                     stateStackHash := prevStackHash
                     switch eq(and(stateStackGindex, toU256(1)), toU256(1))
                     case 1 {
@@ -300,7 +376,7 @@ contract Step {
                     }
                     stateStackGindex := shr(stateStackGindex, toU256(1))
                     if eq(stateStackGindex, toU256(1)) {
-                        mstore(stateRoot, stateValue)
+                        mstore(stateRootMemAddr(), stateValue)
                     }
                 }
             }
@@ -437,8 +513,8 @@ contract Step {
             }
 
             function storeMem(addr, size, value) {
-                offset, gindex1, gindex2 := memToStateOp(addr, size)
-                mutate(gindex1, gindex2, offset, size, destWrite(), value)
+                let offset, gindex1, gindex2 := memToStateOp(addr, size)
+                pop(mutate(gindex1, gindex2, offset, size, destWrite(), value))
             }
 
             function loadRegister(num) -> out {
@@ -450,15 +526,15 @@ contract Step {
                     // v is a HINT, but no hints are specified by standard spec, or used by us.
                     leave
                 }
-                mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite(), val)
+                pop(mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite(), val))
             }
 
             function getPC() -> out {
                 out := mutate(pcGindex(), toU256(0), 0, toU64(8), destRead(), 0)
             }
 
-            function setPC(pc) {
-                mutate(pcGindex(), toU256(0), 0, toU64(8), destWrite(), pc)
+            function setPC(v) {
+                pop(mutate(pcGindex(), toU256(0), 0, toU64(8), destWrite(), v))
             }
 
             function readCSR(num) -> out {
@@ -466,7 +542,7 @@ contract Step {
             }
 
             function writeCSR(num, v) {
-                mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite(), v)
+                pop(mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite(), v))
             }
 
             function sysCall() {
@@ -474,7 +550,7 @@ contract Step {
                 switch a7
                 case 93 { // exit
                     let a0 := loadRegister(toU64(0))
-                    mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0)
+                    pop(mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0))
                 }
                 case 214 { // brk
                     // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
@@ -497,7 +573,7 @@ contract Step {
                     switch addr
                     case 0 {
                         // no hint, allocate it ourselves, by as much as the requested length
-                        heap := mutate(heapGindex(), toU256(0), 0, toU64(8), destHeapIncr(), length)
+                        let heap := mutate(heapGindex(), toU256(0), 0, toU64(8), destHeapIncr(), length)
                         writeRegister(toU64(10), heap)
                     }
                     default {
@@ -510,8 +586,8 @@ contract Step {
                 }
             }
 
-            let pc := getPC()
-            let instr := loadMem(pc, toU64(4), false)
+            let _pc := getPC()
+            let instr := loadMem(_pc, toU64(4), false)
 
             // these fields are ignored if not applicable to the instruction type / opcode
             let opcode := parseOpcode(instr)
@@ -523,7 +599,7 @@ contract Step {
             let rs1Value := loadRegister(rs1)
             let rs2Value := loadRegister(rs2)
 
-            //fmt.Printf("slow PC: %x\n", pc)
+            //fmt.Printf("slow PC: %x\n", _pc)
             //fmt.Printf("slow INSTR: %x\n", instr)
             //fmt.Printf("slow OPCODE: %x\n", opcode)
             //fmt.Printf("slow rs1 value: %x\n", rs1Value)
@@ -538,7 +614,7 @@ contract Step {
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 let rdValue := loadMem(memIndex, size, signed)
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x23 { // 010_0011: memory storing
                 // SB, SH, SW, SD
                 let imm := parseImmTypeS(instr)
@@ -546,7 +622,7 @@ contract Step {
                 let value := rs2Value
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 storeMem(memIndex, size, value)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x63 { // 110_0011: branching
                 let branchHit := toU64(0)
                 switch funct3
@@ -565,14 +641,14 @@ contract Step {
                 }
                 switch branchHit
                 case 0 {
-                    pc := add64(pc, toU64(4))
+                    _pc := add64(_pc, toU64(4))
                 } default {
-                    imm := parseImmTypeB(instr)
+                    let imm := parseImmTypeB(instr)
                     // imm12 is a signed offset, in multiples of 2 bytes
-                    pc := add64(pc, signExtend64(imm, toU64(11)))
+                    _pc := add64(_pc, signExtend64(imm, toU64(11)))
                 }
                 // not like the other opcodes: nothing to write to rd register, and PC has already changed
-                setPC(pc)
+                setPC(_pc)
             } case 0x13 { // 001_0011: immediate arithmetic and logic
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
@@ -600,7 +676,7 @@ contract Step {
                     rdValue := and64(rs1Value, imm)
                 }
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x1B { // 001_1011: immediate arithmetic and logic signed 32 bit
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
@@ -619,7 +695,7 @@ contract Step {
                     }
                 }
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x33 { // 011_0011: register arithmetic and logic
                 let rdValue := 0
                 switch funct7
@@ -693,7 +769,7 @@ contract Step {
                     }
                 }
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x3B { // 011_1011: register arithmetic and logic in 32 bits
                 let rdValue := 0
                 switch funct7
@@ -752,25 +828,25 @@ contract Step {
                     }
                 }
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x37 { // 011_0111: LUI = Load upper immediate
                 let imm := parseImmTypeU(instr)
                 let rdValue := shl64(imm, toU64(12))
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x17 { // 001_0111: AUIPC = Add upper immediate to PC
                 let imm := parseImmTypeU(instr)
-                let rdValue := add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
+                let rdValue := add64(_pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x6F { // 110_1111: JAL = Jump and link
                 let imm := parseImmTypeJ(instr)
-                let rdValue := add64(pc, toU64(4))
+                let rdValue := add64(_pc, toU64(4))
                 writeRegister(rd, rdValue)
-                setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes
+                setPC(add64(_pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes
             } case 0x67 { // 110_0111: JALR = Jump and link register
                 let imm := parseImmTypeI(instr)
-                let rdValue := add64(pc, toU64(4))
+                let rdValue := add64(_pc, toU64(4))
                 writeRegister(rd, rdValue)
                 setPC(and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
             } case 0x73 { // 111_0011: environment things
@@ -779,10 +855,10 @@ contract Step {
                     switch shr64(instr, toU64(20)) // I-type, top 12 bits
                     case 0 { // imm12 = 000000000000 ECALL
                         sysCall()
-                        setPC(add64(pc, toU64(4)))
+                        setPC(add64(_pc, toU64(4)))
                     } default { // imm12 = 000000000001 EBREAK
                         // ignore breakpoint
-                        setPC(add64(pc, toU64(4)))
+                        setPC(add64(_pc, toU64(4)))
                     }
                 } default { // CSR instructions
                     let imm := parseCSSR(instr)
@@ -801,7 +877,7 @@ contract Step {
                     }
                     // TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
                     writeRegister(rd, rdValue)
-                    setPC(add64(pc, toU64(4)))
+                    setPC(add64(_pc, toU64(4)))
                 }
             } case 0x2F { // 010_1111: RV32A and RV32A atomic operations extension
                 // TODO atomic operations
@@ -822,7 +898,7 @@ contract Step {
                 } case 0x1c { // 11100 = AMOMAXU
                 }
                 //writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } case 0x0F { // 000_1111: fence
                 //// TODO: different layout of func data
                 //// "fm pred succ"
@@ -836,12 +912,12 @@ contract Step {
                 //}
                 // We can no-op FENCE, there's nothing to synchronize
                 //writeRegister(rd, rdValue)
-                setPC(add64(pc, toU64(4)))
+                setPC(add64(_pc, toU64(4)))
             } default {
                 revert(0, 0) // TODO memory output: unknown opcode: %b full instruction: %b", opcode, instr
             }
         }
 
-        return;
+        return stateRoot;
     }
 }
