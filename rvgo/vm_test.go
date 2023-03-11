@@ -2,8 +2,20 @@ package fast
 
 import (
 	"debug/elf"
+	"encoding/binary"
+	"encoding/json"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/protolambda/asterisc/rvgo/oracle"
 	"github.com/protolambda/asterisc/rvgo/slow"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,6 +126,65 @@ func runSlowTestSuite(t *testing.T, path string) {
 // TODO iterate all test suites
 // TODO maybe load ELF sections for debugging
 // TODO if step PC matches test symbol address, then log that we entered the test case
+
+type dummyChain struct {
+}
+
+// Engine retrieves the chain's consensus engine.
+func (d *dummyChain) Engine() consensus.Engine {
+	return nil
+}
+
+// GetHeader returns the hash corresponding to their hash.
+func (d *dummyChain) GetHeader(h common.Hash, n uint64) *types.Header {
+	parentHash := common.Hash{0: 0xff}
+	binary.BigEndian.PutUint64(parentHash[1:], n-1)
+	return fakeHeader(n, parentHash)
+}
+
+func fakeHeader(n uint64, parentHash common.Hash) *types.Header {
+	header := types.Header{
+		Coinbase:   common.HexToAddress("0x00000000000000000000000000000000deadbeef"),
+		Number:     big.NewInt(int64(n)),
+		ParentHash: parentHash,
+		Time:       1000,
+		Nonce:      types.BlockNonce{0x1},
+		Extra:      []byte{},
+		Difficulty: big.NewInt(0),
+		GasLimit:   100000,
+	}
+	return &header
+}
+
+func TestEVMStep(t *testing.T) {
+	chainCfg := params.MainnetChainConfig
+	bc := &dummyChain{}
+	header := bc.GetHeader(common.Hash{}, 100)
+	author := &common.Address{0xaa}
+	blockContext := core.NewEVMBlockContext(header, bc, author)
+	vmCfg := vm.Config{}
+	db := rawdb.NewMemoryDatabase()
+	statedb := state.NewDatabase(db)
+	state, err := state.New(types.EmptyRootHash, statedb, nil)
+	require.NoError(t, err)
+
+	stepAddr := common.Address{}
+	dat, err := os.ReadFile("../rvsol/out/Step.sol/Step.json")
+	require.NoError(t, err)
+
+	var outDat struct {
+		Bytecode struct {
+			Object hexutil.Bytes `json:"object"`
+		} `json:"bytecode"`
+	}
+	err = json.Unmarshal(dat, &outDat)
+	require.NoError(t, err)
+
+	state.SetCode(stepAddr, outDat.Bytecode.Object)
+
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
+
+}
 
 func TestFastStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
