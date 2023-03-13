@@ -18,6 +18,11 @@ contract Step {
             mstore(stateRootMemAddr(), calldataload(4))
             mstore(soDataIndexMemAddr(), 100) // 4 + 32 + 32 + 32 = selector, stateroot, offset, length
 
+            function revertWithCode(code) {
+                mstore(0, code)
+                revert(0, 0x20)
+            }
+
             function hash(a, b) -> h {
                 mstore(0, a)
                 mstore(0x20, b)
@@ -33,8 +38,7 @@ contract Step {
                 let h := hash(a, b)
                 // TODO: we can check i is after offset and within length, but it buys us nothing
                 if iszero(eq(h, key)) {
-                    mstore(0, 0x8badf00d)
-                    revert(0, 0x20)
+                    revertWithCode(0x8badf00d)
                 }
                 mstore(soDataIndexMemAddr(), i)
             }
@@ -401,21 +405,18 @@ contract Step {
                 let stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
 
                 switch dest
-                case 3 { // destCSRRW
-                    // special case: CSRRW - read and write bits
+                case 3 { // destCSRRW: atomic Read/Write bits in CSR
                     out := stateValue
                     dest := destWrite()
                 }
-                case 4 { // destCSRRS
-                    // special case: CSRRS - read and set bits
+                case 4 { // destCSRRS: atomic Read and Set bits in CSR
                     out := stateValue
-                    value := or64(out, value) // set bits
+                    value := or64(out, value) // set bits, v=0 will be no-op
                     dest := destWrite()
                 }
-                case 5 { // destCSRRC
-                    // special case: CSRRC - read and clear bits
+                case 5 { // destCSRRC: atomic Read and Clear Bits in CSR
                     out := stateValue
-                    value := and64(out, not64(value)) // clear bits
+                    value := and64(out, not64(value)) // clear bits, v=0 will be no-op
                     dest := destWrite()
                 }
                 case 2 { // destHeapIncr
@@ -491,17 +492,15 @@ contract Step {
             }
 
             function makeRegisterGindex(register) -> out {
-                if gt(register, 31) {
-                    mstore(0, 0xbadacce550)
-                    revert(0, 0x20) // there are only 32 valid registers
+                if gt(register, 31) { // there are only 32 valid registers
+                    revertWithCode(0xbadacce550)
                 }
                 out := or(shl(toU256(5), registersGindex()), U256(register))
             }
 
             function makeCSRGindex(num) -> out {
-                if gt(num, 4095) {
-                    mstore(0, 0xbadacce551)
-                    revert(0, 0x20) // there are only 4096 valid CSR registers
+                if gt(num, 4095) { // there are only 4096 valid CSR registers
+                    revertWithCode(0xbadacce551)
                 }
                 out := or(shl(toU256(12), csrGindex()), U256(num))
             }
@@ -550,12 +549,19 @@ contract Step {
                 pop(mutate(pcGindex(), toU256(0), 0, toU64(8), destWrite(), v))
             }
 
-            function readCSR(num) -> out {
-                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead(), 0)
-            }
-
-            function writeCSR(num, v) {
-                pop(mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite(), v))
+            function updateCSR(num, v, mode) -> out {
+                let dest := 0
+                switch mode
+                case 1 {
+                    dest := destCSRRW() // ?01 = CSRRW(I)
+                } case 2 {
+                    dest := destCSRRS() // ?10 = CSRRS(I)
+                } case 3 {
+                    dest := destCSRRC() // ?11 = CSRRC(I)
+                } default {
+                    revertWithCode(0xbadc0de0)
+                }
+                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), dest, v)
             }
 
             function sysCall() {
@@ -875,20 +881,12 @@ contract Step {
                     }
                 } default { // CSR instructions
                     let imm := parseCSSR(instr)
-                    let rdValue := readCSR(imm)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
                         value := rs1Value
                     }
-                    switch and64(funct3, toU64(3))
-                    case 1 { // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
-                        writeCSR(imm, value)
-                    } case 2 { // ?10 = CSRRS = "atomic Read and Set bits in CSR"
-                        writeCSR(imm, or64(rdValue, value)) // v=0 will be no-op
-                    } case 3 { // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
-                        writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
-                    }
-                    // TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
+                    let mode := and64(funct3, toU64(3))
+                    let rdValue := updateCSR(imm, value, mode)
                     writeRegister(rd, rdValue)
                     setPC(add64(_pc, toU64(4)))
                 }

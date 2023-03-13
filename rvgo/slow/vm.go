@@ -136,19 +136,17 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
 
 		switch dest {
-		case destCSRRW:
-			// special case: CSRRW - read and write bits
+		// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
+		case destCSRRW: // atomic Read/Write bits in CSR
 			out = decodeU64(stateValue[:8])
 			dest = destWrite
-		case destCSRRS:
-			// special case: CSRRS - read and set bits
+		case destCSRRS: // atomic Read and Set bits in CSR
 			out = decodeU64(stateValue[:8])
-			value = or64(out, value) // set bits
+			value = or64(out, value) // set bits, v=0 will be no-op
 			dest = destWrite
-		case destCSRRC:
-			// special case: CSRRC - read and clear bits
+		case destCSRRC: // atomic Read and Clear Bits in CSR
 			out = decodeU64(stateValue[:8])
-			value = and64(out, not64(value)) // clear bits
+			value = and64(out, not64(value)) // clear bits, v=0 will be no-op
 			dest = destWrite
 		case destHeapIncr:
 			// special case: increment before writing, and output result
@@ -252,13 +250,20 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		mutate(pcGindex, toU256(0), 0, toU64(8), destWrite, pc)
 	}
 
-	readCSR := func(num U64) (out U64) {
-		out = mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destRead, U64{})
+	updateCSR := func(num U64, v U64, mode U64) (out U64) {
+		var dest U64
+		switch mode.val() {
+		case 1:
+			dest = destCSRRW // ?01 = CSRRW(I)
+		case 2:
+			dest = destCSRRS // ?10 = CSRRS(I)
+		case 3:
+			dest = destCSRRC // ?11 = CSRRC(I)
+		default:
+			panic(fmt.Errorf("unkwown CSR mode: %d", mode.val()))
+		}
+		out = mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), dest, v)
 		return
-	}
-
-	writeCSR := func(num U64, v U64) {
-		mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), destWrite, v)
 	}
 
 	sysCall := func() {
@@ -574,20 +579,12 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			}
 		default: // CSR instructions
 			imm := parseCSSR(instr)
-			rdValue := readCSR(imm)
 			value := rs1
 			if iszero64(and64(funct3, toU64(4))) {
 				value = rs1Value
 			}
-			switch and64(funct3, toU64(3)).val() {
-			case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
-				writeCSR(imm, value)
-			case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
-				writeCSR(imm, or64(rdValue, value)) // v=0 will be no-op
-			case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
-				writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
-			}
-			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
+			mode := and64(funct3, toU64(3))
+			rdValue := updateCSR(imm, value, mode)
 			writeRegister(rd, rdValue)
 			setPC(add64(pc, toU64(4)))
 		}
