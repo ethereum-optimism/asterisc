@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"debug/elf"
+	"log"
 
 	"github.com/protolambda/asterisc/rvgo/fast"
 	"github.com/protolambda/asterisc/rvgo/oracle"
@@ -9,40 +10,34 @@ import (
 )
 
 func main() {
-	state := fast.NewVMState()
-	// TODO load program into memory
+	programELF, err := elf.Open("program.bin")
+	if err != nil {
+		log.Fatalf("failed to open program ELF: %v", err)
+	}
+	defer programELF.Close()
+	vmState, err := fast.LoadELF(programELF)
+	if err != nil {
+		log.Fatalf("failed to load ELF into VM state: %v", err)
+	}
 
 	// run through agreed instruction steps the fast way
 	instructionStep := 1000
 	for i := 0; i < instructionStep; i++ {
-		fast.Step(state)
+		fast.Step(vmState)
 	}
-
-	instructionSubStep := 10
 
 	so := oracle.NewStateOracle()
-	pre := slow.VMSubState{StateRoot: state.Merkleize(so)} // oracle will remember merkleized state
-	// run through agreed instruction sub-steps
-	for i := 0; i < instructionSubStep; i++ {
-		pre = slow.SubStep(pre, so)
-	}
+	pre := vmState.Merkleize(so)
+	log.Printf("pre-state: %x", pre)
 
-	// Now run through the sub-step of dispute.
+	// Now run through the disputed step.
 	// And remember all state we access, so we can reproduce it without full state oracle.
 	so.BuildAccessList(true)
-	post := slow.SubStep(pre, so)
+	post := slow.Step(pre, so)
+
+	log.Printf("post-state: %x", post)
 	al := so.AccessList()
-	fmt.Println("produced post sub-step post-state with access list!", post, al)
+	evmInput := oracle.Input(al, pre)
 
-	// replicate the step in Go with only the access list data, and copy of pre-state
-	so2 := &oracle.AccessListOracle{AccessList: al}
-	post2 := slow.SubStep(pre, so2)
-	if post != post2 {
-		panic("failed to replicate step")
-	}
-
-	// TODO: replicate the sub-step in EVM
-	// TODO encode pre-state and access-list as EVM function call args
-	// TODO run EVM
-	// TODO compare result
+	log.Printf("proof calldata: %x", evmInput)
 }
