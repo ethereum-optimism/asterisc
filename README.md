@@ -8,7 +8,7 @@ Or spelled out in asterisks: `******* amzing` (when it's complete :P)
 
 ## Work in progress
 
-This project is a work in progress. Maybe 50% complete.
+This project is a work in progress. Maybe 80% complete.
 
 TODO
 - [ ] Go:
@@ -29,15 +29,16 @@ TODO
     - [ ] extend w/ threading clone/futex/gettid/tgkil/tkill
     - [ ] extras
   - [ ] implement pre-image oracle by swapping a special memory region for the requested preimage
+  - [x] Pass RISC-V test vectors
 - [ ] Sol:
   - [ ] Forge solidity testing setup
-  - [ ] complete port of Go slow-mode emu to solidity
+  - [x] Complete port of Go slow-mode emu to solidity/Yul
+  - [x] Pass RISC-V test vectors
 - [ ] Misc:
   - [x] analyze Go runtime/compiler
   - [ ] script to turn ELF binary into riscv memory pre-image with starting point
   - [ ] Go-Sol differential fuzzing
   - [ ] Test basic Go programs
-  - [ ] Test Cannon
 
 ## How does it work?
 
