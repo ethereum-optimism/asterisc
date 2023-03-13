@@ -925,8 +925,7 @@ contract Step {
                 //writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } default {
-                mstore(0, 0xf001c0de)
-                revert(0, 0x20) // TODO memory output: unknown opcode: %b full instruction: %b", opcode, instr
+                revertWithCode(0xf001c0de)
             }
 
             return(stateRootMemAddr(), 0x20)
