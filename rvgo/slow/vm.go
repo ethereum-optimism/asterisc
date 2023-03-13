@@ -29,21 +29,21 @@ var (
 
 func makeMemGindex(byteIndex U64) U256 {
 	// memory is packed in 32 byte leaf values. = 5 bits, thus 64-5=59 bit path
-	return or(shl(memoryGindex, toU256(59)), shr(U256(byteIndex), toU256(5)))
+	return or(shl(toU256(59), memoryGindex), shr(toU256(5), U256(byteIndex)))
 }
 
 func makeRegisterGindex(register U64) U256 {
 	if x := U256(register); x.Uint64() >= 32 {
 		panic("there are only 32 valid registers")
 	}
-	return or(shl(registersGindex, toU256(5)), U256(register))
+	return or(shl(toU256(5), registersGindex), U256(register))
 }
 
 func makeCSRGindex(num U64) U256 {
 	if x := U256(num); x.Uint64() >= 4096 {
 		panic("there are only 4096 valid CSR registers")
 	}
-	return or(shl(csrGindex, toU256(12)), U256(num))
+	return or(shl(toU256(12), csrGindex), U256(num))
 }
 
 func memToStateOp(memIndex U64, size U64) (offset uint8, gindex1, gindex2 U256) {
@@ -89,9 +89,9 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			if stateStackGindex.Eq(uint256.NewInt(1)) {
 				stateValue = stateRoot
 			}
-			stateStackGindex = shl(stateStackGindex, toU256(1))
+			stateStackGindex = shl(toU256(1), stateStackGindex)
 			a, b := so.Get(stateValue)
-			if and(shr(stateGindex, toU256(stateStackDepth)), toU256(1)) != (U256{}) {
+			if and(shr(toU256(stateStackDepth), stateGindex), toU256(1)) != (U256{}) {
 				stateStackGindex = or(stateStackGindex, toU256(1))
 				stateValue = b
 				// keep track of where we have been, to use the trail to go back up the stack when writing
@@ -116,7 +116,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			} else {
 				stateValue = so.Remember(stateValue, prevSibling)
 			}
-			stateStackGindex = shr(stateStackGindex, toU256(1))
+			stateStackGindex = shr(toU256(1), stateStackGindex)
 			if stateStackGindex == toU256(1) {
 				//if d, ok := so.(oracle.Differ); ok {
 				//	fmt.Println("state change")
@@ -167,18 +167,18 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		switch dest {
 		case destWrite:
 			for i := uint8(0); i < uint8(firstChunkBytes.val()); i++ {
-				shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
-				valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
-				maskByte := shl(toU256(0xff), shamt)
-				value = shr64(value, toU64(8))
+				shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
+				valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
+				maskByte := shl(shamt, toU256(0xff))
+				value = shr64(toU64(8), value)
 				base = or(and(base, not(maskByte)), valByte)
 			}
 			write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
 		case destRead:
 			for i := uint8(0); i < uint8(firstChunkBytes.val()); i++ {
-				shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
-				valByte := U64(and(shr(base, shamt), toU256(0xff)))
-				out = or64(out, shl64(valByte, shl64(toU64(i), toU64(3))))
+				shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
+				valByte := U64(and(shr(shamt, base), toU256(0xff)))
+				out = or64(out, shl64(shl64(toU64(3), toU64(i)), valByte))
 			}
 		}
 
@@ -199,18 +199,18 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		case destWrite:
 			// note: StateValue holds the old 32 bytes, some of which may stay the same
 			for i := uint64(0); i < secondChunkBytes.val(); i++ {
-				shamt := shl(toU256(31-uint8(i)), toU256(3))
-				valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
-				maskByte := shl(toU256(0xff), shamt)
-				value = shr64(value, toU64(8))
+				shamt := shl(toU256(3), toU256(31-uint8(i)))
+				valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
+				maskByte := shl(shamt, toU256(0xff))
+				value = shr64(toU64(8), value)
 				base = or(and(base, not(maskByte)), valByte)
 			}
 			write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
 		case destRead:
 			for i := uint8(0); i < uint8(secondChunkBytes.val()); i++ {
-				shamt := shl(sub(toU256(31), toU256(i)), toU256(3))
-				valByte := U64(and(shr(base, shamt), toU256(0xff)))
-				out = or64(out, shl64(valByte, shl64(add64(toU64(i), firstChunkBytes), toU64(3))))
+				shamt := shl(toU256(3), sub(toU256(31), toU256(i)))
+				valByte := U64(and(shr(shamt, base), toU256(0xff)))
+				out = or64(out, shl64(shl64(toU64(3), add64(toU64(i), firstChunkBytes)), valByte))
 			}
 		}
 		return
@@ -220,7 +220,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		offset, gindex1, gindex2 := memToStateOp(addr, size)
 		out = mutate(gindex1, gindex2, offset, size, destRead, U64{})
 		if signed {
-			topBitIndex := sub64(shl64(size, toU64(3)), toU64(1))
+			topBitIndex := sub64(shl64(toU64(3), size), toU64(1))
 			out = signExtend64(out, topBitIndex)
 		}
 		return
@@ -271,7 +271,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 			// brk(0) changes nothing about the memory, and returns the current page break
-			v := shl64(toU64(1), toU64(30)) // set program break at 1 GiB
+			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
 			writeRegister(toU64(10), v)
 		case 222: // mmap
 			// A0 = addr (hint)
@@ -322,7 +322,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		// LB, LH, LW, LD, LBU, LHU, LWU
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
-		size := shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
+		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := loadMem(memIndex, size, signed)
 		writeRegister(rd, rdValue)
@@ -330,7 +330,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
-		size := shl64(toU64(1), funct3)
+		size := shl64(funct3, toU64(1))
 		value := rs2Value
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		storeMem(memIndex, size, value)
@@ -368,7 +368,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		case 0: // 000 = ADDI
 			rdValue = add64(rs1Value, imm)
 		case 1: // 001 = SLLI
-			rdValue = shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+			rdValue = shl64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 		case 2: // 010 = SLTI
 			rdValue = slt64(rs1Value, imm)
 		case 3: // 011 = SLTIU
@@ -378,9 +378,9 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		case 5: // 101 = SR~
 			switch funct7.val() {
 			case 0x00: // 0000000 = SRLI
-				rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+				rdValue = shr64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			case 0x20: // 0100000 = SRAI
-				rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+				rdValue = sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			}
 		case 6: // 110 = ORI
 			rdValue = or64(rs1Value, imm)
@@ -396,14 +396,14 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		case 0: // 000 = ADDIW
 			rdValue = mask32Signed64(add64(rs1Value, imm))
 		case 1: // 001 = SLLIW
-			rdValue = mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
+			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
 			switch funct7.val() {
 			case 0x00: // 0000000 = SRLIW
-				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
 			case 0x20: // 0100000 = SRAIW
-				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}
 		writeRegister(rd, rdValue)
@@ -411,16 +411,16 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 	case 0x33: // 011_0011: register arithmetic and logic
 		var rdValue U64
 		switch funct7.val() {
-		case 1: // RV32M extension
+		case 1: // RV M extension
 			switch funct3.val() {
 			case 0: // 000 = MUL: signed x signed
 				rdValue = mul64(rs1Value, rs2Value)
 			case 1: // 001 = MULH: upper bits of signed x signed
-				rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value)), toU256(64)))
+				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value))))
 			case 2: // 010 = MULHSU: upper bits of signed x unsigned
-				rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), u64ToU256(rs2Value))))
 			case 3: // 011 = MULHU: upper bits of unsigned x unsigned
-				rdValue = u256ToU64(shr(mul(u64ToU256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+				rdValue = u256ToU64(shr(toU256(64), mul(u64ToU256(rs1Value), u64ToU256(rs2Value))))
 			case 4: // 100 = DIV
 				switch rs2Value.val() {
 				case 0:
@@ -460,7 +460,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 					rdValue = sub64(rs1Value, rs2Value)
 				}
 			case 1: // 001 = SLL
-				rdValue = shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
+				rdValue = shl64(and64(rs2Value, toU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
 			case 2: // 010 = SLT
 				rdValue = slt64(rs1Value, rs2Value)
 			case 3: // 011 = SLTU
@@ -470,9 +470,9 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			case 5: // 101 = SR~
 				switch funct7.val() {
 				case 0x00: // 0000000 = SRL
-					rdValue = shr64(rs1Value, and64(rs2Value, toU64(0x3F))) // logical: fill with zeroes
+					rdValue = shr64(and64(rs2Value, toU64(0x3F)), rs1Value) // logical: fill with zeroes
 				case 0x20: // 0100000 = SRA
-					rdValue = sar64(rs1Value, and64(rs2Value, toU64(0x3F))) // arithmetic: sign bit is extended
+					rdValue = sar64(and64(rs2Value, toU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
 				}
 			case 6: // 110 = OR
 				rdValue = or64(rs1Value, rs2Value)
@@ -485,7 +485,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
 		var rdValue U64
 		switch funct7.val() {
-		case 1: // RV64M extension
+		case 1: // RV M extension
 			switch funct3.val() {
 			case 0: // 000 = MULW
 				rdValue = mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
@@ -518,7 +518,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			}
-		default: // RV32M extension
+		default:
 			switch funct3.val() {
 			case 0: // 000 = ADDW/SUBW
 				switch funct7.val() {
@@ -528,14 +528,14 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			case 1: // 001 = SLLW
-				rdValue = mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
+				rdValue = mask32Signed64(shl64(and64(rs2Value, toU64(0x1F)), rs1Value))
 			case 5: // 101 = SR~
 				shamt := and64(rs2Value, toU64(0x1F))
 				switch funct7.val() {
 				case 0x00: // 0000000 = SRLW
-					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
 				case 0x20: // 0100000 = SRAW
-					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 				}
 			}
 		}
@@ -543,19 +543,19 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		setPC(add64(pc, toU64(4)))
 	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
-		rdValue := shl64(imm, toU64(12))
+		rdValue := shl64(toU64(12), imm)
 		writeRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
-		rdValue := add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
+		rdValue := add64(pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
 		writeRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
 		writeRegister(rd, rdValue)
-		setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes
+		setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
@@ -564,7 +564,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 	case 0x73: // 111_0011: environment things
 		switch funct3.val() {
 		case 0: // 000 = ECALL/EBREAK
-			switch shr64(instr, toU64(20)).val() { // I-type, top 12 bits
+			switch shr64(toU64(20), instr).val() { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				sysCall()
 				setPC(add64(pc, toU64(4)))
@@ -596,7 +596,7 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
 		//size := 1 << funct3
-		switch shr64(and64(funct7, toU64(0x1F)), toU64(2)).val() {
+		switch shr64(toU64(2), and64(funct7, toU64(0x1F))).val() {
 		case 0x0: // 00000 = AMOADD
 		case 0x1: // 00001 = AMOSWAP
 		case 0x2: // 00010 = LR

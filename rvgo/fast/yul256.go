@@ -102,25 +102,25 @@ func xor(x, y U256) (out U256) {
 }
 
 func shl(x, y U256) (out U256) {
-	if !y.IsUint64() && y.Uint64() >= 256 {
+	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
 	}
-	out.Lsh(&x, uint(y.Uint64()))
+	out.Lsh(&y, uint(x.Uint64()))
 	return
 }
 
 func shr(x, y U256) (out U256) {
-	if !y.IsUint64() && y.Uint64() >= 256 {
+	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
 	}
-	out.Rsh(&x, uint(y.Uint64()))
+	out.Rsh(&y, uint(x.Uint64()))
 	return
 }
 
 func sar(x, y U256) (out U256) {
-	if !y.IsUint64() && y.Uint64() >= 256 {
+	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
 	}
-	out.SRsh(&x, uint(y.Uint64()))
+	out.SRsh(&y, uint(x.Uint64()))
 	return
 }

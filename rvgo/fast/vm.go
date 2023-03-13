@@ -21,7 +21,7 @@ func Step(s *VMState) {
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 			// brk(0) changes nothing about the memory, and returns the current page break
-			v := shl64(toU64(1), toU64(30)) // set program break at 1 GiB
+			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
 			s.writeRegister(toU64(10), v)
 		case 222: // mmap
 			// A0 = addr (hint)
@@ -72,7 +72,7 @@ func Step(s *VMState) {
 		// LB, LH, LW, LD, LBU, LHU, LWU
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
-		size := shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
+		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := s.loadMem(memIndex, size, signed)
 		s.writeRegister(rd, rdValue)
@@ -80,7 +80,7 @@ func Step(s *VMState) {
 	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
-		size := shl64(toU64(1), funct3)
+		size := shl64(funct3, toU64(1))
 		value := rs2Value
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		s.storeMem(memIndex, size, value)
@@ -118,7 +118,7 @@ func Step(s *VMState) {
 		case 0: // 000 = ADDI
 			rdValue = add64(rs1Value, imm)
 		case 1: // 001 = SLLI
-			rdValue = shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+			rdValue = shl64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 		case 2: // 010 = SLTI
 			rdValue = slt64(rs1Value, imm)
 		case 3: // 011 = SLTIU
@@ -128,9 +128,9 @@ func Step(s *VMState) {
 		case 5: // 101 = SR~
 			switch funct7 {
 			case 0x00: // 0000000 = SRLI
-				rdValue = shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+				rdValue = shr64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			case 0x20: // 0100000 = SRAI
-				rdValue = sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+				rdValue = sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			}
 		case 6: // 110 = ORI
 			rdValue = or64(rs1Value, imm)
@@ -146,14 +146,14 @@ func Step(s *VMState) {
 		case 0: // 000 = ADDIW
 			rdValue = mask32Signed64(add64(rs1Value, imm))
 		case 1: // 001 = SLLIW
-			rdValue = mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
+			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
 			switch funct7 {
 			case 0x00: // 0000000 = SRLIW
-				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
 			case 0x20: // 0100000 = SRAIW
-				rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}
 		s.writeRegister(rd, rdValue)
@@ -161,16 +161,16 @@ func Step(s *VMState) {
 	case 0x33: // 011_0011: register arithmetic and logic
 		var rdValue U64
 		switch funct7 {
-		case 1: // RV32M extension
+		case 1: // RV M extension
 			switch funct3 {
 			case 0: // 000 = MUL: signed x signed
 				rdValue = mul64(rs1Value, rs2Value)
 			case 1: // 001 = MULH: upper bits of signed x signed
-				rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value)), toU256(64)))
+				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value))))
 			case 2: // 010 = MULHSU: upper bits of signed x unsigned
-				rdValue = u256ToU64(shr(mul(signExtend64To256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), u64ToU256(rs2Value))))
 			case 3: // 011 = MULHU: upper bits of unsigned x unsigned
-				rdValue = u256ToU64(shr(mul(u64ToU256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+				rdValue = u256ToU64(shr(toU256(64), mul(u64ToU256(rs1Value), u64ToU256(rs2Value))))
 			case 4: // 100 = DIV
 				switch rs2Value {
 				case 0:
@@ -210,7 +210,7 @@ func Step(s *VMState) {
 					rdValue = sub64(rs1Value, rs2Value)
 				}
 			case 1: // 001 = SLL
-				rdValue = shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
+				rdValue = shl64(and64(rs2Value, toU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
 			case 2: // 010 = SLT
 				rdValue = slt64(rs1Value, rs2Value)
 			case 3: // 011 = SLTU
@@ -220,9 +220,9 @@ func Step(s *VMState) {
 			case 5: // 101 = SR~
 				switch funct7 {
 				case 0x00: // 0000000 = SRL
-					rdValue = shr64(rs1Value, and64(rs2Value, toU64(0x3F))) // logical: fill with zeroes
+					rdValue = shr64(and64(rs2Value, toU64(0x3F)), rs1Value) // logical: fill with zeroes
 				case 0x20: // 0100000 = SRA
-					rdValue = sar64(rs1Value, and64(rs2Value, toU64(0x3F))) // arithmetic: sign bit is extended
+					rdValue = sar64(and64(rs2Value, toU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
 				}
 			case 6: // 110 = OR
 				rdValue = or64(rs1Value, rs2Value)
@@ -235,7 +235,7 @@ func Step(s *VMState) {
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
 		var rdValue U64
 		switch funct7 {
-		case 1: // RV64M extension
+		case 1: // RV M extension
 			switch funct3 {
 			case 0: // 000 = MULW
 				rdValue = mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
@@ -268,7 +268,7 @@ func Step(s *VMState) {
 					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			}
-		default: // RV32M extension
+		default:
 			switch funct3 {
 			case 0: // 000 = ADDW/SUBW
 				switch funct7 {
@@ -278,14 +278,14 @@ func Step(s *VMState) {
 					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			case 1: // 001 = SLLW
-				rdValue = mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
+				rdValue = mask32Signed64(shl64(and64(rs2Value, toU64(0x1F)), rs1Value))
 			case 5: // 101 = SR~
 				shamt := and64(rs2Value, toU64(0x1F))
 				switch funct7 {
 				case 0x00: // 0000000 = SRLW
-					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
 				case 0x20: // 0100000 = SRAW
-					rdValue = signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 				}
 			}
 		}
@@ -293,12 +293,12 @@ func Step(s *VMState) {
 		s.setPC(add64(pc, toU64(4)))
 	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
-		rdValue := shl64(imm, toU64(12))
+		rdValue := shl64(toU64(12), imm)
 		s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
 	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
-		rdValue := add64(pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
+		rdValue := add64(pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
 		s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
 	case 0x6F: // 110_1111: JAL = Jump and link
@@ -314,7 +314,7 @@ func Step(s *VMState) {
 	case 0x73: // 111_0011: environment things
 		switch funct3 {
 		case 0: // 000 = ECALL/EBREAK
-			switch shr64(instr, toU64(20)) { // I-type, top 12 bits
+			switch shr64(toU64(20), instr) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				sysCall()
 				s.setPC(add64(pc, toU64(4)))
@@ -346,7 +346,7 @@ func Step(s *VMState) {
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
 		//size := 1 << funct3
-		switch shr64(and64(funct7, toU64(0x1F)), toU64(2)) {
+		switch shr64(toU64(2), and64(funct7, toU64(0x1F))) {
 		case 0x0: // 00000 = AMOADD
 		case 0x1: // 00001 = AMOSWAP
 		case 0x2: // 00010 = LR

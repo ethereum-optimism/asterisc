@@ -5,7 +5,9 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/holiman/uint256"
 )
 
 type VMStateOracle interface {
@@ -229,6 +231,24 @@ func (al *AccessListOracle) Get(key [32]byte) (a, b [32]byte) {
 func (al *AccessListOracle) Remember(left [32]byte, right [32]byte) [32]byte {
 	// nothing to remember, just return the hash
 	return crypto.Keccak256Hash(left[:], right[:])
+}
+
+var (
+	stepFnSig    = "step(bytes32,bytes)"
+	stepFnBytes4 = crypto.Keccak256([]byte(stepFnSig))[:4]
+)
+
+func Input(al []Access, preState [32]byte) []byte {
+	out := make([]byte, 0, 4+32+32+32+len(al)*64)
+	out = append(out, stepFnBytes4...)
+	out = append(out, preState[:]...)
+	out = append(out, common.Hash(uint256.NewInt(64).Bytes32()).Bytes()...)                 // offset to data
+	out = append(out, common.Hash(uint256.NewInt(uint64(len(al))*64).Bytes32()).Bytes()...) // length of data
+	for _, v := range al {
+		out = append(out, v.Value[0][:]...)
+		out = append(out, v.Value[1][:]...)
+	}
+	return out
 }
 
 var _ VMStateOracle = (*AccessListOracle)(nil)
