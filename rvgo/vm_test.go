@@ -214,7 +214,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 
 	for i := 0; i < 10_000; i++ {
 		so.BuildAccessList(true)
-		t.Logf("next step - pc: 0x%x\n", vmState.PC)
+		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
 		post := slow.Step(pre, so)
 
@@ -229,11 +229,6 @@ func runEVMTestSuite(t *testing.T, path string) {
 			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
 		}
 
-		t.Log("ACCESS LIST")
-		for i, v := range al {
-			t.Logf("%10d: 0x%x, 0x%x -> 0x%x", i, v.Value[0], v.Value[1], v.Key)
-		}
-
 		// Now run the same in EVM, but using the access-list
 		input := oracle.Input(al, pre)
 		startingGas := uint64(30_000_000)
@@ -243,7 +238,6 @@ func runEVMTestSuite(t *testing.T, path string) {
 		if gasUsed > maxGasUsed {
 			maxGasUsed = gasUsed
 		}
-		t.Logf("fast post: %x", fastRoot)
 		require.Len(t, ret, 32)
 		post2 := common.BytesToHash(ret)
 		if post2 != fastRoot {
