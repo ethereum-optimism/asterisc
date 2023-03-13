@@ -6,16 +6,18 @@ contract Step {
 
     // Executes a single RISC-V instruction, starting from the given state-root s,
     // using state-oracle witness data soData, and outputs a new state-root.
-    function step(bytes32 s, bytes calldata soData) public pure returns (bytes32 stateRoot) {
-        stateRoot = s;
-
+    function step(bytes32 s, bytes calldata soData) public pure returns (bytes32 stateRootOut) {
         assembly {
+            // 0x00 and 0x20 are scratch.
             function stateRootMemAddr() -> out {
-                out := 0x80 // TODO is this correct?
+                out := 0x40
             }
-            function soDataIndex() -> out {
-                out := 100 // 4 + 32 + 32 + 32 = selector, stateroot, offset, length
+            function soDataIndexMemAddr() -> out {
+                out := 0x60
             }
+            mstore(stateRootMemAddr(), calldataload(4))
+            mstore(soDataIndexMemAddr(), 100) // 4 + 32 + 32 + 32 = selector, stateroot, offset, length
+
             function hash(a, b) -> h {
                 mstore(0, a)
                 mstore(0x20, b)
@@ -23,15 +25,18 @@ contract Step {
             }
 
             function soGet(key) -> a, b {
-                let i := mload(soDataIndex())
+                let i := mload(soDataIndexMemAddr())
                 a := calldataload(i)
                 i := add(i, 0x20)
                 b := calldataload(i)
                 i := add(i, 0x20)
                 let h := hash(a, b)
                 // TODO: we can check i is after offset and within length, but it buys us nothing
-                if not(eq(h, key)) { revert(0, 0) }
-                mstore(soDataIndex(), i)
+                if iszero(eq(h, key)) {
+                    mstore(0, 0x8badf00d)
+                    revert(0, 0x20)
+                }
+                mstore(soDataIndexMemAddr(), i)
             }
 
             function soRemember(a, b) -> h {
@@ -83,41 +88,42 @@ contract Step {
                 out := v
             }
 
+            // 1 11 0110 00000101
             function bitlen(x) -> n {
-                if gt(x, sub(shl(1, 128), 1)) {
-                    x := shr(x, 128)
+                if gt(x, sub(shl(128, 1), 1)) {
+                    x := shr(128, x)
                     n := add(n, 128)
                 }
-                if gt(x, sub(shl(1, 64), 1)) {
-                    x := shr(x, 64)
+                if gt(x, sub(shl(64, 1), 1)) {
+                    x := shr(64, x)
                     n := add(n, 64)
                 }
-                if gt(x, sub(shl(1, 32), 1)) {
-                    x := shr(x, 32)
+                if gt(x, sub(shl(32, 1), 1)) {
+                    x := shr(32, x)
                     n := add(n, 32)
                 }
-                if gt(x, sub(shl(1, 16), 1)) {
-                    x := shr(x, 16)
+                if gt(x, sub(shl(16, 1), 1)) {
+                    x := shr(16, x)
                     n := add(n, 16)
                 }
-                if gt(x, sub(shl(1, 8), 1)) {
-                    x := shr(x, 8)
+                if gt(x, sub(shl(8, 1), 1)) {
+                    x := shr(8, x)
                     n := add(n, 8)
                 }
-                if gt(x, sub(shl(1, 4), 1)) {
-                    x := shr(x, 4)
+                if gt(x, sub(shl(4, 1), 1)) {
+                    x := shr(4, x)
                     n := add(n, 4)
                 }
-                if gt(x, sub(shl(1, 2), 1)) {
-                    x := shr(x, 2)
+                if gt(x, sub(shl(2, 1), 1)) {
+                    x := shr(2, x)
                     n := add(n, 2)
                 }
                 if gt(x, sub(shl(1, 1), 1)) {
-                    x := shr(x, 1)
+                    x := shr(1, x)
                     n := add(n, 1)
                 }
-                if gt(x, sub(shl(1, 0), 1)) {
-                    n := add(n, 0)
+                if gt(x, 0) {
+                    n := add(n, 1)
                 }
             }
 
@@ -125,11 +131,11 @@ contract Step {
             // Yul64 - functions to do 64 bit math - see yul64.go
             //
             function u64Mask() -> out { // max uint64
-                out := shr(not(0), 192) // 256-64 = 192
+                out := shr(192, not(0)) // 256-64 = 192
             }
 
             function u32Mask() -> out {
-                out := U64(shr(not(0), toU256(224))) // 256-32 = 224
+                out := U64(shr(toU256(224), not(0))) // 256-32 = 224
             }
 
             function toU64(v) -> out {
@@ -153,22 +159,22 @@ contract Step {
             }
 
             function u64Mod() -> out { // 1 << 64
-                out := shl(toU256(1), toU256(64))
+                out := shl(toU256(64), toU256(1))
             }
 
             function u64TopBit() -> out { // 1 << 63
-                out := shl(toU256(1), toU256(63))
+                out := shl(toU256(63), toU256(1))
             }
 
             function signExtend64(v, bit) -> out {
-                switch and(v, shl(1, bit))
+                switch and(v, shl(bit, 1))
                 case 0 {
                     // fill with zeroes, by masking
-                    out := U64(and(U256(v), shr(U256(u64Mask()), sub(toU256(63), bit))))
+                    out := U64(and(U256(v), shr(sub(toU256(63), bit), U256(u64Mask()))))
                 }
                 default {
                     // fill with ones, by or-ing
-                    out := U64(or(U256(v), shl(shr(U256(u64Mask()), bit), bit)))
+                    out := U64(or(U256(v), shl(bit, shr(bit, U256(u64Mask())))))
                 }
             }
 
@@ -178,7 +184,7 @@ contract Step {
                     out := v
                 }
                 default {
-                    out := or(shl(not(0), toU256(64)), v)
+                    out := or(shl(toU256(64), not(0)), v)
                 }
             }
 
@@ -259,7 +265,7 @@ contract Step {
             }
 
             function sar64(x, y) -> out {
-                out := u256ToU64(sar(signExtend64To256(x), U256(y)))
+                out := u256ToU64(sar(U256(x), signExtend64To256(y)))
             }
 
 
@@ -267,23 +273,28 @@ contract Step {
             // Parse - functions to parse RISC-V instructions - see parse.go
             //
             function parseImmTypeI(instr) -> out {
-                out := signExtend64(shr64(instr, toU64(20)), toU64(11))
+                out := signExtend64(shr64(toU64(20), instr), toU64(11))
             }
 
             function parseImmTypeS(instr) -> out {
-                out := signExtend64(or64(shl64(shr64(instr, toU64(25)), toU64(5)), and64(shr64(instr, toU64(7)), toU64(0x1F))), toU64(11))
+                out := signExtend64(
+                    or64(
+                        shl64(toU64(5), shr64(toU64(25), instr)),
+                        and64(shr64(toU64(7), instr), toU64(0x1F))
+                    ),
+                    toU64(11))
             }
 
             function parseImmTypeB(instr) -> out {
                 out := signExtend64(
                     or64(
                         or64(
-                            shl64(and64(shr64(instr, toU64(8)), toU64(0xF)), toU64(1)),
-                            shl64(and64(shr64(instr, toU64(25)), toU64(0x3F)), toU64(5))
+                            shl64(toU64(1), and64(shr64(toU64(8), instr), toU64(0xF))),
+                            shl64(toU64(5), and64(shr64(toU64(25), instr), toU64(0x3F)))
                         ),
                         or64(
-                            shl64(and64(shr64(instr, toU64(7)), toU64(1)), toU64(11)),
-                            shl64(shr64(instr, toU64(31)), toU64(12))
+                            shl64(toU64(11), and64(shr64(toU64(7), instr), toU64(1))),
+                            shl64(toU64(12), shr64(toU64(31), instr))
                         )
                     ),
                     toU64(12)
@@ -291,19 +302,19 @@ contract Step {
             }
 
             function parseImmTypeU(instr) -> out {
-                out := signExtend64(shr64(instr, toU64(12)), toU64(19))
+                out := signExtend64(shr64(toU64(12), instr), toU64(19))
             }
 
             function parseImmTypeJ(instr) -> out {
                 out := signExtend64(
                     or64(
                         or64(
-                            shl64(and64(shr64(instr, toU64(21)), shortToU64(0x1FF)), toU64(1)),
-                            shl64(and64(shr64(instr, toU64(20)), toU64(1)), toU64(10))
+                            shl64(toU64(1), and64(shr64(toU64(21), instr), shortToU64(0x1FF))),
+                            shl64(toU64(10), and64(shr64(toU64(20), instr), toU64(1)))
                         ),
                         or64(
-                            shl64(and64(shr64(instr, toU64(12)), toU64(0xFF)), toU64(11)),
-                            shl64(shr64(instr, toU64(31)), toU64(19))
+                            shl64(toU64(11), and64(shr64(toU64(12), instr), toU64(0xFF))),
+                            shl64(toU64(19), shr64(toU64(31), instr))
                         )
                     ),
                     toU64(19)
@@ -315,27 +326,27 @@ contract Step {
             }
 
             function parseRd(instr) -> out {
-                out := and64(shr64(instr, toU64(7)), toU64(0x1F))
+                out := and64(shr64(toU64(7), instr), toU64(0x1F))
             }
 
             function parseFunct3(instr) -> out {
-                out := and64(shr64(instr, toU64(12)), toU64(0x7))
+                out := and64(shr64(toU64(12), instr), toU64(0x7))
             }
 
             function parseRs1(instr) -> out {
-                out := and64(shr64(instr, toU64(15)), toU64(0x1F))
+                out := and64(shr64(toU64(15), instr), toU64(0x1F))
             }
 
             function parseRs2(instr) -> out {
-                out := and64(shr64(instr, toU64(20)), toU64(0x1F))
+                out := and64(shr64(toU64(20), instr), toU64(0x1F))
             }
 
             function parseFunct7(instr) -> out {
-                out := shr64(instr, toU64(25))
+                out := shr64(toU64(25), instr)
             }
 
             function parseCSSR(instr) -> out {
-                out := shr64(instr, toU64(20))
+                out := shr64(toU64(20), instr)
             }
 
             function read(stateStackGindex, stateGindex, stateStackDepth) -> stateValue, stateStackHash {
@@ -344,16 +355,16 @@ contract Step {
                     if eq(stateStackGindex, 1) {
                         stateValue := mload(stateRootMemAddr())
                     }
-                    stateStackGindex := shl(stateStackGindex, toU256(1))
+                    stateStackGindex := shl(toU256(1), stateStackGindex)
                     let a, b := soGet(stateValue)
-                    switch and(shr(stateGindex, toU256(stateStackDepth)), toU256(1))
+                    switch and(shr(toU256(stateStackDepth), stateGindex), toU256(1))
                     case 1 {
                         stateStackGindex := or(stateStackGindex, toU256(1))
                         stateValue := b
                         // keep track of where we have been, to use the trail to go back up the stack when writing
                         stateStackHash := soRemember(stateStackHash, a)
                     }
-                    case 2 {
+                    case 0 {
                         stateValue := a
                         // keep track of where we have been, to use the trail to go back up the stack when writing
                         stateStackHash := soRemember(stateStackHash, b)
@@ -374,7 +385,7 @@ contract Step {
                     case 0 {
                         stateValue := soRemember(stateValue, prevSibling)
                     }
-                    stateStackGindex := shr(stateStackGindex, toU256(1))
+                    stateStackGindex := shr(toU256(1), stateStackGindex)
                     if eq(stateStackGindex, toU256(1)) {
                         mstore(stateRootMemAddr(), stateValue)
                     }
@@ -424,19 +435,19 @@ contract Step {
                 switch dest
                 case 1 { // destWrite
                     for { let i := 0 } lt(i, firstChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
-                        let valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
-                        let maskByte := shl(toU256(0xff), shamt)
-                        value := shr64(value, toU64(8))
+                        let shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
+                        let valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
+                        let maskByte := shl(shamt, toU256(0xff))
+                        value := shr64(toU64(8), value)
                         base := or(and(base, not(maskByte)), valByte)
                     }
                     write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
                 }
                 case 0 { // destRead
                     for { let i := 0 } lt(i, firstChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(sub(sub(toU256(31), toU256(i)), toU256(offset)), toU256(3))
-                        let valByte := U64(and(shr(base, shamt), toU256(0xff)))
-                        out := or64(out, shl64(valByte, shl64(toU64(i), toU64(3))))
+                        let shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
+                        let valByte := U64(and(shr(shamt, base), toU256(0xff)))
+                        out := or64(out, shl64(shl64(toU64(3), toU64(i)), valByte))
                     }
                 }
 
@@ -457,40 +468,42 @@ contract Step {
                 case 1 { // destWrite
                     // note: StateValue holds the old 32 bytes, some of which may stay the same
                     for { let i := 0 } lt(i, secondChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(toU256(sub(31, i)), toU256(3))
-                        let valByte := shl(and(u64ToU256(value), toU256(0xff)), shamt)
-                        let maskByte := shl(toU256(0xff), shamt)
-                        value := shr64(value, toU64(8))
+                        let shamt := shl(toU256(3), toU256(sub(31, i)))
+                        let valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
+                        let maskByte := shl(shamt, toU256(0xff))
+                        value := shr64(toU64(8), value)
                         base := or(and(base, not(maskByte)), valByte)
                     }
                     write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
                 }
                 case 0 { // destRead
                     for { let i := 0 } lt(i, secondChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(sub(toU256(31), toU256(i)), toU256(3))
-                        let valByte := U64(and(shr(base, shamt), toU256(0xff)))
-                        out := or64(out, shl64(valByte, shl64(add64(toU64(i), firstChunkBytes), toU64(3))))
+                        let shamt := shl(toU256(3), sub(toU256(31), toU256(i)))
+                        let valByte := U64(and(shr(shamt, base), toU256(0xff)))
+                        out := or64(out, shl64(shl64(toU64(3), add64(toU64(i), firstChunkBytes)), valByte))
                     }
                 }
             }
 
             function makeMemGindex(byteIndex) -> out {
                 // memory is packed in 32 byte leaf values. = 5 bits, thus 64-5=59 bit path
-                out := or(shl(memoryGindex(), toU256(59)), shr(U256(byteIndex), toU256(5)))
+                out := or(shl(toU256(59), memoryGindex()), shr(toU256(5), U256(byteIndex)))
             }
 
             function makeRegisterGindex(register) -> out {
                 if gt(register, 31) {
-                    revert(0, 0) // there are only 32 valid registers
+                    mstore(0, 0xbadacce550)
+                    revert(0, 0x20) // there are only 32 valid registers
                 }
-                out := or(shl(registersGindex(), toU256(5)), U256(register))
+                out := or(shl(toU256(5), registersGindex()), U256(register))
             }
 
             function makeCSRGindex(num) -> out {
                 if gt(num, 4095) {
-                    revert(0, 0) // there are only 4096 valid CSR registers
+                    mstore(0, 0xbadacce551)
+                    revert(0, 0x20) // there are only 4096 valid CSR registers
                 }
-                out := or(shl(csrGindex(), toU256(12)), U256(num))
+                out := or(shl(toU256(12), csrGindex()), U256(num))
             }
 
             function memToStateOp(memIndex, size) -> offset, gindex1, gindex2 {
@@ -507,7 +520,7 @@ contract Step {
                 let offset, gindex1, gindex2 := memToStateOp(addr, size)
                 out := mutate(gindex1, gindex2, offset, size, destRead(), 0)
                 if signed {
-                    let topBitIndex := sub64(shl64(size, toU64(3)), toU64(1))
+                    let topBitIndex := sub64(shl64(toU64(3), size), toU64(1))
                     out := signExtend64(out, topBitIndex)
                 }
             }
@@ -556,7 +569,7 @@ contract Step {
                     // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
                     // brk(0) changes nothing about the memory, and returns the current page break
-                    let v := shl64(toU64(1), toU64(30)) // set program break at 1 GiB
+                    let v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
                     writeRegister(toU64(10), v)
                 }
                 case 222 { // mmap
@@ -610,7 +623,7 @@ contract Step {
                 // LB, LH, LW, LD, LBU, LHU, LWU
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
-                let size := shl64(toU64(1), and64(funct3, toU64(3))) // 3 = 11 -> 1, 2, 4, 8 bytes size
+                let size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 let rdValue := loadMem(memIndex, size, signed)
                 writeRegister(rd, rdValue)
@@ -618,7 +631,7 @@ contract Step {
             } case 0x23 { // 010_0011: memory storing
                 // SB, SH, SW, SD
                 let imm := parseImmTypeS(instr)
-                let size := shl64(toU64(1), funct3)
+                let size := shl64(funct3, toU64(1))
                 let value := rs2Value
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 storeMem(memIndex, size, value)
@@ -656,7 +669,7 @@ contract Step {
                 case 0 { // 000 = ADDI
                     rdValue := add64(rs1Value, imm)
                 } case 1 { // 001 = SLLI
-                    rdValue := shl64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+                    rdValue := shl64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
                 } case 2 { // 010 = SLTI
                     rdValue := slt64(rs1Value, imm)
                 } case 3 { // 011 = SLTIU
@@ -666,9 +679,9 @@ contract Step {
                 } case 5 { // 101 = SR~
                     switch funct7
                     case 0x00 { // 0000000 = SRLI
-                        rdValue := shr64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+                        rdValue := shr64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
                     } case 0x20 { // 0100000 = SRAI
-                        rdValue := sar64(rs1Value, and64(imm, toU64(0x3F))) // lower 6 bits in 64 bit mode
+                        rdValue := sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
                     }
                 } case 6 { // 110 = ORI
                     rdValue := or64(rs1Value, imm)
@@ -684,14 +697,14 @@ contract Step {
                 case 0 { // 000 = ADDIW
                     rdValue := mask32Signed64(add64(rs1Value, imm))
                 } case 1 { // 001 = SLLIW
-                    rdValue := mask32Signed64(shl64(rs1Value, and64(imm, toU64(0x1F))))
+                    rdValue := mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
                 } case 5 { // 101 = SR~
                     let shamt := and64(imm, toU64(0x1F))
                     switch funct7
                     case 0x00 { // 0000000 = SRLIW
-                        rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+                        rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
                     } case 0x20 { // 0100000 = SRAIW
-                        rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+                        rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
                     }
                 }
                 writeRegister(rd, rdValue)
@@ -704,11 +717,11 @@ contract Step {
                     case 0 { // 000 = MUL: signed x signed
                         rdValue := mul64(rs1Value, rs2Value)
                     } case 1 { // 001 = MULH: upper bits of signed x signed
-                        rdValue := u256ToU64(shr(mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value)), toU256(64)))
+                        rdValue := u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value))))
                     } case 2 { // 010 = MULHSU: upper bits of signed x unsigned
-                        rdValue := u256ToU64(shr(mul(signExtend64To256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+                        rdValue := u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), u64ToU256(rs2Value))))
                     } case 3 { // 011 = MULHU: upper bits of unsigned x unsigned
-                        rdValue := u256ToU64(shr(mul(u64ToU256(rs1Value), u64ToU256(rs2Value)), toU256(64)))
+                        rdValue := u256ToU64(shr(toU256(64), mul(u64ToU256(rs1Value), u64ToU256(rs2Value))))
                     } case 4 { // 100 = DIV
                         switch rs2Value
                         case 0 {
@@ -748,7 +761,7 @@ contract Step {
                             rdValue := sub64(rs1Value, rs2Value)
                         }
                     } case 1 { // 001 = SLL
-                        rdValue := shl64(rs1Value, and64(rs2Value, toU64(0x3F))) // only the low 6 bits are consider in RV6VI
+                        rdValue := shl64(and64(rs2Value, toU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
                     } case 2 { // 010 = SLT
                         rdValue := slt64(rs1Value, rs2Value)
                     } case 3 { // 011 = SLTU
@@ -758,9 +771,9 @@ contract Step {
                     } case 5 { // 101 = SR~
                         switch funct7
                         case 0x00 { // 0000000 = SRL
-                            rdValue := shr64(rs1Value, and64(rs2Value, toU64(0x3F))) // logical: fill with zeroes
+                            rdValue := shr64(and64(rs2Value, toU64(0x3F)), rs1Value) // logical: fill with zeroes
                         } case 0x20 { // 0100000 = SRA
-                            rdValue := sar64(rs1Value, and64(rs2Value, toU64(0x3F))) // arithmetic: sign bit is extended
+                            rdValue := sar64(and64(rs2Value, toU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
                         }
                     } case 6 { // 110 = OR
                         rdValue := or64(rs1Value, rs2Value)
@@ -816,14 +829,14 @@ contract Step {
                             rdValue := mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
                     } case 1 { // 001 = SLLW
-                        rdValue := mask32Signed64(shl64(rs1Value, and64(rs2Value, toU64(0x1F))))
+                        rdValue := mask32Signed64(shl64(and64(rs2Value, toU64(0x1F)), rs1Value))
                     } case 5 { // 101 = SR~
                         let shamt := and64(rs2Value, toU64(0x1F))
                         switch funct7
                         case 0x00 { // 0000000 = SRLW
-                            rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), toU64(31))
+                            rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
                         } case 0x20 { // 0100000 = SRAW
-                            rdValue := signExtend64(shr64(and64(rs1Value, u32Mask()), shamt), sub64(toU64(31), shamt))
+                            rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
                         }
                     }
                 }
@@ -831,12 +844,12 @@ contract Step {
                 setPC(add64(_pc, toU64(4)))
             } case 0x37 { // 011_0111: LUI = Load upper immediate
                 let imm := parseImmTypeU(instr)
-                let rdValue := shl64(imm, toU64(12))
+                let rdValue := shl64(toU64(12), imm)
                 writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x17 { // 001_0111: AUIPC = Add upper immediate to PC
                 let imm := parseImmTypeU(instr)
-                let rdValue := add64(_pc, signExtend64(shl64(imm, toU64(12)), toU64(31)))
+                let rdValue := add64(_pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
                 writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x6F { // 110_1111: JAL = Jump and link
@@ -852,7 +865,7 @@ contract Step {
             } case 0x73 { // 111_0011: environment things
                 switch funct3
                 case 0 { // 000 = ECALL/EBREAK
-                    switch shr64(instr, toU64(20)) // I-type, top 12 bits
+                    switch shr64(toU64(20), instr) // I-type, top 12 bits
                     case 0 { // imm12 = 000000000000 ECALL
                         sysCall()
                         setPC(add64(_pc, toU64(4)))
@@ -884,7 +897,7 @@ contract Step {
                 // 0b010 == RV32A W variants
                 // 0b011 == RV64A D variants
                 //size := 1 << funct3
-                switch shr64(and64(funct7, toU64(0x1F)), toU64(2))
+                switch shr64(toU64(2), and64(funct7, toU64(0x1F)))
                 case 0x0 { // 00000 = AMOADD
                 } case 0x1 { // 00001 = AMOSWAP
                 } case 0x2 { // 00010 = LR
@@ -914,10 +927,11 @@ contract Step {
                 //writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } default {
-                revert(0, 0) // TODO memory output: unknown opcode: %b full instruction: %b", opcode, instr
+                mstore(0, 0xf001c0de)
+                revert(0, 0x20) // TODO memory output: unknown opcode: %b full instruction: %b", opcode, instr
             }
-        }
 
-        return stateRoot;
+            return(stateRootMemAddr(), 0x20)
+        }
     }
 }

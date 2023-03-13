@@ -37,13 +37,13 @@ func mask32Signed64(v U64) U64 {
 }
 
 func signExtend64(v uint64, bit uint64) uint64 {
-	switch and64(v, shl64(1, bit)) {
+	switch and64(v, shl64(bit, 1)) {
 	case 0:
 		// fill with zeroes, by masking
-		return and64(v, shr64(u64Mask(), sub64(63, bit)))
+		return and64(v, shr64(sub64(63, bit), u64Mask()))
 	default:
 		// fill with ones, by or-ing
-		return or64(v, shl64(shr64(u64Mask(), bit), bit))
+		return or64(v, shl64(bit, shr64(bit, u64Mask())))
 	}
 }
 
@@ -52,7 +52,7 @@ func signExtend64To256(v U64) U256 {
 	case 0:
 		return *new(uint256.Int).SetUint64(v)
 	default:
-		return or(shl(not(U256{}), toU256(64)), *new(uint256.Int).SetUint64(v))
+		return or(shl(toU256(64), not(U256{})), *new(uint256.Int).SetUint64(v))
 	}
 }
 
@@ -162,13 +162,13 @@ func xor64(x, y uint64) uint64 {
 }
 
 func shl64(x, y uint64) uint64 {
-	return x << y
+	return y << x
 }
 
 func shr64(x, y uint64) uint64 {
-	return x >> y
+	return y >> x
 }
 
 func sar64(x, y uint64) uint64 {
-	return uint64(int64(x) >> y)
+	return uint64(int64(y) >> x)
 }

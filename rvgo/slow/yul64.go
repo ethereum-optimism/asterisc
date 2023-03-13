@@ -32,11 +32,11 @@ func u64ToU256(v U64) U256 {
 }
 
 func u64Mask() U64 { // max uint64
-	return U64(shr(not(U256{}), toU256(192))) // 256-64 = 192
+	return U64(shr(toU256(192), not(U256{}))) // 256-64 = 192
 }
 
 func u32Mask() U64 {
-	return U64(shr(not(U256{}), toU256(224))) // 256-32 = 224
+	return U64(shr(toU256(224), not(U256{}))) // 256-32 = 224
 }
 
 func mask32Signed64(v U64) U64 {
@@ -44,21 +44,21 @@ func mask32Signed64(v U64) U64 {
 }
 
 func u64Mod() U256 { // 1 << 64
-	return shl(toU256(1), toU256(64))
+	return shl(toU256(64), toU256(1))
 }
 
 func u64TopBit() U256 { // 1 << 63
-	return shl(toU256(1), toU256(63))
+	return shl(toU256(63), toU256(1))
 }
 
 func signExtend64(v U64, bit U64) U64 {
-	switch and(U256(v), shl(toU256(1), U256(bit))) {
+	switch and(U256(v), shl(U256(bit), toU256(1))) {
 	case U256{}:
 		// fill with zeroes, by masking
-		return U64(and(U256(v), shr(U256(u64Mask()), sub(toU256(63), U256(bit)))))
+		return U64(and(U256(v), shr(sub(toU256(63), U256(bit)), U256(u64Mask()))))
 	default:
 		// fill with ones, by or-ing
-		return U64(or(U256(v), shl(shr(U256(u64Mask()), U256(bit)), U256(bit))))
+		return U64(or(U256(v), shl(U256(bit), shr(U256(bit), U256(u64Mask())))))
 	}
 }
 
@@ -67,7 +67,7 @@ func signExtend64To256(v U64) U256 {
 	case U256{}:
 		return U256(v)
 	default:
-		return or(shl(not(U256{}), toU256(64)), U256(v))
+		return or(shl(toU256(64), not(U256{})), U256(v))
 	}
 }
 
@@ -155,17 +155,20 @@ func xor64(x, y U64) (out U64) {
 	return
 }
 
+// returns y << x
 func shl64(x, y U64) (out U64) {
 	out = u256ToU64(shl(U256(x), U256(y)))
 	return
 }
 
+// returns y >> x
 func shr64(x, y U64) (out U64) {
 	out = U64(shr(U256(x), U256(y)))
 	return
 }
 
+// returns y >> x (signed)
 func sar64(x, y U64) (out U64) {
-	out = u256ToU64(sar(signExtend64To256(x), U256(y)))
+	out = u256ToU64(sar(U256(x), signExtend64To256(y)))
 	return
 }
