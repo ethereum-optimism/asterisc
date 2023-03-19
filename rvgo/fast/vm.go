@@ -2,27 +2,32 @@ package fast
 
 import (
 	"fmt"
+	"io"
 )
 
-func Step(s *VMState) {
+// Step runs a single instruction
+// Note: errors are only returned in debugging/tooling modes, not in production use.
+func Step(s *VMState, stdOut, stdErr io.Writer) error {
 	if s.Exited {
-		return
+		return nil
 	}
 
-	sysCall := func() {
+	sysCall := func() error {
 		a7 := s.loadRegister(toU64(17))
 
 		switch a7 {
 		case 93: // exit
-			a0 := s.loadRegister(toU64(0))
+			a0 := s.loadRegister(toU64(10))
 			s.Exit = a0
 			s.Exited = true
+			// program stops here, no need to change registers.
 		case 214: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 			// brk(0) changes nothing about the memory, and returns the current page break
 			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
 			s.writeRegister(toU64(10), v)
+			s.writeRegister(toU64(11), toU64(0)) // no error
 		case 222: // mmap
 			// A0 = addr (hint)
 			addr := s.loadRegister(toU64(10))
@@ -43,9 +48,83 @@ func Step(s *VMState) {
 				// allow hinted memory address (leave it in A0 as return argument)
 			}
 			s.writeRegister(toU64(11), toU64(0)) // no error
-		default:
-			// TODO maybe revert if the syscall is unrecognized?
+		case 63: // read
+			fd := s.loadRegister(toU64(10))    // A0 = fd
+			addr := s.loadRegister(toU64(11))  // A1 = *buf addr
+			count := s.loadRegister(toU64(12)) // A2 = count
+			var n, errCode U64
+			switch fd {
+			case 0: // stdin
+				n = toU64(0) // never read anything from stdin
+				errCode = toU64(0)
+			case 3: // pre-image oracle
+				n = s.readPreimageValue(addr, count)
+				errCode = toU64(0)
+			default:
+				n = u64Mask()         //  -1 (reading error)
+				errCode = toU64(0x4d) // EBADF
+			}
+			s.writeRegister(toU64(10), n)
+			s.writeRegister(toU64(11), errCode)
+		case 64: // write
+			fd := s.loadRegister(toU64(10))    // A0 = fd
+			addr := s.loadRegister(toU64(11))  // A1 = *buf addr
+			count := s.loadRegister(toU64(12)) // A2 = count
+			var n, errCode U64
+			switch fd {
+			case 1: // stdout
+				_, err := io.Copy(stdOut, s.memRange(fd, count))
+				if err != nil {
+					return fmt.Errorf("stdout writing err: %w", err)
+				}
+				n = count // write completes fully in single instruction step
+				errCode = toU64(0)
+			case 2: // stderr
+				_, err := io.Copy(stdErr, s.memRange(fd, count))
+				if err != nil {
+					return fmt.Errorf("stderr writing err: %w", err)
+				}
+				n = count // write completes fully in single instruction step
+				errCode = toU64(0)
+			case 3: // pre-image oracle
+				n = s.writePreimageKey(addr, count)
+				s.writeRegister(toU64(11), toU64(0)) // no error
+			default: // any other file, including (4) pre-image hinter
+				n = u64Mask()         //  -1 (writing error)
+				errCode = toU64(0x4d) // EBADF
+			}
+			s.writeRegister(toU64(10), n)
+			s.writeRegister(toU64(11), errCode)
+		case 25: // fcntl - file descriptor manipulation / info lookup
+			fd := s.loadRegister(toU64(10))  // A0 = fd
+			cmd := s.loadRegister(toU64(11)) // A1 = cmd
+			var out, errCode U64
+			switch cmd {
+			case 0x3: // F_GETFL: get file descriptor flags
+				switch fd {
+				case 0: // stdin
+					out = 0 // O_RDONLY
+				case 1: // stdout
+					out = 1 // O_WRONLY
+				case 2: // stderr
+					out = 1 // O_WRONLY
+				case 3: // pre-image oracle
+					out = 2 // O_RDWR
+				default:
+					out = u64Mask()
+					errCode = toU64(0x4d) // EBADF
+				}
+			default: // no other commands: don't allow changing flags, duplicating FDs, etc.
+				out = u64Mask()
+				errCode = toU64(0x16) // EINVAL (cmd not recognized by this kernel)
+			}
+			s.writeRegister(toU64(10), out)
+			s.writeRegister(toU64(11), errCode) // EBADF
+		default: // every other syscall results in exit with error code
+			s.Exited = true
+			s.Exit = 1
 		}
+		return nil
 	}
 
 	pc := s.PC
@@ -316,8 +395,12 @@ func Step(s *VMState) {
 		case 0: // 000 = ECALL/EBREAK
 			switch shr64(toU64(20), instr) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
-				sysCall()
-				s.setPC(add64(pc, toU64(4)))
+				if err := sysCall(); err != nil {
+					return fmt.Errorf("syscall err: %w", err)
+				}
+				if !s.Exited { // don't change any state if we have exited with the syscall already
+					s.setPC(add64(pc, toU64(4)))
+				}
 			default: // imm12 = 000000000001 EBREAK
 				// ignore breakpoint
 				s.setPC(add64(pc, toU64(4)))
@@ -375,8 +458,9 @@ func Step(s *VMState) {
 		// We can no-op FENCE, there's nothing to synchronize
 		//s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
-	default:
-		panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
+	default: // any other opcode results in an exit with error code
+		s.Exited = true
+		s.Exit = uint64(1)
 	}
-	return
+	return nil
 }

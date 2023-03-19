@@ -3,6 +3,7 @@ package main
 import (
 	"debug/elf"
 	"log"
+	"os"
 
 	"github.com/protolambda/asterisc/rvgo/fast"
 	"github.com/protolambda/asterisc/rvgo/oracle"
@@ -23,7 +24,9 @@ func main() {
 	// run through agreed instruction steps the fast way
 	instructionStep := 1000
 	for i := 0; i < instructionStep; i++ {
-		fast.Step(vmState)
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			log.Fatalf("VM err at step %d PC %d: %v", i, vmState.PC, err)
+		}
 	}
 
 	so := oracle.NewStateOracle()

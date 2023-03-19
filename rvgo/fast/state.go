@@ -3,6 +3,7 @@ package fast
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 
 	"github.com/protolambda/asterisc/rvgo/oracle"
 )
@@ -29,6 +30,11 @@ type VMState struct {
 	Exit   uint64
 	Exited bool
 	Heap   uint64 // for mmap to keep allocating new anon memory
+
+	PreimageKey         [2][32]byte // 0: type, 1: hash
+	PreimageValueOffset uint64
+
+	PreimageOracle func(typ [32]byte, key [32]byte) []byte
 }
 
 func NewVMState() *VMState {
@@ -135,16 +141,17 @@ func (state *VMState) loadMem(addr uint64, size uint64, signed bool) uint64 {
 	}
 	var out [8]byte
 	pageIndex := addr >> pageAddrSize
-	if _, ok := state.Memory[pageIndex]; !ok { // if page does not exist, then it's a 0 value
+	p, ok := state.Memory[pageIndex]
+	if !ok { // if page does not exist, then it's a 0 value
 		return 0
 	}
-	copy(out[:], state.Memory[pageIndex][addr&pageAddrMask:])
+	copy(out[:], p[addr&pageAddrMask:])
 	end := addr + size - 1 // Can also wrap around total memory.
 	endPage := end >> pageAddrSize
 	if pageIndex != endPage { // if it spans across two pages.
-		if _, ok := state.Memory[endPage]; ok { // only if page exists, 0 otherwise
+		if p, ok := state.Memory[endPage]; ok { // only if page exists, 0 otherwise
 			remaining := (end & pageAddrMask) + 1
-			copy(out[size-remaining:], state.Memory[endPage][:remaining])
+			copy(out[size-remaining:], p[:remaining])
 		}
 	}
 	v := binary.LittleEndian.Uint64(out[:]) & ((1 << (size * 8)) - 1)
@@ -161,18 +168,22 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 	var bytez [8]byte
 	binary.LittleEndian.PutUint64(bytez[:], value)
 	pageIndex := addr >> pageAddrSize
-	if _, ok := state.Memory[pageIndex]; !ok { // create page if it does not exist
-		state.Memory[pageIndex] = &[pageSize]byte{}
+	p, ok := state.Memory[pageIndex]
+	if !ok { // create page if it does not exist
+		p = &[pageSize]byte{}
+		state.Memory[pageIndex] = p
 	}
-	copy(state.Memory[pageIndex][addr&pageAddrMask:], bytez[:size])
+	copy(p[addr&pageAddrMask:], bytez[:size])
 	end := addr + size - 1
 	endPage := end >> pageAddrSize
 	if pageIndex != endPage { // if it spans across two pages. Can also wrap around total memory.
-		if _, ok := state.Memory[endPage]; !ok { // create page if it does not exist
-			state.Memory[endPage] = &[pageSize]byte{}
+		p, ok := state.Memory[endPage]
+		if !ok { // create page if it does not exist
+			p = &[pageSize]byte{}
+			state.Memory[endPage] = p
 		}
 		remaining := (end & pageAddrMask) + 1
-		copy(state.Memory[endPage][:remaining], bytez[size-remaining:])
+		copy(p[:remaining], bytez[size-remaining:])
 	}
 }
 
@@ -206,4 +217,147 @@ func (state *VMState) writeRegister(reg uint64, v uint64) {
 		panic(fmt.Errorf("unknown register %d, cannot write %x", reg, v))
 	}
 	state.Registers[reg] = v
+}
+
+// readU256AlignedMemory reads bytes starting at addr from memory, no more than count are read.
+// At most 32 bytes are read.
+// If addr is not aligned to a multiple of 32 bytes, less bytes may be read,
+// to contain reading to a single 32-byte leaf.
+// A container with the data (zeroed right-padding if necessary),
+// and the length of the read data in bits (!!!), is returned.
+func (state *VMState) readU256AlignedMemory(addr uint64, count uint64) (dat U256, bits uint64) {
+	// find alignment, and reduce work if it is not aligned
+	alignment := addr % 32
+	// how many bytes we can read from this bytes32
+	maxData := 32 - alignment
+	// reduce count accordingly, if necessary
+	if count > maxData {
+		count = maxData
+	}
+	bits = shl64(toU64(8), count)
+
+	// make sure addr is aligned with 32 bits
+	addr = addr & ^uint64(0x1f)
+
+	// load the key data
+	pageIndex := addr >> pageAddrSize
+	p, ok := state.Memory[pageIndex]
+	if !ok { // default to zeroed data if page does not exist
+		return U256{}, bits
+	}
+
+	// Load the relevant bytes32
+	pageAddr := addr & pageAddrMask
+	dat = b32asBEWord(*(*[32]byte)(p[pageAddr : pageAddr+32]))
+
+	// shift out prefix and align with start of output
+	alignmentInBits := u64ToU256(shl64(toU64(3), alignment))
+	dat = shl(alignmentInBits, dat)
+	// remove suffix
+	shamt := u64ToU256(sub64(toU64(256), bits))
+	dat = shl(shamt, shr(shamt, dat))
+	return
+}
+
+// writeU256AlignedMemory writes up to count bytes of the given data to the memory at the address.
+// At most 32 bytes are written.
+// If addr is not aligned to a multiple of 32 bytes, less bytes may be written,
+// to contain writing to a single 32-byte leaf.
+// The length of the written data in bytes is returned.
+func (state *VMState) writeU256AlignedMemory(addr uint64, count uint64, dat [32]byte) uint64 {
+	// find alignment, and reduce work if it is not aligned
+	alignment := addr % 32
+	// how many bytes we can write of this bytes32
+	maxData := 32 - alignment
+	// reduce count accordingly, if necessary
+	if count > maxData {
+		count = maxData
+	}
+
+	// make sure addr is aligned with 32 bits
+	addr = addr & ^uint64(0x1f)
+
+	// load the key data
+	pageIndex := addr >> pageAddrSize
+	p, ok := state.Memory[pageIndex]
+	if !ok { // create page if it doesn't exist yet
+		p = &[pageSize]byte{}
+		state.Memory[pageIndex] = p
+	}
+
+	// overwrite the leaf part
+	pageAddr := addr & pageAddrMask
+	prev := p[pageAddr : pageAddr+32]
+	copy(prev[alignment:alignment+count], dat[:count])
+	return count
+}
+
+func (state *VMState) writePreimageKey(addr uint64, count uint64) uint64 {
+	dat, bits := state.readU256AlignedMemory(addr, count)
+
+	// Append to key type, key content using bitshifts
+	key0 := b32asBEWord(state.PreimageKey[0])
+	key1 := b32asBEWord(state.PreimageKey[1])
+	key1 = shl(u64ToU256(bits), key1)
+	key1 = or(key1, shr(u64ToU256(sub64(toU64(256), bits)), key0)) // bits overflow from key0 to key1
+	key0 = shl(u64ToU256(bits), key0)
+	key0 = or(key0, dat)
+	state.PreimageKey[0] = beWordAsB32(key0)
+	state.PreimageKey[1] = beWordAsB32(key1)
+	return shr64(toU64(3), bits)
+}
+
+func (state *VMState) readPreimageValue(addr uint64, size uint64) uint64 {
+	preimage := state.PreimageOracle(state.PreimageKey[0], state.PreimageKey[1])
+	preimageSize := uint64(len(preimage))
+	remaining := preimageSize - state.PreimageValueOffset
+	n := size
+	if n > 32 {
+		n = 32
+	}
+	if n > remaining {
+		n = remaining
+	}
+	var x [32]byte
+	copy(x[:], preimage[state.PreimageValueOffset:state.PreimageValueOffset+n])
+	n = state.writeU256AlignedMemory(addr, n, x)
+	state.PreimageValueOffset += n
+	return n
+}
+
+type memReader struct {
+	state *VMState
+	addr  uint64
+	count uint64
+}
+
+func (r *memReader) Read(dest []byte) (n int, err error) {
+	if r.count == 0 {
+		return 0, io.EOF
+	}
+
+	// Keep iterating over memory until we have all our data.
+	// It may wrap around the address range, and may not be aligned
+	endAddr := r.addr + r.count
+
+	pageIndex := r.addr >> pageAddrSize
+	start := r.addr & pageAddrMask
+	end := uint64(pageSize)
+
+	if pageIndex == (endAddr >> pageAddrSize) {
+		end = endAddr & pageAddrMask
+	}
+	p, ok := r.state.Memory[pageIndex]
+	if ok {
+		n = copy(dest, p[start:end])
+	} else {
+		n = copy(dest, make([]byte, end-start)) // default to zeroes
+	}
+	r.addr += uint64(n)
+	r.count -= uint64(n)
+	return n, nil
+}
+
+func (state *VMState) memRange(addr uint64, count uint64) io.Reader {
+	return &memReader{state: state, addr: addr, count: count}
 }

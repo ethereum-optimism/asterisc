@@ -7,6 +7,16 @@ import "github.com/holiman/uint256"
 
 type U256 = uint256.Int
 
+// bytes interpreted as big endian uint256
+func b32asBEWord(v [32]byte) (out U256) {
+	out.SetBytes32(v[:])
+	return
+}
+
+func beWordAsB32(v U256) [32]byte {
+	return v.Bytes32()
+}
+
 func add(x, y U256) (out U256) {
 	out.Add(&x, &y)
 	return
@@ -101,6 +111,7 @@ func xor(x, y U256) (out U256) {
 	return
 }
 
+// returns y << x
 func shl(x, y U256) (out U256) {
 	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
@@ -109,6 +120,7 @@ func shl(x, y U256) (out U256) {
 	return
 }
 
+// returns y >> x
 func shr(x, y U256) (out U256) {
 	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
@@ -117,6 +129,7 @@ func shr(x, y U256) (out U256) {
 	return
 }
 
+// returns y >> x (signed)
 func sar(x, y U256) (out U256) {
 	if !x.IsUint64() && x.Uint64() >= 256 {
 		return

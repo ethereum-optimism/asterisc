@@ -59,7 +59,9 @@ func runFastTestSuite(t *testing.T, path string) {
 
 	for i := 0; i < 10_000; i++ {
 		//fmt.Printf("pc: 0x%x\n", vmState.PC)
-		fast.Step(vmState)
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		}
 		if vmState.Exited {
 			break
 		}
@@ -94,7 +96,9 @@ func runSlowTestSuite(t *testing.T, path string) {
 		alo := &oracle.AccessListOracle{AccessList: al}
 
 		// Now run the same in fast mode
-		fast.Step(vmState)
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		}
 
 		fastRoot := vmState.Merkleize(so)
 		if post != fastRoot {
@@ -221,7 +225,9 @@ func runEVMTestSuite(t *testing.T, path string) {
 		al := so.AccessList()
 
 		// Now run the same in fast mode
-		fast.Step(vmState)
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		}
 
 		fastRoot := vmState.Merkleize(so)
 		if post != fastRoot {

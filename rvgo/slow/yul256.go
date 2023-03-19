@@ -111,6 +111,7 @@ func xor(x, y U256) (out U256) {
 	return
 }
 
+// returns y << x
 func shl(x, y U256) (out U256) {
 	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
@@ -119,6 +120,7 @@ func shl(x, y U256) (out U256) {
 	return
 }
 
+// returns y >> x
 func shr(x, y U256) (out U256) {
 	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
@@ -127,6 +129,7 @@ func shr(x, y U256) (out U256) {
 	return
 }
 
+// returns y >> x (signed)
 func sar(x, y U256) (out U256) {
 	if !x.IsUint64() && x.Uint64() >= 256 {
 		return
