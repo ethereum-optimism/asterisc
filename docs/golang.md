@@ -35,6 +35,10 @@ TODO:
 The Go runtime defines the following linux syscalls to be used by Go:
 [`sys_linux_riscv64.s`](https://github.com/golang/go/blob/master/src/runtime/sys_linux_riscv64.s)
 
+And table of all syscalls:
+https://github.com/golang/go/blob/master/src/syscall/zsysnum_linux_riscv64.go
+Note that some are available to std-lib, but not used by the runtime, and thus present here but not in the runtime bindings.
+
 To read the Go assembler, see [this Go asm syntax doc](https://go.dev/doc/asm) (it's not as complete, but one of few resources).
 
 By supporting a minimal subset of these, most Go programs can be proven.
@@ -43,9 +47,11 @@ The GC won't have to be disabled if concurrency is supported, and will then avoi
 Note that hardware-accelerated AES hashing is not supported by the riscv64 runtime,
 fallback functions [are used instead](https://github.com/golang/go/blob/0b323a3c1690050340fc8e39730a07bb01373f0a/src/runtime/asm_riscv64.s#L222). 
 
-```text
-System calls used by linux_riscv64:
+Errors and file descriptor flags used by the syscalls can be found in https://github.com/golang/go/blob/master/src/syscall/zerrors_linux_riscv64.go
 
+System calls used by `linux_riscv64` Go runtime:
+
+```text
 # Memory: must-have
 SYS_brk			214
 SYS_mmap		222
@@ -147,6 +153,15 @@ SYS_rt_sigreturn	139
 SYS_sigaltstack		132
 
 ```
+
+Additionally, syscalls to support for Go std-lib:
+
+```text
+# file descriptor manipulation with flags - support flag lookups
+# 
+SYS_fcntl 25
+```
+
 
 ## RISC-V Instructions used by Go
 
