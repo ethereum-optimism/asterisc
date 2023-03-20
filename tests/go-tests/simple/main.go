@@ -113,7 +113,6 @@ func main() {
 
 		preimageHinter.Hint(Keccak256HashPreimageTyp, []byte("hello"))
 		preimageHinter.Hint(Keccak256HashPreimageTyp, []byte("world"))
-		preimageHinter.Hint(Keccak256HashPreimageTyp, []byte("hello world!"))
 	}
 
 	// take inputs, and compute new output

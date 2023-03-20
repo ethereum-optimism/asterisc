@@ -58,7 +58,11 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 				n = toU64(0) // never read anything from stdin
 				errCode = toU64(0)
 			case 3: // pre-image oracle
-				n = s.readPreimageValue(addr, count)
+				x, err := s.readPreimageValue(addr, count)
+				if err != nil {
+					return fmt.Errorf("preimage reading error (PC: %d): %w", s.PC, err)
+				}
+				n = x
 				errCode = toU64(0)
 			default:
 				n = u64Mask()         //  -1 (reading error)
@@ -120,6 +124,12 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			}
 			s.writeRegister(toU64(10), out)
 			s.writeRegister(toU64(11), errCode) // EBADF
+		case 56: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
+			s.writeRegister(toU64(10), u64Mask())
+			s.writeRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
+			s.writeRegister(toU64(10), toU64(0))
+			s.writeRegister(toU64(11), toU64(0))
 		default: // every other syscall results in exit with error code
 			s.Exited = true
 			s.Exit = 1
@@ -205,10 +215,10 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		case 4: // 100 = XORI
 			rdValue = xor64(rs1Value, imm)
 		case 5: // 101 = SR~
-			switch funct7 {
-			case 0x00: // 0000000 = SRLI
+			switch shr64(toU64(6), imm) { // in rv64i the top 6 bits select the shift type
+			case 0x00: // 000000 = SRLI
 				rdValue = shr64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
-			case 0x20: // 0100000 = SRAI
+			case 0x10: // 010000 = SRAI
 				rdValue = sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			}
 		case 6: // 110 = ORI
@@ -228,10 +238,10 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
-			switch funct7 {
-			case 0x00: // 0000000 = SRLIW
+			switch shr64(toU64(6), imm) { // in rv64i the top 6 bits select the shift type
+			case 0x00: // 000000 = SRLIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
-			case 0x20: // 0100000 = SRAIW
+			case 0x10: // 010000 = SRAIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}
@@ -384,12 +394,12 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
+		s.setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
-		s.setPC(and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
+		s.setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3 {
 		case 0: // 000 = ECALL/EBREAK
@@ -425,6 +435,13 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			s.setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
+
+		// TODO: lr.w.aq and sc.w.aq
+		// amoor.w.aq
+		// amoand.w.aq
+		// for lock/unlock etc.
+		// for heap to work: lr.d.aq and sc.d.aq
+
 		// TODO atomic operations
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
@@ -458,6 +475,12 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		// We can no-op FENCE, there's nothing to synchronize
 		//s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
+	case 0x07: // FLW/FLD: floating point load word/double
+		s.setPC(add64(pc, toU64(4))) // no-op this.
+	case 0x27: // FSW/FSD: floating point store word/double
+		s.setPC(add64(pc, toU64(4))) // no-op this.
+	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
+		s.setPC(add64(pc, toU64(4))) // no-op this.
 	default: // any other opcode results in an exit with error code
 		s.Exited = true
 		s.Exit = uint64(1)

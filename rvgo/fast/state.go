@@ -34,7 +34,7 @@ type VMState struct {
 	PreimageKey         [2][32]byte // 0: type, 1: hash
 	PreimageValueOffset uint64
 
-	PreimageOracle func(typ [32]byte, key [32]byte) []byte
+	PreimageOracle func(typ [32]byte, key [32]byte) ([]byte, error)
 }
 
 func NewVMState() *VMState {
@@ -158,6 +158,7 @@ func (state *VMState) loadMem(addr uint64, size uint64, signed bool) uint64 {
 	if signed && v&((1<<(size<<3))>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
 		v |= 0xFFFF_FFFF_FFFF_FFFF << (size << 3)
 	} // otherwise just leave it zeroed
+	//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
 	return v
 }
 
@@ -185,6 +186,7 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 		remaining := (end & pageAddrMask) + 1
 		copy(p[:remaining], bytez[size-remaining:])
 	}
+	//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
 }
 
 func (state *VMState) getPC() uint64 {
@@ -196,6 +198,7 @@ func (state *VMState) setPC(pc uint64) {
 }
 
 func (state *VMState) loadRegister(reg uint64) uint64 {
+	//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 	return state.Registers[reg]
 }
 
@@ -208,7 +211,7 @@ func (state *VMState) readCSR(num uint64) uint64 {
 }
 
 func (state *VMState) writeRegister(reg uint64, v uint64) {
-	//fmt.Printf("rd write to %d value: 0x%x\n", reg, v)
+	//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
 	if reg == 0 { // reg 0 must stay 0
 		// v is a HINT, but no hints are specified by standard spec, or used by us.
 		return
@@ -254,7 +257,7 @@ func (state *VMState) readU256AlignedMemory(addr uint64, count uint64) (dat U256
 	alignmentInBits := u64ToU256(shl64(toU64(3), alignment))
 	dat = shl(alignmentInBits, dat)
 	// remove suffix
-	shamt := u64ToU256(sub64(toU64(256), bits))
+	shamt := u64ToU256(sub64(U64(256), bits))
 	dat = shl(shamt, shr(shamt, dat))
 	return
 }
@@ -299,16 +302,20 @@ func (state *VMState) writePreimageKey(addr uint64, count uint64) uint64 {
 	key0 := b32asBEWord(state.PreimageKey[0])
 	key1 := b32asBEWord(state.PreimageKey[1])
 	key1 = shl(u64ToU256(bits), key1)
-	key1 = or(key1, shr(u64ToU256(sub64(toU64(256), bits)), key0)) // bits overflow from key0 to key1
+	key1 = or(key1, shr(u64ToU256(sub64(U64(256), bits)), key0)) // bits overflow from key0 to key1
 	key0 = shl(u64ToU256(bits), key0)
 	key0 = or(key0, dat)
 	state.PreimageKey[0] = beWordAsB32(key0)
 	state.PreimageKey[1] = beWordAsB32(key1)
+	state.PreimageValueOffset = 0
 	return shr64(toU64(3), bits)
 }
 
-func (state *VMState) readPreimageValue(addr uint64, size uint64) uint64 {
-	preimage := state.PreimageOracle(state.PreimageKey[0], state.PreimageKey[1])
+func (state *VMState) readPreimageValue(addr uint64, size uint64) (uint64, error) {
+	preimage, err := state.PreimageOracle(state.PreimageKey[0], state.PreimageKey[1])
+	if err != nil {
+		return 0, fmt.Errorf("failed to get preimage (%x, %x): %w", state.PreimageKey[0], state.PreimageKey[1], err)
+	}
 	preimageSize := uint64(len(preimage))
 	remaining := preimageSize - state.PreimageValueOffset
 	n := size
@@ -322,7 +329,7 @@ func (state *VMState) readPreimageValue(addr uint64, size uint64) uint64 {
 	copy(x[:], preimage[state.PreimageValueOffset:state.PreimageValueOffset+n])
 	n = state.writeU256AlignedMemory(addr, n, x)
 	state.PreimageValueOffset += n
-	return n
+	return n, nil
 }
 
 type memReader struct {
@@ -360,4 +367,30 @@ func (r *memReader) Read(dest []byte) (n int, err error) {
 
 func (state *VMState) memRange(addr uint64, count uint64) io.Reader {
 	return &memReader{state: state, addr: addr, count: count}
+}
+
+func (state *VMState) setRange(addr uint64, count uint64, r io.Reader) error {
+	end := addr + count
+	for addr := addr; addr < end; {
+		// map address to page index, and start within page
+		page := state.loadOrCreatePage(addr >> pageAddrSize)
+		pageStart := addr & pageAddrMask
+		// copy till end of page
+		pageEnd := uint64(pageSize)
+		// unless we reached the end
+		if (addr&^pageAddrMask)+pageSize > end {
+			pageEnd = end & pageAddrMask
+		}
+		if _, err := io.ReadFull(r, page[pageStart:pageEnd]); err != nil {
+			return fmt.Errorf("failed to read data into memory %d: %w", pageStart, err)
+		}
+		addr += pageEnd - pageStart
+	}
+	return nil
+}
+
+func (state *VMState) Instr() uint32 {
+	var out [4]byte
+	_, _ = io.ReadFull(state.memRange(state.PC, 4), out[:])
+	return binary.LittleEndian.Uint32(out[:])
 }

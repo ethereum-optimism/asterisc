@@ -40,12 +40,12 @@ func parseImmTypeJ(instr U64) U64 {
 	return signExtend64(
 		or64(
 			or64(
-				shl64(toU64(1), and64(shr64(toU64(21), instr), shortToU64(0x1FF))),
-				shl64(toU64(10), and64(shr64(toU64(20), instr), toU64(1))),
+				and64(shr64(toU64(21), instr), shortToU64(0x3FF)),          // 10 bits for index 0:9
+				shl64(toU64(10), and64(shr64(toU64(20), instr), toU64(1))), // 1 bit for index 10
 			),
 			or64(
-				shl64(toU64(11), and64(shr64(toU64(12), instr), toU64(0xFF))),
-				shl64(toU64(19), shr64(toU64(31), instr)),
+				shl64(toU64(11), and64(shr64(toU64(12), instr), toU64(0xFF))), // 8 bits for index 11:18
+				shl64(toU64(19), shr64(toU64(31), instr)),                     // 1 bit for index 19
 			),
 		),
 		toU64(19),

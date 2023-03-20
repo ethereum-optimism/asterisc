@@ -37,3 +37,10 @@ mipsel-linux-gnu-objdump -d startup.o
 # TODO: objcopy the section to a binary file
 
 ```
+
+Go Runtime GC disabling patch:
+```
+# Jump to the return address (in register $ra based on MIPS call convention)
+03e00008 # ret (pseudo instruction) = jr $ra
+00000000 # invalid, make sure it never enters the actual function
+```

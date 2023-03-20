@@ -381,10 +381,10 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		case 4: // 100 = XORI
 			rdValue = xor64(rs1Value, imm)
 		case 5: // 101 = SR~
-			switch funct7.val() {
-			case 0x00: // 0000000 = SRLI
+			switch shr64(toU64(6), imm).val() { // in rv64i the top 6 bits select the shift type
+			case 0x00: // 000000 = SRLI
 				rdValue = shr64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
-			case 0x20: // 0100000 = SRAI
+			case 0x10: // 010000 = SRAI
 				rdValue = sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			}
 		case 6: // 110 = ORI
@@ -404,10 +404,10 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
-			switch funct7.val() {
-			case 0x00: // 0000000 = SRLIW
+			switch shr64(toU64(6), imm).val() { // in rv64i the top 6 bits select the shift type
+			case 0x00: // 000000 = SRLIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
-			case 0x20: // 0100000 = SRAIW
+			case 0x10: // 010000 = SRAIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}
@@ -560,12 +560,12 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
 		writeRegister(rd, rdValue)
-		setPC(add64(pc, signExtend64(imm, toU64(21)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
+		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
 		writeRegister(rd, rdValue)
-		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(12))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
+		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3.val() {
 		case 0: // 000 = ECALL/EBREAK
@@ -622,6 +622,12 @@ func Step(s [32]byte, so oracle.VMStateOracle) (stateRoot [32]byte) {
 		// We can no-op FENCE, there's nothing to synchronize
 		//writeRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
+	case 0x07: // FLW/FLD: floating point load word/double
+		setPC(add64(pc, toU64(4))) // no-op this.
+	case 0x27: // FSW/FSD: floating point store word/double
+		setPC(add64(pc, toU64(4))) // no-op this.
+	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
+		setPC(add64(pc, toU64(4))) // no-op this.
 	default:
 		panic(fmt.Errorf("unknown opcode: %b full instruction: %b", opcode, instr))
 	}

@@ -8,6 +8,7 @@
 - specs: https://riscv.org/technical/specifications/
 - Berkely riscv card: https://inst.eecs.berkeley.edu/~cs61c/fa18/img/riscvcard.pdf
 - "riscv bytes" blog posts: https://danielmangum.com/categories/risc-v-bytes/
+- Online instruction decoder: https://luplab.gitlab.io/rvcodecjs/
 
 ## Emulators
 
