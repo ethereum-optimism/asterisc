@@ -296,7 +296,7 @@ func (state *VMState) readU256AlignedMemory(addr uint64, count uint64) (dat U256
 	if count > maxData {
 		count = maxData
 	}
-	bits = shl64(toU64(8), count)
+	bits = shl64(toU64(3), count)
 
 	// make sure addr is aligned with 32 bits
 	addr = addr & ^uint64(0x1f)
@@ -424,11 +424,11 @@ func (r *memReader) Read(dest []byte) (n int, err error) {
 	return n, nil
 }
 
-func (state *VMState) memRange(addr uint64, count uint64) io.Reader {
+func (state *VMState) GetMemRange(addr uint64, count uint64) io.Reader {
 	return &memReader{state: state, addr: addr, count: count}
 }
 
-func (state *VMState) setRange(addr uint64, count uint64, r io.Reader) error {
+func (state *VMState) SetMemRange(addr uint64, count uint64, r io.Reader) error {
 	end := addr + count
 	for addr := addr; addr < end; {
 		// map address to page index, and start within page
@@ -450,6 +450,6 @@ func (state *VMState) setRange(addr uint64, count uint64, r io.Reader) error {
 
 func (state *VMState) Instr() uint32 {
 	var out [4]byte
-	_, _ = io.ReadFull(state.memRange(state.PC, 4), out[:])
+	_, _ = io.ReadFull(state.GetMemRange(state.PC, 4), out[:])
 	return binary.LittleEndian.Uint32(out[:])
 }

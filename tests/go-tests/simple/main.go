@@ -92,7 +92,8 @@ func (p *PreimageHinter) Hint(typ PreimageTyp, dat []byte) {
 }
 
 func main() {
-	fmt.Println("starting!")
+	_, _ = os.Stdout.Write([]byte("hello world!\n"))
+	fmt.Println("starting!") // uses sync pool
 	preimageOracle := PreimageOracle{F: os.NewFile(3, "preimage-oracle")}
 	mode := preimageOracle.Get(ProgramInputKey(0))
 	fmt.Printf("operating in %x mode\n", mode)

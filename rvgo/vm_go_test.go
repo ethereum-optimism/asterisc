@@ -4,8 +4,10 @@ import (
 	"debug/elf"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
@@ -67,21 +69,112 @@ func TestFastSimple(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 200_000; i++ {
+	//lastSym := ""
+	for i := 0; i < 300_000; i++ {
 		sym := symbols.FindSymbol(vmState.PC)
-		instr := vmState.Instr()
 		if sym != nil {
+			//if sym.Name != lastSym {
+			//	lastSym = sym.Name
+			instr := vmState.Instr()
 			fmt.Printf("i: %4d  pc: 0x%x  instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, instr, sym.Name, sym.Size)
-		} else {
-			fmt.Printf("i: %4d  pc: 0x%x  instr: %08x\n", i, vmState.PC, instr)
+			if sym.Name == "runtime.throw" {
+				throwArg := vmState.Registers[10]
+				throwArgLen := vmState.Registers[11]
+				if throwArgLen > 1000 {
+					throwArgLen = 1000
+				}
+				x := vmState.GetMemRange(throwArg, throwArgLen)
+				dat, _ := io.ReadAll(x)
+				if utf8.Valid(dat) {
+					fmt.Printf("THROW! %q\n", string(dat))
+				} else {
+					fmt.Printf("THROW! %016x: %x\n", throwArg, dat)
+				}
+
+				x = vmState.GetMemRange(0x1949e0, 0x1949e0+512)
+				dat, _ = io.ReadAll(x)
+				fmt.Printf("panic data buffer: %x\n", dat)
+				break
+			}
+			if sym.Name == "runtime.recordForPanic" {
+				recordArg := vmState.Registers[10]
+				x := vmState.GetMemRange(recordArg, 32)
+				dat, _ := io.ReadAll(x)
+				fmt.Printf("recordForPanic! %016x: %x\n", recordArg, dat)
+			}
+			//}
 		}
-		if sym.Name == "runtime.throw" {
-			break
-		}
+		//else {
+		//fmt.Printf("i: %4d  pc: 0x%x  instr: %08x\n", i, vmState.PC, instr)
+		//}
 		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
 			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+
 		}
-		fmt.Println()
+		if vmState.Exited {
+			break
+		}
+	}
+	require.True(t, vmState.Exited, "ran out of steps")
+	if vmState.Exit != 0 {
+		t.Fatalf("failed with exit code %d", vmState.Exit)
+	}
+}
+
+func TestFastMinimal(t *testing.T) {
+	programELF, err := elf.Open("../tests/go-tests/bin/minimal")
+	require.NoError(t, err)
+	defer programELF.Close()
+
+	vmState, err := fast.LoadELF(programELF)
+	require.NoError(t, err, "must load test suite ELF binary")
+
+	err = fast.PatchVM(programELF, vmState)
+	require.NoError(t, err, "must patch VM")
+
+	symbols, err := fast.Symbols(programELF)
+	require.NoError(t, err)
+
+	vmState.PreimageOracle = func(typ [32]byte, key [32]byte) ([]byte, error) {
+		return nil, fmt.Errorf("unknown key %x", key)
+	}
+
+	//lastSym := ""
+	for i := 0; i < 300_000; i++ {
+		sym := symbols.FindSymbol(vmState.PC)
+		if sym != nil {
+			//if sym.Name != lastSym {
+			//	lastSym = sym.Name
+			instr := vmState.Instr()
+			fmt.Printf("i: %4d  pc: 0x%x  offset: %03x instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, vmState.PC-sym.Value, instr, sym.Name, sym.Size)
+			if sym.Name == "runtime.throw" {
+				throwArg := vmState.Registers[10]
+				throwArgLen := vmState.Registers[11]
+				if throwArgLen > 1000 {
+					throwArgLen = 1000
+				}
+				x := vmState.GetMemRange(throwArg, throwArgLen)
+				dat, _ := io.ReadAll(x)
+				if utf8.Valid(dat) {
+					fmt.Printf("THROW! %q\n", string(dat))
+				} else {
+					fmt.Printf("THROW! %016x: %x\n", throwArg, dat)
+				}
+
+				//x = vmState.GetMemRange(0x1949e0, 0x1949e0+512)
+				//dat, _ = io.ReadAll(x)
+				//fmt.Printf("panic data buffer: %x\n", dat)
+				break
+			}
+			//}
+		}
+		//else {
+		//fmt.Printf("i: %4d  pc: 0x%x  instr: %08x\n", i, vmState.PC, instr)
+		//}
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+
+		}
 		if vmState.Exited {
 			break
 		}

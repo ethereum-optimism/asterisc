@@ -20,7 +20,7 @@ sudo make
 ```
 
 Optional: Install "Spike" (RISCV simulator):
-
+ba
 ```shell
 # apt-get install device-tree-compiler
 sudo pacman -S dtc
@@ -37,6 +37,9 @@ make
 sudo make install
 ```
 
-
+Looking at an ELF file:
+```
+readelf -a myfile
+```
 
 

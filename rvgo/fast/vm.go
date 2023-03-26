@@ -45,11 +45,19 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			// ignore: prot, flags, fd, offset
 			switch addr {
 			case 0:
-				// no hint, allocate it ourselves, by as much as the requested length
-				s.Heap += length // increment heap with length
+				// No hint, allocate it ourselves, by as much as the requested length.
+				// Increase the length to align it with desired page size if necessary.
+				align := and64(length, 4095)
+				if !iszero64(align) {
+					length = add64(length, sub64(4096, align))
+					length += align
+				}
 				s.writeRegister(toU64(10), s.Heap)
+				s.Heap += length // increment heap with length
+				fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
+				fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
 			s.writeRegister(toU64(11), toU64(0)) // no error
 		case 63: // read
@@ -81,14 +89,14 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			var n, errCode U64
 			switch fd {
 			case 1: // stdout
-				_, err := io.Copy(stdOut, s.memRange(fd, count))
+				_, err := io.Copy(stdOut, s.GetMemRange(addr, count))
 				if err != nil {
 					return fmt.Errorf("stdout writing err: %w", err)
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
 			case 2: // stderr
-				_, err := io.Copy(stdErr, s.memRange(fd, count))
+				_, err := io.Copy(stdErr, s.GetMemRange(addr, count))
 				if err != nil {
 					return fmt.Errorf("stderr writing err: %w", err)
 				}
@@ -96,7 +104,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 				errCode = toU64(0)
 			case 3: // pre-image oracle
 				n = s.writePreimageKey(addr, count)
-				s.writeRegister(toU64(11), toU64(0)) // no error
+				errCode = toU64(0) // no error
 			default: // any other file, including (4) pre-image hinter
 				n = u64Mask()         //  -1 (writing error)
 				errCode = toU64(0x4d) // EBADF
@@ -134,6 +142,35 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			s.writeRegister(toU64(10), toU64(0))
 			s.writeRegister(toU64(11), toU64(0))
+		case 113: // clock_gettime
+			addr := s.loadRegister(toU64(11))        // addr of timespec struct
+			s.storeMem(addr, 8, 0x1337)              // seconds
+			s.storeMem(add64(addr, toU64(8)), 8, 42) // nanoseconds: must be nonzero to pass Go runtimeInitTime check
+			s.writeRegister(toU64(10), toU64(0))
+			s.writeRegister(toU64(11), toU64(0))
+		case 135: // rt_sigprocmask - ignore any sigset changes
+			s.writeRegister(toU64(10), toU64(0))
+			s.writeRegister(toU64(11), toU64(0))
+		case 132: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
+			s.writeRegister(toU64(10), toU64(0))
+			s.writeRegister(toU64(11), toU64(0))
+		case 178: // gettid - hardcode to 0
+			s.writeRegister(toU64(10), toU64(0))
+			s.writeRegister(toU64(11), toU64(0))
+		case 134: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
+			s.writeRegister(toU64(10), toU64(0))
+			s.writeRegister(toU64(11), toU64(0))
+		//case 220: // clone - not supported
+		case 163: // getrlimit
+			res := s.loadRegister(toU64(10))
+			addr := s.loadRegister(toU64(11))
+			switch res {
+			case 0x7: // RLIMIT_NOFILE
+				s.storeMem(addr, toU64(8), shortToU64(1024))           // soft limit. 1024 file handles max open
+				s.storeMem(add64(addr, 8), toU64(8), shortToU64(1024)) // hard limit
+			default:
+				return revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
+			}
 		default: // every other syscall results in exit with error code
 			return revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
@@ -150,8 +187,6 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 	rs1 := parseRs1(instr) // source register 1 index
 	rs2 := parseRs2(instr) // source register 2 index
 	funct7 := parseFunct7(instr)
-	rs1Value := s.loadRegister(rs1) // loaded source registers. Only load if rs1/rs2 are not zero.
-	rs2Value := s.loadRegister(rs2)
 
 	//fmt.Printf("fast PC: %x\n", pc)
 	//fmt.Printf("fast INSTR: %x\n", instr)
@@ -165,6 +200,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
 		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
+		rs1Value := s.loadRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := s.loadMem(memIndex, size, signed)
 		s.writeRegister(rd, rdValue)
@@ -173,11 +209,14 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
 		size := shl64(funct3, toU64(1))
-		value := rs2Value
+		value := s.loadRegister(rs2)
+		rs1Value := s.loadRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		s.storeMem(memIndex, size, value)
 		s.setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
+		rs1Value := s.loadRegister(rs1)
+		rs2Value := s.loadRegister(rs2)
 		branchHit := toU64(0)
 		switch funct3 {
 		case 0: // 000 = BEQ
@@ -204,6 +243,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		s.setPC(pc)
 	case 0x13: // 001_0011: immediate arithmetic and logic
+		rs1Value := s.loadRegister(rs1)
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3 {
@@ -232,6 +272,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
 	case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
+		rs1Value := s.loadRegister(rs1)
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3 {
@@ -251,6 +292,8 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
 	case 0x33: // 011_0011: register arithmetic and logic
+		rs1Value := s.loadRegister(rs1)
+		rs2Value := s.loadRegister(rs2)
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV M extension
@@ -325,6 +368,8 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, toU64(4)))
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
+		rs1Value := s.loadRegister(rs1)
+		rs2Value := s.loadRegister(rs2)
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV M extension
@@ -399,6 +444,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		s.writeRegister(rd, rdValue)
 		s.setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
+		rs1Value := s.loadRegister(rs1)
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
 		s.writeRegister(rd, rdValue)
@@ -422,6 +468,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			imm := parseCSSR(instr)
 			rdValue := s.readCSR(imm)
 			value := rs1
+			rs1Value := s.loadRegister(rs1)
 			if iszero64(and64(funct3, toU64(4))) {
 				value = rs1Value
 			}
@@ -465,6 +512,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		case 0x3: // 00011 = SC = Store Conditional
 			rdValue := toU64(1)
 			if eq64(addr, s.getLoadReservation()) != 0 {
+				rs2Value := s.loadRegister(rs2)
 				s.storeMem(addr, size, rs2Value)
 				rdValue = toU64(0)
 			}

@@ -17,18 +17,37 @@ for now we can try to support the `riscv64_linux` runtime of the official Go com
 
 Steps:
 1. Compile Go with `riscv64_linux` target
-2. Take ELF binary output, and concatenate all sections: i.e. pre-process the ELF-loader steps.
+2. Take ELF binary output, and concatenate all sections, with filling to mem-size etc. where necessary: i.e. pre-process the ELF-loader steps.
 3. If concurrency is not supported, we must replicate the hack from geohotz in Cannon to make the GC start function in the Go runtime a no-op, 
-   during the ELF processing this can be done based on inspection of program symbols.
-4. Merkleize the binary, this will be the cartridge we slot into the VM
+   during the ELF processing this can be done based on inspection of program symbols and patching `runtime.gcenable` to immediately jump to the address in the return-address register (`ra`).
+4. Prepare the stack:
+   - After `0x7f_ff_d0_00` in memory, lay out the stack:
+     - `argc = 0`
+     - `argv[n] = 0`
+     - `envp[term] = 0`
+     - `auxv[0] = _AT_PAGESZ = 6`
+     - `auxv[1] = 4 KiB = 4096`
+     - `auxv[2] = _AT_RANDOM = 25`
+     - `auxv[3] = address to 16 bytes of randomness`
+     - `auxv[term] = 0`
+     - `16 bytes of randomness`
+   - Initialize stack pointer to top of stack
+5. Merkleize the binary, this will be the cartridge we slot into the VM
 
-TODO:
-- We can modify the "ELF auxiliary vectors", which come after the program arguments
-  - The `AT_RANDOM` vector is a pointer to 16 bytes of data, initialized by the Go runtime
-    [here](https://github.com/golang/go/blob/db36eca33c389871b132ffb1a84fd534a349e8d8/src/runtime/os_linux.go#L284)
-    to [initialize](https://github.com/golang/go/blob/0b323a3c1690050340fc8e39730a07bb01373f0a/src/runtime/proc.go#L867)
-    the "fast random" with, i.e. the randomness used by maps iteration.
-  - Maybe also empty the hardware capabilities vector `AT_HWCAP`; no hardware is supported anyway.
+## AUX vectors used by Go
+
+See [`os_linux.go`](https://github.com/golang/go/blob/1a9893a969e0a73dc4f1e48ed40ccaf29ec238a6/src/runtime/os_linux.go#L215):
+- `_AT_NULL`: End of vector
+- `_AT_PAGESZ = 6`: System physical page size. Go requires [4KB minimum physical page size](https://github.com/golang/go/blob/1a09d57de58a90987789ef637083aac21533eeb7/src/runtime/mheap.go#L23).
+- `_AT_HWCAP  = 16`, `_AT_HWCAP2 = 26`: hardware capability bit vector, and vector 2:
+  The `internal/cpu` package in Go uses these to determine abilities like AES, SHA2, etc.
+  However, the RISC-V target doesn't support any hardware accellerated functions,
+  [the `doinit()` is empty](https://github.com/golang/go/blob/feb984c96b10900daade4b47c4d308d7dd4ed5c3/src/internal/cpu/cpu_riscv64.go#L9).
+- `_AT_RANDOM = 25`: The `AT_RANDOM` vector is a pointer to 16 bytes of data, initialized by the Go runtime
+  [here](https://github.com/golang/go/blob/db36eca33c389871b132ffb1a84fd534a349e8d8/src/runtime/os_linux.go#L284)
+  to [initialize](https://github.com/golang/go/blob/0b323a3c1690050340fc8e39730a07bb01373f0a/src/runtime/proc.go#L867)
+  the "fast random" with, i.e. the randomness used by maps iteration, as well as the `hashkey` used by `hash{32,64}.go`
+
 
 ## Linux syscalls used by Go
 
@@ -244,3 +263,9 @@ HFENCEGVMA, HFENCEVVMA
 The escape hatch. Inserts a single 32-bit word.
 WORD
 ```
+
+fresh reg reads:
+runtime.rt0_go: 1
+
+0xC000000000 - called by mmap
+

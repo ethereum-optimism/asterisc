@@ -16,8 +16,11 @@ func LoadELF(f *elf.File) (*VMState, error) {
 		CSR:       [4096]uint64{},
 		Exit:      0,
 		Exited:    false,
-		Heap:      0,
+		Heap:      0x20_00_00_00,
 	}
+	// 0x20060000
+
+	// 0x44AE0000
 
 	// statically prepare VM state:
 	out.PC = f.Entry
@@ -45,8 +48,12 @@ func LoadELF(f *elf.File) (*VMState, error) {
 			}
 		}
 
+		if x := prog.Vaddr + prog.Memsz; x > out.Heap {
+			return nil, fmt.Errorf("warning: prog segment %d is past heap: %x - %x, heap at %x", i, prog.Vaddr, x, out.Heap)
+		}
+
 		// copy the segment into its assigned virtual memory, page by page
-		if err := out.setRange(prog.Vaddr, prog.Memsz, r); err != nil {
+		if err := out.SetMemRange(prog.Vaddr, prog.Memsz, r); err != nil {
 			return nil, fmt.Errorf("failed to read program segment %d: %w", i, err)
 		}
 	}
@@ -65,16 +72,17 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 		// Disable Golang GC by patching the function that enables to a no-op function.
 		switch s.Name {
 		case "runtime.gcenable",
-			// TODO below funcs is a hack. Need LW/SC instructions for locks, but also for Go heap to work etc.
-			"runtime.check",
-			"runtime.lock2", "runtime.lock",
-			"runtime.unlock2", "runtime.unlock":
+			"runtime.init.5",     // patch out: init() { go forcegchelper() }
+			"runtime.main.func1", // patch out: main.func() { newm(sysmon, ....) }
+			// runtime.doInit -> some init call produces a traceback that then fails
+			// We need to patch this out, we don't pass float64nan because we don't support floats
+			"runtime.check":
 			// RISCV patch: ret (pseudo instruction)
 			// 00008067 = jalr zero, ra, 0
 			// 00000000 = invalid, make sure it never enters the actual function
 			// Jump And Link Register, but rd=zero so no linking, and thus only jumping to the return address.
 			// (return address is in register $ra based on RISCV call convention)
-			if err := vmState.setRange(s.Value, 8, bytes.NewReader([]byte{
+			if err := vmState.SetMemRange(s.Value, 8, bytes.NewReader([]byte{
 				0x67, 0x80, 0x00, 0x00,
 				0, 0, 0, 0,
 			})); err != nil {
@@ -84,22 +92,25 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 	}
 
 	// To no-op an instruction:
-	//vmState.setRange(addr, 4, bytes.NewReader([]byte{0x13, 0x00, 0x00, 0x00}))
+	//vmState.SetMemRange(addr, 4, bytes.NewReader([]byte{0x13, 0x00, 0x00, 0x00}))
 
 	// now insert the initial stack
 
 	// setup stack pointer
 	sp := uint64(0x7f_ff_d0_00)
-	//sp := uint64(0x20_00_00_00)
 	vmState.writeRegister(2, sp)
 
 	// init argc, argv, aux on stack
-	vmState.storeMem(sp+8*1, 8, 0x42) // argc = 0 (argument count)
-	vmState.storeMem(sp+8*2, 8, 0x35) // argv[n] = 0 (terminating argv)
-	vmState.storeMem(sp+8*3, 8, 0)    // envp[term] = 0 (no env vars)
-	vmState.storeMem(sp+8*4, 8, 6)    // auxv[0] = _AT_PAGESZ = 6 (key)
-	vmState.storeMem(sp+8*5, 8, 4096) // auxv[1] = page size of 4 KiB (value) - (== minPhysPageSize)
-	vmState.storeMem(sp+8*6, 8, 0)    // auxv[term] = 0
+	vmState.storeMem(sp+8*1, 8, 0x42)                // argc = 0 (argument count)
+	vmState.storeMem(sp+8*2, 8, 0x35)                // argv[n] = 0 (terminating argv)
+	vmState.storeMem(sp+8*3, 8, 0)                   // envp[term] = 0 (no env vars)
+	vmState.storeMem(sp+8*4, 8, 6)                   // auxv[0] = _AT_PAGESZ = 6 (key)
+	vmState.storeMem(sp+8*5, 8, 4096)                // auxv[1] = page size of 4 KiB (value) - (== minPhysPageSize)
+	vmState.storeMem(sp+8*6, 8, 25)                  // auxv[2] = AT_RANDOM
+	vmState.storeMem(sp+8*7, 8, sp+8*9)              // auxv[3] = address of 16 bytes containing random value
+	vmState.storeMem(sp+8*8, 8, 0)                   // auxv[term] = 0
+	vmState.storeMem(sp+8*9, 8, 0x6f727020646e6172)  // randomness 8/16
+	vmState.storeMem(sp+8*10, 8, 0x6164626d616c6f74) // randomness 16/16
 
 	// entrypoint is set as part of elf load function
 	return nil
