@@ -138,7 +138,7 @@ func sgt64(x, y uint64) uint64 {
 }
 
 func eq64(x, y uint64) uint64 {
-	if int64(x) == int64(y) {
+	if x == y {
 		return 1
 	} else {
 		return 0

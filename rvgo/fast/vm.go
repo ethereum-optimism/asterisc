@@ -5,6 +5,10 @@ import (
 	"io"
 )
 
+func revertWithCode(code uint64, err error) error {
+	return fmt.Errorf("code %x: %w", code, err)
+}
+
 // Step runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
 func Step(s *VMState, stdOut, stdErr io.Writer) error {
@@ -131,8 +135,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			s.writeRegister(toU64(10), toU64(0))
 			s.writeRegister(toU64(11), toU64(0))
 		default: // every other syscall results in exit with error code
-			s.Exited = true
-			s.Exit = 1
+			return revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
 		return nil
 	}
@@ -406,7 +409,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			switch shr64(toU64(20), instr) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				if err := sysCall(); err != nil {
-					return fmt.Errorf("syscall err: %w", err)
+					return err
 				}
 				if !s.Exited { // don't change any state if we have exited with the syscall already
 					s.setPC(add64(pc, toU64(4)))
@@ -435,45 +438,77 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			s.setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
+		// acquire and release bits:
+		//   aq := and64(shr64(toU64(1), funct7), toU64(1))
+		//   rl := and64(funct7, toU64(1))
+		// if none set: unordered
+		// if aq is set: no following mem ops observed before acquire mem op
+		// if rl is set: release mem op not observed before earlier mem ops
+		// if both set: sequentially consistent
+		// These are no-op here because there is no pipeline of mem ops to acquire/release.
 
-		// TODO: lr.w.aq and sc.w.aq
-		// amoor.w.aq
-		// amoand.w.aq
-		// for lock/unlock etc.
-		// for heap to work: lr.d.aq and sc.d.aq
-
-		// TODO atomic operations
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
-		//size := 1 << funct3
-		switch shr64(toU64(2), and64(funct7, toU64(0x1F))) {
-		case 0x0: // 00000 = AMOADD
-		case 0x1: // 00001 = AMOSWAP
-		case 0x2: // 00010 = LR
-		case 0x3: // 00011 = SC
-		case 0x4: // 00100 = AMOXOR
-		case 0x8: // 01000 = AMOOR
-		case 0xc: // 01100 = AMOAND
-		case 0x10: // 10000 = AMOMIN
-		case 0x14: // 10100 = AMOMAX
-		case 0x18: // 11000 = AMOMINU
-		case 0x1c: // 11100 = AMOMAXU
+		size := shl64(funct3, toU64(1))
+		if lt64(size, toU64(4)) != 0 {
+			return revertWithCode(0xbada70, fmt.Errorf("bad AMO size: %d", size))
 		}
-		//s.writeRegister(rd, rdValue)
+		addr := s.loadRegister(rs1)
+		// TODO check if addr is aligned
+
+		op := shr64(toU64(2), funct7)
+		switch op {
+		case 0x2: // 00010 = LR = Load Reserved
+			v := s.loadMem(addr, size, true)
+			s.writeRegister(rd, v)
+			s.setLoadReservation(addr)
+		case 0x3: // 00011 = SC = Store Conditional
+			rdValue := toU64(1)
+			if eq64(addr, s.getLoadReservation()) != 0 {
+				s.storeMem(addr, size, rs2Value)
+				rdValue = toU64(0)
+			}
+			s.writeRegister(rd, rdValue)
+			s.setLoadReservation(0)
+		default: // AMO: Atomic Memory Operation
+			rs2Value := s.loadRegister(rs2)
+			if eq64(size, toU64(4)) != 0 {
+				rs2Value = mask32Signed64(rs2Value)
+			}
+			// Specifying the operation allows us to implement it closer to the memory for smaller witness data.
+			// And that too can be optimized: only one 32 bytes leaf is affected,
+			// since AMOs are always 4 or 8 byte aligned (Zam extension not supported here).
+			var dest U64
+			switch op {
+			case 0x0: // 00000 = AMOADD = add
+				dest = destADD
+			case 0x1: // 00001 = AMOSWAP
+				dest = destSWAP
+			case 0x4: // 00100 = AMOXOR = xor
+				dest = destXOR
+			case 0x8: // 01000 = AMOOR = or
+				dest = destOR
+			case 0xc: // 01100 = AMOAND = and
+				dest = destAND
+			case 0x10: // 10000 = AMOMIN = min signed
+				dest = destMIN
+			case 0x14: // 10100 = AMOMAX = max signed
+				dest = destMAX
+			case 0x18: // 11000 = AMOMINU = min unsigned
+				dest = destMINU
+			case 0x1c: // 11100 = AMOMAXU = max unsigned
+				dest = destMAXU
+			default:
+				return revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
+			}
+			rdValue := s.opMem(dest, addr, size, rs2Value)
+			s.writeRegister(rd, rdValue)
+		}
 		s.setPC(add64(pc, toU64(4)))
 	case 0x0F: // 000_1111: fence
-		//// TODO: different layout of func data
-		//// "fm pred succ"
-		//switch funct3 {
-		//case 0b000:
-		//	switch funct7 {
-		//	case 0b1000001: // FENCE.TSO
-		//	default: // FENCE
-		//	}
-		//case 0b001: // FENCE.I
-		//}
-		// We can no-op FENCE, there's nothing to synchronize
-		//s.writeRegister(rd, rdValue)
+		// Used to impose additional ordering constraints; flushing the mem operation pipeline.
+		// This VM doesn't have a pipeline, nor additional harts, so this is a no-op.
+		// FENCE / FENCE.TSO / FENCE.I all no-op: there's nothing to synchronize.
 		s.setPC(add64(pc, toU64(4)))
 	case 0x07: // FLW/FLD: floating point load word/double
 		s.setPC(add64(pc, toU64(4))) // no-op this.
@@ -482,8 +517,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
 		s.setPC(add64(pc, toU64(4))) // no-op this.
 	default: // any other opcode results in an exit with error code
-		s.Exited = true
-		s.Exit = uint64(1)
+		return revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
 	return nil
 }
