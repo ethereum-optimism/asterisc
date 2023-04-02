@@ -90,7 +90,8 @@ func runSlowTestSuite(t *testing.T, path string) {
 		so.BuildAccessList(true)
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
-		post := slow.Step(pre, so)
+		post, err := slow.Step(pre, so, os.Stdout, os.Stderr)
+		require.NoError(t, err)
 
 		al := so.AccessList()
 		alo := &oracle.AccessListOracle{AccessList: al}
@@ -106,7 +107,8 @@ func runSlowTestSuite(t *testing.T, path string) {
 			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
 		}
 
-		post2 := slow.Step(pre, alo)
+		post2, err := slow.Step(pre, alo, os.Stdout, os.Stderr)
+		require.NoError(t, err)
 		if post2 != fastRoot {
 			so.Diff(post2, fastRoot, 1)
 			t.Fatalf("access-list slow state %x must match fast state %x", post2, fastRoot)
@@ -220,7 +222,8 @@ func runEVMTestSuite(t *testing.T, path string) {
 		so.BuildAccessList(true)
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
-		post := slow.Step(pre, so)
+		post, err := slow.Step(pre, so, os.Stdout, os.Stderr)
+		require.NoError(t, err)
 
 		al := so.AccessList()
 
@@ -293,7 +296,7 @@ func TestSlowStep(t *testing.T) {
 	}
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
-	//runTestCategory("rv64ua-p")  // TODO implement atomic instructions extension
+	runTestCategory("rv64ua-p")
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 

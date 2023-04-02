@@ -118,8 +118,9 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 			so.Remember(registersRoot, csrRoot),                // 10, 11
 		),
 		so.Remember(
-			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)),  // 12, 13
-			so.Remember(uint64AsBytes32(state.LoadReservation), state.PreimageKey), // TODO pre-image state merkleization
+			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)), // 12, 13
+			so.Remember(uint64AsBytes32(state.LoadReservation), // 14
+				so.Remember(state.PreimageKey, uint64AsBytes32(state.PreimageValueOffset))), // 30, 31
 		),
 	)
 }
@@ -189,55 +190,6 @@ func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
 		copy(p[:remaining], bytez[size-remaining:])
 	}
 	//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
-}
-
-const (
-	destADD uint64 = iota
-	destSWAP
-	destXOR
-	destOR
-	destAND
-	destMIN
-	destMAX
-	destMINU
-	destMAXU
-)
-
-func (state *VMState) opMem(op uint64, addr uint64, size uint64, value uint64) uint64 {
-	v := state.loadMem(addr, size, true)
-	out := v
-	switch op {
-	case destADD:
-		v = add64(v, value)
-	case destSWAP:
-		v = value
-	case destXOR:
-		v = xor64(v, value)
-	case destOR:
-		v = or64(v, value)
-	case destAND:
-		v = and64(v, value)
-	case destMIN:
-		if slt64(value, v) != 0 {
-			v = value
-		}
-	case destMAX:
-		if sgt64(value, v) != 0 {
-			v = value
-		}
-	case destMINU:
-		if lt64(value, v) != 0 {
-			v = value
-		}
-	case destMAXU:
-		if gt64(value, v) != 0 {
-			v = value
-		}
-	default:
-		panic(fmt.Errorf("unrecognized mem op: %d", op))
-	}
-	state.storeMem(addr, size, v)
-	return out
 }
 
 func (state *VMState) getPC() uint64 {
