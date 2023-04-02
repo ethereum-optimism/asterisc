@@ -16,11 +16,12 @@ func LoadELF(f *elf.File) (*VMState, error) {
 		CSR:       [4096]uint64{},
 		Exit:      0,
 		Exited:    false,
-		Heap:      0x20_00_00_00,
+		// Note: Go heap arenas in 64 bit riscv start at 0xc0_00_00_00_00
+		// (c0 << 32) and range to 7f_00_00_00_00_00  (7f << 40) and specifies these with mmap hints.
+		// Go imposes no address space limits on riscv64 however (based on malloc.go heapAddrBits).
+		// So we grow the heap starting from this address, to not overlap with any hinted data
+		Heap: 0x7f_00_00_00_00_00,
 	}
-	// 0x20060000
-
-	// 0x44AE0000
 
 	// statically prepare VM state:
 	out.PC = f.Entry
@@ -48,10 +49,6 @@ func LoadELF(f *elf.File) (*VMState, error) {
 			}
 		}
 
-		if x := prog.Vaddr + prog.Memsz; x > out.Heap {
-			return nil, fmt.Errorf("warning: prog segment %d is past heap: %x - %x, heap at %x", i, prog.Vaddr, x, out.Heap)
-		}
-
 		// copy the segment into its assigned virtual memory, page by page
 		if err := out.SetMemRange(prog.Vaddr, prog.Memsz, r); err != nil {
 			return nil, fmt.Errorf("failed to read program segment %d: %w", i, err)
@@ -66,15 +63,13 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 		return fmt.Errorf("failed to read symbols data, cannot patch program: %w", err)
 	}
 	for _, s := range symbols {
-		//if strings.HasPrefix(s.Name, "runtime.call") {
-		//	fmt.Printf("%s at %016x\n", s.Name, s.Value)
-		//}
-		// Disable Golang GC by patching the function that enables to a no-op function.
+		// Disable Golang GC by patching the functions that enable the GC to a no-op function.
 		switch s.Name {
 		case "runtime.gcenable",
-			"runtime.init.5",     // patch out: init() { go forcegchelper() }
-			"runtime.main.func1", // patch out: main.func() { newm(sysmon, ....) }
-			// runtime.doInit -> some init call produces a traceback that then fails
+			"runtime.init.5",            // patch out: init() { go forcegchelper() }
+			"runtime.main.func1",        // patch out: main.func() { newm(sysmon, ....) }
+			"runtime.deductSweepCredit", // uses floating point nums and interacts with gc we disabled
+			"runtime.(*gcControllerState).commit",
 			// We need to patch this out, we don't pass float64nan because we don't support floats
 			"runtime.check":
 			// RISCV patch: ret (pseudo instruction)
@@ -88,6 +83,10 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 			})); err != nil {
 				return fmt.Errorf("failed to patch Go runtime.gcenable: %w", err)
 			}
+		case "runtime.MemProfileRate":
+			if vmState.SetMemRange(s.Value, 8, bytes.NewReader(make([]byte, 8))); err != nil { // disable mem profiling, to avoid a lot of unnecessary floating point ops
+				return err
+			}
 		}
 	}
 
@@ -97,7 +96,7 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 	// now insert the initial stack
 
 	// setup stack pointer
-	sp := uint64(0x7f_ff_d0_00)
+	sp := uint64(0x10_00_00_00_00_00_00_00)
 	vmState.writeRegister(2, sp)
 
 	// init argc, argv, aux on stack
@@ -119,19 +118,19 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 type SortedSymbols []elf.Symbol
 
 // FindSymbol finds the symbol that intersects with the given addr, or nil if none exists
-func (s SortedSymbols) FindSymbol(addr uint64) *elf.Symbol {
+func (s SortedSymbols) FindSymbol(addr uint64) elf.Symbol {
 	// find first symbol with higher start. Or n if no such symbol exists
 	i := sort.Search(len(s), func(i int) bool {
 		return s[i].Value > addr
 	})
 	if i == 0 {
-		return nil
+		return elf.Symbol{Name: "!start", Value: 0}
 	}
 	out := &s[i-1]
 	if out.Value+out.Size < addr { // addr may be pointing to a gap between symbols
-		return nil
+		return elf.Symbol{Name: "!gap", Value: addr}
 	}
-	return out
+	return *out
 }
 
 func Symbols(f *elf.File) (SortedSymbols, error) {
@@ -139,13 +138,15 @@ func Symbols(f *elf.File) (SortedSymbols, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read symbols data: %w", err)
 	}
-	// Go compiler already sorts them, but not every ELF has sorted symbols
+	// Go compiler supposedly already sorts them,
+	// but it does not do so for some Go internals like internal/bytealg.IndexByteString),
+	// and not every ELF has sorted symbols.
 	out := make(SortedSymbols, len(symbols))
 	for i := range out {
 		out[i] = symbols[i]
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Value < out[i].Value
+		return out[i].Value < out[j].Value
 	})
 	return out, nil
 }

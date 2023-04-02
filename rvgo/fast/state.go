@@ -33,10 +33,10 @@ type VMState struct {
 
 	LoadReservation uint64
 
-	PreimageKey         [2][32]byte // 0: type, 1: hash
+	PreimageKey         [32]byte
 	PreimageValueOffset uint64
 
-	PreimageOracle func(typ [32]byte, key [32]byte) ([]byte, error)
+	PreimageOracle func(key [32]byte) ([]byte, error)
 }
 
 func NewVMState() *VMState {
@@ -118,8 +118,8 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 			so.Remember(registersRoot, csrRoot),                // 10, 11
 		),
 		so.Remember(
-			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)),     // 12, 13
-			so.Remember(uint64AsBytes32(state.LoadReservation), state.PreimageKey[0]), // TODO pre-image state merkleization
+			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)),  // 12, 13
+			so.Remember(uint64AsBytes32(state.LoadReservation), state.PreimageKey), // TODO pre-image state merkleization
 		),
 	)
 }
@@ -336,7 +336,7 @@ func (state *VMState) writeU256AlignedMemory(addr uint64, count uint64, dat [32]
 		count = maxData
 	}
 
-	// make sure addr is aligned with 32 bits
+	// make sure addr is aligned with 32 bytes
 	addr = addr & ^uint64(0x1f)
 
 	// load the key data
@@ -358,22 +358,18 @@ func (state *VMState) writePreimageKey(addr uint64, count uint64) uint64 {
 	dat, bits := state.readU256AlignedMemory(addr, count)
 
 	// Append to key type, key content using bitshifts
-	key0 := b32asBEWord(state.PreimageKey[0])
-	key1 := b32asBEWord(state.PreimageKey[1])
-	key1 = shl(u64ToU256(bits), key1)
-	key1 = or(key1, shr(u64ToU256(sub64(U64(256), bits)), key0)) // bits overflow from key0 to key1
+	key0 := b32asBEWord(state.PreimageKey)
 	key0 = shl(u64ToU256(bits), key0)
 	key0 = or(key0, dat)
-	state.PreimageKey[0] = beWordAsB32(key0)
-	state.PreimageKey[1] = beWordAsB32(key1)
+	state.PreimageKey = beWordAsB32(key0)
 	state.PreimageValueOffset = 0
 	return shr64(toU64(3), bits)
 }
 
 func (state *VMState) readPreimageValue(addr uint64, size uint64) (uint64, error) {
-	preimage, err := state.PreimageOracle(state.PreimageKey[0], state.PreimageKey[1])
+	preimage, err := state.PreimageOracle(state.PreimageKey)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get preimage (%x, %x): %w", state.PreimageKey[0], state.PreimageKey[1], err)
+		return 0, fmt.Errorf("failed to get preimage %x: %w", state.PreimageKey, err)
 	}
 	preimageSize := uint64(len(preimage))
 	remaining := preimageSize - state.PreimageValueOffset

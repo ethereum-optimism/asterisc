@@ -24,30 +24,24 @@ var (
 )
 
 type PreimageKey interface {
-	Typ() PreimageTyp
-	Hash() [32]byte
+	Key() [32]byte
 }
 
 type ProgramInputKey uint64
 
-func (k ProgramInputKey) Typ() PreimageTyp {
-	return ProgramInputPreimageTyp
-}
-
-func (k ProgramInputKey) Hash() [32]byte {
-	var out [32]byte
-	binary.BigEndian.PutUint64(out[24:], uint64(k))
-	return out
+func (k ProgramInputKey) Key() [32]byte {
+	var out [64]byte // key, type
+	binary.BigEndian.PutUint64(out[24:32], uint64(k))
+	return keccak256(out[:])
 }
 
 type Keccak256PreimageKey [32]byte
 
-func (k Keccak256PreimageKey) Typ() PreimageTyp {
-	return Keccak256HashPreimageTyp
-}
-
-func (k Keccak256PreimageKey) Hash() [32]byte {
-	return k
+func (k Keccak256PreimageKey) Key() [32]byte {
+	var out [64]byte // key, type
+	copy(out[:32], k[:])
+	out[32] = 1
+	return keccak256(out[:])
 }
 
 type PreimageOracle struct {
@@ -55,17 +49,13 @@ type PreimageOracle struct {
 }
 
 func (p *PreimageOracle) Get(k PreimageKey) []byte {
-	typ := k.Typ()
-	if _, err := io.Copy(p.F, bytes.NewReader(typ[:])); err != nil {
-		panic(fmt.Errorf("failed to write type %x to preimage oracle: %w", typ, err))
-	}
-	hash := k.Hash()
-	if _, err := io.Copy(p.F, bytes.NewReader(hash[:])); err != nil {
-		panic(fmt.Errorf("failed to write hash %x to preimage oracle: %w", hash, err))
+	key := k.Key()
+	if _, err := io.Copy(p.F, bytes.NewReader(key[:])); err != nil {
+		panic(fmt.Errorf("failed to write key %x to preimage oracle: %w", key, err))
 	}
 	dat, err := io.ReadAll(p.F)
 	if err != nil {
-		panic(fmt.Errorf("failed to read preimage of (%x, %x) from oracle: %w", typ, hash, err))
+		panic(fmt.Errorf("failed to read preimage %s (%T) from oracle: %w", key, k, err))
 	}
 	return dat
 }

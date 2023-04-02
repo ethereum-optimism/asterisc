@@ -20,11 +20,15 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 		a7 := s.loadRegister(toU64(17))
 
 		switch a7 {
-		case 93: // exit
+		case 93: // exit the calling thread. No multi-thread support yet, so just exit.
 			a0 := s.loadRegister(toU64(10))
 			s.Exit = a0
 			s.Exited = true
 			// program stops here, no need to change registers.
+		case 94: // exit-group
+			a0 := s.loadRegister(toU64(10))
+			s.Exit = a0
+			s.Exited = true
 		case 214: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
@@ -50,14 +54,13 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 				align := and64(length, 4095)
 				if !iszero64(align) {
 					length = add64(length, sub64(4096, align))
-					length += align
 				}
 				s.writeRegister(toU64(10), s.Heap)
 				s.Heap += length // increment heap with length
-				fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
+				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
-				fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
+				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
 			s.writeRegister(toU64(11), toU64(0)) // no error
 		case 63: // read
@@ -237,8 +240,9 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			pc = add64(pc, toU64(4))
 		default:
 			imm := parseImmTypeB(instr)
-			// imm12 is a signed offset, in multiples of 2 bytes
-			pc = add64(pc, signExtend64(imm, toU64(11)))
+			// imm is a signed offset, in multiples of 2 bytes.
+			// So it's really 13 bits with a hardcoded 0 bit.
+			pc = add64(pc, imm)
 		}
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		s.setPC(pc)
@@ -475,9 +479,9 @@ func Step(s *VMState, stdOut, stdErr io.Writer) error {
 			switch and64(funct3, toU64(3)) {
 			case 1: // ?01 = CSRRW(I) = "atomic Read/Write bits in CSR"
 				s.writeCSR(imm, value)
-			case 2: // ?10 = CSRRS = "atomic Read and Set bits in CSR"
+			case 2: // ?10 = CSRRS(I) = "atomic Read and Set bits in CSR"
 				s.writeCSR(imm, or64(rdValue, value)) // v=0 will be no-op
-			case 3: // ?11 = CSRRC = "atomic Read and Clear Bits in CSR"
+			case 3: // ?11 = CSRRC(I) = "atomic Read and Clear Bits in CSR"
 				s.writeCSR(imm, and64(rdValue, not64(value))) // v=0 will be no-op
 			}
 			// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
