@@ -99,7 +99,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 		case 3: // ?11 = CSRRC(I)
 			v = and64(out, not64(v))
 		default:
-			panic(fmt.Errorf("unkwown CSR mode: %d", mode))
+			revertWithCode(0xbadc0de0, fmt.Errorf("unkwown CSR mode: %d", mode))
 		}
 		s.writeCSR(num, v)
 		return
@@ -153,7 +153,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 				// No hint, allocate it ourselves, by as much as the requested length.
 				// Increase the length to align it with desired page size if necessary.
 				align := and64(length, shortToU64(4095))
-				if !iszero64(align) {
+				if align != 0 {
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
 				writeRegister(toU64(10), s.Heap)
@@ -271,7 +271,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
-		default: // every other syscall results in exit with error code
+		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
 	}
@@ -644,7 +644,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 		setPC(add64(pc, toU64(4))) // no-op this.
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
 		setPC(add64(pc, toU64(4))) // no-op this.
-	default: // any other opcode results in an exit with error code
+	default:
 		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
 	return nil

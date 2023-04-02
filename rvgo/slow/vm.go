@@ -80,11 +80,6 @@ var (
 	destMAXU     = toU64(14)
 )
 
-func encodePacked(v U64) (out [8]byte) {
-	binary.LittleEndian.PutUint64(out[:], v.val())
-	return
-}
-
 func decodeU64(v []byte) (out U64) {
 	if len(v) > 8 {
 		panic("bad u64 decode")
@@ -148,10 +143,6 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 			}
 			stateStackGindex = shr(toU256(1), stateStackGindex)
 			if stateStackGindex == toU256(1) {
-				//if d, ok := so.(oracle.Differ); ok {
-				//	fmt.Println("state change")
-				//	d.Diff(stateRoot, stateValue, 1)
-				//}
 				stateRoot = stateValue
 			}
 		}
@@ -319,7 +310,7 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 				v = value
 			}
 		default:
-			panic(fmt.Errorf("unrecognized mem op: %d", op))
+			revertWithCode(0xbadc0de1, fmt.Errorf("unrecognized mem op: %d", op))
 		}
 		storeMem(addr, size, v)
 		return out
@@ -335,7 +326,7 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 		case 3:
 			dest = destCSRRC // ?11 = CSRRC(I)
 		default:
-			panic(fmt.Errorf("unkwown CSR mode: %d", mode.val()))
+			revertWithCode(0xbadc0de0, fmt.Errorf("unkwown CSR mode: %d", mode.val()))
 		}
 		out = mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), dest, v)
 		return
@@ -383,7 +374,7 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 				// No hint, allocate it ourselves, by as much as the requested length.
 				// Increase the length to align it with desired page size if necessary.
 				align := and64(length, shortToU64(4095))
-				if !iszero64(align) {
+				if align != (U64{}) {
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
 				heap := mutate(heapGindex, toU256(0), 0, toU64(8), destHeapIncr, length) // increment heap with length
@@ -501,7 +492,7 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
-		default: // every other syscall results in exit with error code
+		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
 	}
@@ -874,7 +865,7 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 		setPC(add64(pc, toU64(4))) // no-op this.
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
 		setPC(add64(pc, toU64(4))) // no-op this.
-	default: // any other opcode results in an exit with error code
+	default:
 		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
 

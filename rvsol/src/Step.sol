@@ -56,7 +56,7 @@ contract Step {
             //	    2          3
             //	 4    5     6     7
             //	8 9 10 11 12 13 14 15
-            //
+            //                     30 31
             // ```
             function pcGindex() -> out { out := 8 }
             function memoryGindex() -> out { out := 9 }
@@ -64,6 +64,9 @@ contract Step {
             function csrGindex() -> out { out := 11 }
             function exitGindex() -> out { out := 12 }
             function heapGindex() -> out { out := 13 }
+            function loadResGindex() -> out { out := 14 }
+            function preimageKeyGindex() -> out { out := 30 }
+            function preimageValueGindex() -> out { out := 31 }
 
             // Writing destinations. Note: also update the switch-case entries (no constant support...)
             function destRead() -> out { out := 0 }
@@ -72,6 +75,15 @@ contract Step {
             function destCSRRW() -> out { out := 3 }
             function destCSRRS() -> out { out := 4 }
             function destCSRRC() -> out { out := 5 }
+            function destADD() -> out { out   := 6 }
+            function destSWAP() -> out { out  := 7 }
+            function destXOR() -> out { out   := 8 }
+            function destOR() -> out { out    := 9 }
+            function destAND() -> out { out   := 10 }
+            function destMIN() -> out { out   := 11 }
+            function destMAX() -> out { out   := 12 }
+            function destMINU() -> out { out  := 13 }
+            function destMAXU() -> out { out  := 14 }
 
             function b32asBEWord(v) -> out {
                 out := v
@@ -405,6 +417,7 @@ contract Step {
                 let stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
 
                 switch dest
+                // TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
                 case 3 { // destCSRRW: atomic Read/Write bits in CSR
                     out := stateValue
                     dest := destWrite()
@@ -541,12 +554,56 @@ contract Step {
                 pop(mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite(), val))
             }
 
+            function setLoadReservation(addr) {
+                pop(mutate(loadResGindex(), toU256(0), 0, toU64(8), destWrite(), addr))
+            }
+
+            function getLoadReservation() -> out {
+                out := mutate(loadResGindex(), toU256(0), 0, toU64(8), destRead(), 0)
+            }
+
             function getPC() -> out {
                 out := mutate(pcGindex(), toU256(0), 0, toU64(8), destRead(), 0)
             }
 
             function setPC(v) {
                 pop(mutate(pcGindex(), toU256(0), 0, toU64(8), destWrite(), v))
+            }
+
+            function opMem(op, addr, size, value) -> out {
+                let v := loadMem(addr, size, true)
+                out := v
+                switch op
+                case 6 { // destADD
+                    v := add64(v, value)
+                } case 7 { // destSWAP
+                    v := value
+                } case 8 { // destXOR
+                    v := xor64(v, value)
+                } case 9 { // destOR
+                    v := or64(v, value)
+                } case 10 { // destAND
+                    v := and64(v, value)
+                } case 11 { // destMIN
+                    if slt64(value, v) {
+                        v := value
+                    }
+                } case 12 { // destMAX
+                    if sgt64(value, v) {
+                        v := value
+                    }
+                } case 13 { // destMINU
+                    if lt64(value, v) {
+                        v := value
+                    }
+                } case 14 { // destMAXU
+                    if gt64(value, v) {
+                        v := value
+                    }
+                } default {
+                    revertWithCode(0xbadc0de1) // unrecognized mem op
+                }
+                storeMem(addr, size, v)
             }
 
             function updateCSR(num, v, mode) -> out {
@@ -564,21 +621,33 @@ contract Step {
                 out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), dest, v)
             }
 
+            function writePreimageKey(addr, count) -> out {
+                // TODO
+                out := count
+            }
+            function readPreimageValue(addr, size) -> out {
+                // TODO
+                out := size
+            }
+
             function sysCall() {
                 let a7 := loadRegister(toU64(17))
                 switch a7
-                case 93 { // exit
-                    let a0 := loadRegister(toU64(0))
+                case 93 { // exit the calling thread. No multi-thread support yet, so just exit.
+                    let a0 := loadRegister(toU64(10))
                     pop(mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0))
-                }
-                case 214 { // brk
+                    // program stops here, no need to change registers.
+                } case 94 { // exit-group
+                    let a0 := loadRegister(toU64(10))
+                    pop(mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0))
+                } case 214 { // brk
                     // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
                     // brk(0) changes nothing about the memory, and returns the current page break
                     let v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
                     writeRegister(toU64(10), v)
-                }
-                case 222 { // mmap
+                    writeRegister(toU64(11), toU64(0)) // no error
+                } case 222 { // mmap
                     // A0 = addr (hint)
                     let addr := loadRegister(toU64(10))
                     // A1 = n (length)
@@ -591,17 +660,131 @@ contract Step {
                     // ignore: prot, flags, fd, offset
                     switch addr
                     case 0 {
-                        // no hint, allocate it ourselves, by as much as the requested length
-                        let heap := mutate(heapGindex(), toU256(0), 0, toU64(8), destHeapIncr(), length)
+                        // No hint, allocate it ourselves, by as much as the requested length.
+                        // Increase the length to align it with desired page size if necessary.
+                        let align := and64(length, shortToU64(4095))
+                        if align {
+                            length := add64(length, sub64(shortToU64(4096), align))
+                        }
+                        let heap := mutate(heapGindex(), toU256(0), 0, toU64(8), destHeapIncr(), length) // increment heap with length
                         writeRegister(toU64(10), heap)
                     }
                     default {
                         // allow hinted memory address (leave it in A0 as return argument)
                     }
                     writeRegister(toU64(11), toU64(0)) // no error
-                }
-                default {
-                    // TODO maybe revert if the syscall is unrecognized?
+                } case 63 { // read
+                    let fd := loadRegister(toU64(10))    // A0 = fd
+                    let addr := loadRegister(toU64(11))  // A1 = *buf addr
+                    let count := loadRegister(toU64(12)) // A2 = count
+                    let n := 0
+                    let errCode := 0
+                    switch fd
+                    case 0 { // stdin
+                        n := toU64(0) // never read anything from stdin
+                        errCode := toU64(0)
+                    } case 3 { // pre-image oracle
+                        n := readPreimageValue(addr, count)
+                        errCode := toU64(0)
+                    } default {
+                        n := u64Mask()         //  -1 (reading error)
+                        errCode := toU64(0x4d) // EBADF
+                    }
+                    writeRegister(toU64(10), n)
+                    writeRegister(toU64(11), errCode)
+                } case 64 { // write
+                    let fd := loadRegister(toU64(10))    // A0 = fd
+                    let addr := loadRegister(toU64(11))  // A1 = *buf addr
+                    let count := loadRegister(toU64(12)) // A2 = count
+                    let n := 0
+                    let errCode := 0
+                    switch fd
+                    case 1 { // stdout
+                        //_, err := io.Copy(stdOut, s.GetMemRange(addr, count)) // TODO stdout
+                        //if err != nil {
+                        //	panic(fmt.Errorf("stdout writing err: %w", err))
+                        //}
+                        n := count // write completes fully in single instruction step
+                        errCode := toU64(0)
+                    } case 2 { // stderr
+                        //_, err := io.Copy(stdErr, s.GetMemRange(addr, count)) // TODO stderr
+                        //if err != nil {
+                        //	panic(fmt.Errorf("stderr writing err: %w", err))
+                        //}
+                        n := count // write completes fully in single instruction step
+                        errCode := toU64(0)
+                    } case 3 { // pre-image oracle
+                        n := writePreimageKey(addr, count)
+                        errCode := toU64(0) // no error
+                    } default { // any other file, including (4) pre-image hinter
+                        n := u64Mask()         //  -1 (writing error)
+                        errCode := toU64(0x4d) // EBADF
+                    }
+                    writeRegister(toU64(10), n)
+                    writeRegister(toU64(11), errCode)
+                } case 25 { // fcntl - file descriptor manipulation / info lookup
+                    let fd := loadRegister(toU64(10))  // A0 = fd
+                    let cmd := loadRegister(toU64(11)) // A1 = cmd
+                    let out := 0
+                    let errCode := 0
+                    switch cmd
+                    case 0x3 { // F_GETFL: get file descriptor flags
+                        switch fd
+                        case 0 { // stdin
+                            out := toU64(0) // O_RDONLY
+                        } case 1 { // stdout
+                            out := toU64(1) // O_WRONLY
+                        } case 2 { // stderr
+                            out := toU64(1) // O_WRONLY
+                        } case 3 { // pre-image oracle
+                            out := toU64(2) // O_RDWR
+                        } default {
+                            out := u64Mask()
+                            errCode := toU64(0x4d) // EBADF
+                        }
+                    } default { // no other commands: don't allow changing flags, duplicating FDs, etc.
+                        out := u64Mask()
+                        errCode := toU64(0x16) // EINVAL (cmd not recognized by this kernel)
+                    }
+                    writeRegister(toU64(10), out)
+                    writeRegister(toU64(11), errCode) // EBADF
+                } case 56 { // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
+                    writeRegister(toU64(10), u64Mask())
+                    writeRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+                } case 123 { // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
+                    writeRegister(toU64(10), toU64(0))
+                    writeRegister(toU64(11), toU64(0))
+                } case 113 { // clock_gettime
+                    let addr := loadRegister(toU64(11))                  // addr of timespec struct
+                    storeMem(addr, toU64(8), shortToU64(1337))           // seconds
+                    storeMem(add64(addr, toU64(8)), toU64(8), toU64(42)) // nanoseconds: must be nonzero to pass Go runtimeInitTime check
+                    writeRegister(toU64(10), toU64(0))
+                    writeRegister(toU64(11), toU64(0))
+                } case 135 { // rt_sigprocmask - ignore any sigset changes
+                    writeRegister(toU64(10), toU64(0))
+                    writeRegister(toU64(11), toU64(0))
+                } case 132 { // sigaltstack - ignore any hints of an alternative signal receiving stack addr
+                    writeRegister(toU64(10), toU64(0))
+                    writeRegister(toU64(11), toU64(0))
+                } case 178 { // gettid - hardcode to 0
+                    writeRegister(toU64(10), toU64(0))
+                    writeRegister(toU64(11), toU64(0))
+                } case 134 { // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
+                    writeRegister(toU64(10), toU64(0))
+                    writeRegister(toU64(11), toU64(0))
+                //case 220 // clone - not supported
+                } case 163 { // getrlimit
+                    let res := loadRegister(toU64(10))
+                    let addr := loadRegister(toU64(11))
+                    switch res
+                    case 0x7 {  // RLIMIT_NOFILE
+                        storeMem(addr, toU64(8), shortToU64(1024))                  // soft limit. 1024 file handles max open
+                        storeMem(add64(addr, toU64(8)), toU64(8), shortToU64(1024)) // hard limit
+                    } default {
+                        revertWithCode(0xf0012) // unrecognized resource limit lookup
+                    }
+                } default {
+                    revertWithCode(0xf001ca11) // unrecognized system call
                 }
             }
 
@@ -615,14 +798,6 @@ contract Step {
             let rs1 := parseRs1(instr) // source register 1 index
             let rs2 := parseRs2(instr) // source register 2 index
             let funct7 := parseFunct7(instr)
-            let rs1Value := loadRegister(rs1)
-            let rs2Value := loadRegister(rs2)
-
-            //fmt.Printf("slow PC: %x\n", _pc)
-            //fmt.Printf("slow INSTR: %x\n", instr)
-            //fmt.Printf("slow OPCODE: %x\n", opcode)
-            //fmt.Printf("slow rs1 value: %x\n", rs1Value)
-            //fmt.Printf("slow rs2 value: %x\n", rs2Value)
 
             switch opcode
             case 0x03 { // 000_0011: memory loading
@@ -630,6 +805,7 @@ contract Step {
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
                 let size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
+                let rs1Value := loadRegister(rs1)
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 let rdValue := loadMem(memIndex, size, signed)
                 writeRegister(rd, rdValue)
@@ -638,11 +814,14 @@ contract Step {
                 // SB, SH, SW, SD
                 let imm := parseImmTypeS(instr)
                 let size := shl64(funct3, toU64(1))
-                let value := rs2Value
+                let value := loadRegister(rs2)
+                let rs1Value := loadRegister(rs1)
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 storeMem(memIndex, size, value)
                 setPC(add64(_pc, toU64(4)))
             } case 0x63 { // 110_0011: branching
+                let rs1Value := loadRegister(rs1)
+                let rs2Value := loadRegister(rs2)
                 let branchHit := toU64(0)
                 switch funct3
                 case 0 { // 000 = BEQ
@@ -663,12 +842,14 @@ contract Step {
                     _pc := add64(_pc, toU64(4))
                 } default {
                     let imm := parseImmTypeB(instr)
-                    // imm12 is a signed offset, in multiples of 2 bytes
-                    _pc := add64(_pc, signExtend64(imm, toU64(11)))
+                    // imm12 is a signed offset, in multiples of 2 bytes.
+			        // So it's really 13 bits with a hardcoded 0 bit.
+                    _pc := add64(_pc, imm)
                 }
                 // not like the other opcodes: nothing to write to rd register, and PC has already changed
                 setPC(_pc)
             } case 0x13 { // 001_0011: immediate arithmetic and logic
+		        let rs1Value := loadRegister(rs1)
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
                 switch funct3
@@ -697,6 +878,7 @@ contract Step {
                 writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x1B { // 001_1011: immediate arithmetic and logic signed 32 bit
+		        let rs1Value := loadRegister(rs1)
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
                 switch funct3
@@ -716,9 +898,11 @@ contract Step {
                 writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x33 { // 011_0011: register arithmetic and logic
+		        let rs1Value := loadRegister(rs1)
+		        let rs2Value := loadRegister(rs2)
                 let rdValue := 0
                 switch funct7
-                case 1 { // RV32M extension
+                case 1 { // RV M extension
                     switch funct3
                     case 0 { // 000 = MUL: signed x signed
                         rdValue := mul64(rs1Value, rs2Value)
@@ -790,6 +974,8 @@ contract Step {
                 writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x3B { // 011_1011: register arithmetic and logic in 32 bits
+                let rs1Value := loadRegister(rs1)
+                let rs2Value := loadRegister(rs2)
                 let rdValue := 0
                 switch funct7
                 case 1 { // RV64M extension
@@ -825,7 +1011,7 @@ contract Step {
                             rdValue := mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
                     }
-                } default { // RV32M extension
+                } default {
                     switch funct3
                     case 0 { // 000 = ADDW/SUBW
                         switch funct7
@@ -862,8 +1048,9 @@ contract Step {
                 let imm := parseImmTypeJ(instr)
                 let rdValue := add64(_pc, toU64(4))
                 writeRegister(rd, rdValue)
-                setPC(add64(_pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes
+                setPC(add64(_pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
             } case 0x67 { // 110_0111: JALR = Jump and link register
+		        let rs1Value := loadRegister(rs1)
                 let imm := parseImmTypeI(instr)
                 let rdValue := add64(_pc, toU64(4))
                 writeRegister(rd, rdValue)
@@ -876,14 +1063,13 @@ contract Step {
                         sysCall()
                         setPC(add64(_pc, toU64(4)))
                     } default { // imm12 = 000000000001 EBREAK
-                        // ignore breakpoint
-                        setPC(add64(_pc, toU64(4)))
+                        setPC(add64(_pc, toU64(4))) // ignore breakpoint
                     }
                 } default { // CSR instructions
                     let imm := parseCSSR(instr)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
-                        value := rs1Value
+                        value := loadRegister(rs1)
                     }
                     let mode := and64(funct3, toU64(3))
                     let rdValue := updateCSR(imm, value, mode)
@@ -891,38 +1077,77 @@ contract Step {
                     setPC(add64(_pc, toU64(4)))
                 }
             } case 0x2F { // 010_1111: RV32A and RV32A atomic operations extension
-                // TODO atomic operations
+                // acquire and release bits:
+                //   aq := and64(shr64(toU64(1), funct7), toU64(1))
+                //   rl := and64(funct7, toU64(1))
+                // if none set: unordered
+                // if aq is set: no following mem ops observed before acquire mem op
+                // if rl is set: release mem op not observed before earlier mem ops
+                // if both set: sequentially consistent
+                // These are no-op here because there is no pipeline of mem ops to acquire/release.
+
                 // 0b010 == RV32A W variants
                 // 0b011 == RV64A D variants
-                //size := 1 << funct3
-                switch shr64(toU64(2), and64(funct7, toU64(0x1F)))
-                case 0x0 { // 00000 = AMOADD
-                } case 0x1 { // 00001 = AMOSWAP
-                } case 0x2 { // 00010 = LR
-                } case 0x3 { // 00011 = SC
-                } case 0x4 { // 00100 = AMOXOR
-                } case 0x8 { // 01000 = AMOOR
-                } case 0xc { // 01100 = AMOAND
-                } case 0x10 { // 10000 = AMOMIN
-                } case 0x14 { // 10100 = AMOMAX
-                } case 0x18 { // 11000 = AMOMINU
-                } case 0x1c { // 11100 = AMOMAXU
+                let size := shl64(funct3, toU64(1))
+                if lt64(size, toU64(4)) {
+                    revertWithCode(0xbada70) // bad AMO size
                 }
-                //writeRegister(rd, rdValue)
+                let addr := loadRegister(rs1)
+
+                let op := shr64(toU64(2), funct7)
+                switch op
+                case 0x2 { // 00010 = LR = Load Reserved
+                    let v := loadMem(addr, size, true)
+                    writeRegister(rd, v)
+                    setLoadReservation(addr)
+                } case 0x3 { // 00011 = SC = Store Conditional
+                    let rdValue := toU64(1)
+                    if eq64(addr, getLoadReservation()) {
+                        let rs2Value := loadRegister(rs2)
+                        storeMem(addr, size, rs2Value)
+                        rdValue := toU64(0)
+                    }
+                    writeRegister(rd, rdValue)
+                    setLoadReservation(toU64(0))
+                } default { // AMO: Atomic Memory Operation
+                    let rs2Value := loadRegister(rs2)
+                    if eq64(size, toU64(4)) {
+                        rs2Value := mask32Signed64(rs2Value)
+                    }
+                    // Specifying the operation allows us to implement it closer to the memory for smaller witness data.
+                    // And that too can be optimized: only one 32 bytes leaf is affected,
+                    // since AMOs are always 4 or 8 byte aligned (Zam extension not supported here).
+                    let dest := 0
+                    switch op
+                    case 0x0 { // 00000 = AMOADD = add
+                        dest := destADD()
+                    } case 0x1 { // 00001 = AMOSWAP
+                        dest := destSWAP()
+                    } case 0x4 { // 00100 = AMOXOR = xor
+                        dest := destXOR()
+                    } case 0x8 { // 01000 = AMOOR = or
+                        dest := destOR()
+                    } case 0xc { // 01100 = AMOAND = and
+                        dest := destAND()
+                    } case 0x10 { // 10000 = AMOMIN = min signed
+                        dest := destMIN()
+                    } case 0x14 { // 10100 = AMOMAX = max signed
+                        dest := destMAX()
+                    } case 0x18 { // 11000 = AMOMINU = min unsigned
+                        dest := destMINU()
+                    } case 0x1c { // 11100 = AMOMAXU = max unsigned
+                        dest := destMAXU()
+                    } default {
+                        revertWithCode(0xf001a70) // unknown atomic operation
+                    }
+                    let rdValue := opMem(dest, addr, size, rs2Value)
+                    writeRegister(rd, rdValue)
+                }
                 setPC(add64(_pc, toU64(4)))
             } case 0x0F { // 000_1111: fence
-                //// TODO: different layout of func data
-                //// "fm pred succ"
-                //switch funct3
-                //case 0 {  // 000
-                //	switch funct7
-                //	case 0x41 { // 100_0001 = FENCE.TSO
-                //	} default { // FENCE
-                //	}
-                //} case 1 { // 001: FENCE.I
-                //}
-                // We can no-op FENCE, there's nothing to synchronize
-                //writeRegister(rd, rdValue)
+                // Used to impose additional ordering constraints; flushing the mem operation pipeline.
+                // This VM doesn't have a pipeline, nor additional harts, so this is a no-op.
+                // FENCE / FENCE.TSO / FENCE.I all no-op: there's nothing to synchronize.
                 setPC(add64(_pc, toU64(4)))
             } case 0x07 { // FLW/FLD: floating point load word/double
 		        setPC(add64(_pc, toU64(4))) // no-op this.

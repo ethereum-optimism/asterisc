@@ -309,6 +309,6 @@ func TestEVMStep(t *testing.T) {
 	}
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
-	//runTestCategory("rv64ua-p")  // TODO implement atomic instructions extension
+	runTestCategory("rv64ua-p")
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
