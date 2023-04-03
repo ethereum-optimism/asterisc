@@ -56,7 +56,7 @@ contract Step {
             //	    2          3
             //	 4    5     6     7
             //	8 9 10 11 12 13 14 15
-            //                     30 31
+            //
             // ```
             function pcGindex() -> out { out := 8 }
             function memoryGindex() -> out { out := 9 }
@@ -65,8 +65,7 @@ contract Step {
             function exitGindex() -> out { out := 12 }
             function heapGindex() -> out { out := 13 }
             function loadResGindex() -> out { out := 14 }
-            function preimageKeyGindex() -> out { out := 30 }
-            function preimageValueGindex() -> out { out := 31 }
+            function preimageGindex() -> out { out := 15 }
 
             // Writing destinations. Note: also update the switch-case entries (no constant support...)
             function destRead() -> out { out := 0 }
@@ -433,9 +432,9 @@ contract Step {
                     dest := destWrite()
                 }
                 case 2 { // destHeapIncr
-                    // special case: increment before writing, and output result
-                    value := add64(value, stateValue)
-                    out := value
+                    // we want the heap value before we increase it
+                    out := stateValue
+                    value := add64(out, value)
                     dest := destWrite()
                 }
 
@@ -622,12 +621,84 @@ contract Step {
             }
 
             function writePreimageKey(addr, count) -> out {
-                // TODO
+                // adjust count down, so we only have to read a single 32 byte leaf of memory
+                let alignment := and64(addr, toU64(31))
+                let maxData := sub64(toU64(32), alignment)
+                if gt64(count, maxData) {
+                    count := maxData
+                }
+
+                let memGindex := makeMemGindex(addr)
+                let node, stateStackHash := read(toU256(1), memGindex, 61) // top tree + mem tree - root bit - inspect bit = 4 + (64-5) - 1 - 1 = 61
+                // mask the part of the data we are shifting in
+                let bits := shl(toU256(3), u64ToU256(count))
+                let mask := sub(shl(bits, toU256(1)), toU256(1))
+                let dat := and(b32asBEWord(node), mask)
+
+                node, stateStackHash := read(toU256(1), preimageGindex(), 2)
+                let preImageKey, __ := soGet(node)
+
+                // Append to key content by bit-shifting
+                let key := b32asBEWord(preImageKey)
+                key := shl(bits, key)
+                key := or(key, dat)
+
+                // We reset the pre-image value offset back to 0 (the right part of the merkle pair)
+                let newPreImageRoot := soRemember(beWordAsB32(key), 0)
+                write(preimageGindex(), toU256(1), newPreImageRoot, stateStackHash)
                 out := count
             }
-            function readPreimageValue(addr, size) -> out {
-                // TODO
-                out := size
+
+            function readPreimageValue(addr, count) -> out {
+                let node, stateStackHash := read(toU256(1), preimageGindex(), 2)
+                let preImageKey, preImageValueOffset := soGet(node)
+
+                let offset := b32asBEWord(preImageValueOffset)
+
+                // TODO make call to pre-image oracle contract
+                let pdatB32 := 0
+                let pdatlen := 0
+//                pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.Uint64())
+//                if err {
+//                    revertWithCode(0xbadf00d, err)
+//                }
+                if iszero64(toU64(pdatlen)) { // EOF
+                    out := toU64(0)
+                    leave
+                }
+
+                // align with memory
+                let alignment := and64(addr, toU64(31))
+                let maxData := sub64(toU64(32), alignment)
+                if gt64(count, maxData) {
+                    count := maxData
+                }
+                // limit to end of pre-image
+                if gt64(count, toU64(pdatlen)) {
+                    count := toU64(pdatlen)
+                }
+                let pdat := b32asBEWord(pdatB32)
+                // if we've too much preimage data, shorten it
+                if gt64(toU64(pdatlen), count) {
+                    pdat := shr(pdat, sub(toU256(pdatlen), u64ToU256(count)))
+                }
+
+                // update pre-image reader with updated offset
+                let newOffset := add(offset, u64ToU256(count))
+                let newPreImageRoot := soRemember(preImageKey, beWordAsB32(newOffset))
+                write(preimageGindex(), toU256(1), newPreImageRoot, stateStackHash)
+
+                // put data into memory
+                let memGindex := makeMemGindex(addr)
+                node, stateStackHash := read(toU256(1), memGindex, 61)
+                // mask the part of the data out that we are overwriting
+                let bits := shl(toU256(3), u64ToU256(count))
+                let mask := not(sub(shl(bits, toU256(1)), toU256(1)))
+                let dat := and(b32asBEWord(node), mask)
+                dat := or(dat, pdat)
+
+                write(memGindex, toU256(1), beWordAsB32(dat), stateStackHash)
+                out := count
             }
 
             function sysCall() {
