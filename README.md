@@ -2,8 +2,6 @@
 
 Asterisc proves execution of a RISC-V program with an interactive fraud-proof.
 
-Or spelled out in asterisks: `******* amzing` (when it's complete :P)
-
 *Deploy/run this at your own risk, this is highly experimental software*
 
 ## Work in progress
@@ -26,19 +24,26 @@ TODO
   - [ ] support syscalls
     - [x] memory brk/mmap
     - [x] exit
+    - [x] read/write/fcntl/openat
+    - [x] Go syscalls compat
     - [ ] extend w/ threading clone/futex/gettid/tgkil/tkill
     - [ ] extras
-  - [ ] implement pre-image oracle by swapping a special memory region for the requested preimage
-  - [x] Pass RISC-V test vectors
+  - [x] read/write syscall based pre-image oracle
+  - [x] Pass RISC-V test vectors (RV64 I, M, A)
 - [ ] Sol:
-  - [ ] Forge solidity testing setup
+  - [x] Forge solidity testing setup
+  - [ ] Forge solidity test VM step on snapshotted proof data
   - [x] Complete port of Go slow-mode emu to solidity/Yul
   - [x] Pass RISC-V test vectors
+  - [ ] read/write syscall based pre-image oracle (WIP)
 - [ ] Misc:
   - [x] analyze Go runtime/compiler
-  - [ ] script to turn ELF binary into riscv memory pre-image with starting point
+  - [ ] CLI command to build VM snapshot from ELF
+  - [ ] CLI command to transition VM snapshot N steps with interval snapshots
+  - [ ] CLI command to produce proof for snapshot
+  - [ ] CLI command to verify proof, in EVM and Go mode
   - [ ] Go-Sol differential fuzzing
-  - [ ] Test basic Go programs
+  - [x] Test basic Go programs
 
 ## How does it work?
 
@@ -87,7 +92,9 @@ and having a Go mirror of the smart-contract behavior for testing/debugging in g
 - `Zifencei`: `FENCE.I` no-op: No need for `FENCE.I`
 - `Zicsr`: no-op: some support for Control-and-status registers may come later though.
 - `Ztso`: no-op: no need for Total Store Ordering
-- other: abort on unrecognized instructions
+- other: revert with error code on unrecognized instructions
+
+Where necessary, the non-supported operations are no-ops that allow execution of the standard Go runtime, with disabled GC.
 
 ## Contributing
 
@@ -117,6 +124,7 @@ So Asterisc aims to complement other fraud-proof systems, and not to replace the
 
 - [Go support](./docs/golang.md): relevant info about the Go runtime / compiler to support it
 - [RISC-V resources](./docs/riscv.md): RISC-V instruction set specs, references and notes
+- [Toolchain notes](./docs/toolchain.md): RISC-V and Go toolchain help
 
 ## Why not X?
 
