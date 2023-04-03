@@ -36,7 +36,10 @@ func main() {
 	// Now run through the disputed step.
 	// And remember all state we access, so we can reproduce it without full state oracle.
 	so.BuildAccessList(true)
-	post := slow.Step(pre, so)
+	post, err := slow.Step(pre, so, nil)
+	if err != nil {
+		log.Fatalf("slow step err: %v", err)
+	}
 
 	log.Printf("post-state: %x", post)
 	al := so.AccessList()

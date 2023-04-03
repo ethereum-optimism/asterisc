@@ -90,7 +90,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 		so.BuildAccessList(true)
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
-		post, err := slow.Step(pre, so, os.Stdout, os.Stderr)
+		post, err := slow.Step(pre, so, nil)
 		require.NoError(t, err)
 
 		al := so.AccessList()
@@ -107,7 +107,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
 		}
 
-		post2, err := slow.Step(pre, alo, os.Stdout, os.Stderr)
+		post2, err := slow.Step(pre, alo, nil)
 		require.NoError(t, err)
 		if post2 != fastRoot {
 			so.Diff(post2, fastRoot, 1)
@@ -222,7 +222,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 		so.BuildAccessList(true)
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
-		post, err := slow.Step(pre, so, os.Stdout, os.Stderr)
+		post, err := slow.Step(pre, so, nil)
 		require.NoError(t, err)
 
 		al := so.AccessList()

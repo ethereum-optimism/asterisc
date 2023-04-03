@@ -3,7 +3,6 @@ package slow
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 
 	"github.com/holiman/uint256"
 
@@ -13,23 +12,21 @@ import (
 // tree:
 // ```
 //
-//		         1
-//		    2          3
-//		 4    5     6     7
-//		8 9 10 11 12 13 14 15
-//	                      30  31
+//	         1
+//	    2          3
+//	 4    5     6     7
+//	8 9 10 11 12 13 14 15
 //
 // ```
 var (
-	pcGindex            = toU256(8)
-	memoryGindex        = toU256(9)
-	registersGindex     = toU256(10)
-	csrGindex           = toU256(11)
-	exitGindex          = toU256(12)
-	heapGindex          = toU256(13)
-	loadResGindex       = toU256(14)
-	preimageKeyGindex   = toU256(30)
-	preimageValueGindex = toU256(31)
+	pcGindex        = toU256(8)
+	memoryGindex    = toU256(9)
+	registersGindex = toU256(10)
+	csrGindex       = toU256(11)
+	exitGindex      = toU256(12)
+	heapGindex      = toU256(13)
+	loadResGindex   = toU256(14)
+	preimageGindex  = toU256(15)
 )
 
 func makeMemGindex(byteIndex U64) U256 {
@@ -90,7 +87,7 @@ func decodeU64(v []byte) (out U64) {
 	return
 }
 
-func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateRoot [32]byte, outErr error) {
+func Step(s [32]byte, so oracle.VMStateOracle, po oracle.PreImageOracle) (stateRoot [32]byte, outErr error) {
 	stateRoot = s
 
 	var revertCode uint64
@@ -170,9 +167,9 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 			value = and64(out, not64(value)) // clear bits, v=0 will be no-op
 			dest = destWrite
 		case destHeapIncr:
-			// special case: increment before writing, and output result
-			value = add64(value, decodeU64(stateValue[:8]))
-			out = value
+			// we want the heap value before we increase it
+			out = decodeU64(stateValue[:8])
+			value = add64(out, value)
 			dest = destWrite
 		}
 
@@ -333,12 +330,80 @@ func Step(s [32]byte, so oracle.VMStateOracle, stdOut, stdErr io.Writer) (stateR
 	}
 
 	writePreimageKey := func(addr U64, count U64) U64 {
-		//s.writePreimageKey()
+		// adjust count down, so we only have to read a single 32 byte leaf of memory
+		alignment := and64(addr, toU64(31))
+		maxData := sub64(toU64(32), alignment)
+		if gt64(count, maxData) != (U64{}) {
+			count = maxData
+		}
+
+		memGindex := makeMemGindex(addr)
+		node, stateStackHash := read(toU256(1), memGindex, 61) // top tree + mem tree - root bit - inspect bit = 4 + (64-5) - 1 - 1 = 61
+		// mask the part of the data we are shifting in
+		bits := shl(toU256(3), u64ToU256(count))
+		mask := sub(shl(bits, toU256(1)), toU256(1))
+		dat := and(b32asBEWord(node), mask)
+
+		node, stateStackHash = read(toU256(1), preimageGindex, 2)
+		preImageKey, _ := so.Get(node)
+
+		// Append to key content by bit-shifting
+		key := b32asBEWord(preImageKey)
+		key = shl(bits, key)
+		key = or(key, dat)
+
+		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
+		newPreImageRoot := so.Remember(beWordAsB32(key), [32]byte{})
+		write(preimageGindex, toU256(1), newPreImageRoot, stateStackHash)
 		return count
 	}
-	readPreimageValue := func(addr U64, size U64) U64 {
-		//s.readPreimageValue()
-		return size
+
+	readPreimageValue := func(addr U64, count U64) U64 {
+		node, stateStackHash := read(toU256(1), preimageGindex, 2)
+		preImageKey, preImageValueOffset := so.Get(node)
+
+		offset := b32asBEWord(preImageValueOffset)
+
+		pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.Uint64())
+		if err != nil {
+			revertWithCode(0xbadf00d, err)
+		}
+		if iszero64(toU64(pdatlen)) { // EOF
+			return toU64(0)
+		}
+
+		// align with memory
+		alignment := and64(addr, toU64(31))
+		maxData := sub64(toU64(32), alignment)
+		if gt64(count, maxData) != (U64{}) {
+			count = maxData
+		}
+		// limit to end of pre-image
+		if gt64(count, toU64(pdatlen)) != (U64{}) {
+			count = toU64(pdatlen)
+		}
+		pdat := b32asBEWord(pdatB32)
+		// if we've too much preimage data, shorten it
+		if gt64(toU64(pdatlen), count) != (U64{}) {
+			pdat = shr(pdat, sub(toU256(pdatlen), u64ToU256(count)))
+		}
+
+		// update pre-image reader with updated offset
+		newOffset := add(offset, u64ToU256(count))
+		newPreImageRoot := so.Remember(preImageKey, beWordAsB32(newOffset))
+		write(preimageGindex, toU256(1), newPreImageRoot, stateStackHash)
+
+		// put data into memory
+		memGindex := makeMemGindex(addr)
+		node, stateStackHash = read(toU256(1), memGindex, 61)
+		// mask the part of the data out that we are overwriting
+		bits := shl(toU256(3), u64ToU256(count))
+		mask := not(sub(shl(bits, toU256(1)), toU256(1)))
+		dat := and(b32asBEWord(node), mask)
+		dat = or(dat, pdat)
+
+		write(memGindex, toU256(1), beWordAsB32(dat), stateStackHash)
+		return count
 	}
 
 	sysCall := func() {

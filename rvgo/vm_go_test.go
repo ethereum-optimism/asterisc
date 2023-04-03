@@ -13,9 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/protolambda/asterisc/rvgo/fast"
+	"github.com/protolambda/asterisc/rvgo/oracle"
+	"github.com/protolambda/asterisc/rvgo/slow"
 )
 
-func TestFastSimple(t *testing.T) {
+func TestSimple(t *testing.T) {
 	programELF, err := elf.Open("../tests/go-tests/bin/simple")
 	require.NoError(t, err)
 	defer programELF.Close()
@@ -57,10 +59,30 @@ func TestFastSimple(t *testing.T) {
 		}
 	}
 
+	slowPreimageOracle := oracle.PreImageReaderFn(func(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error) {
+		if v, ok := preImages[key]; ok {
+			if offset == uint64(len(v)) {
+				return [32]byte{}, 0, nil // datlen==0 signals EOF
+			}
+			if offset > uint64(len(v)) {
+				err = fmt.Errorf("cannot read past pre-image (%x) size: %d >= %d", key, offset, len(v))
+				return
+			}
+			datlen = uint8(copy(dat[:], v[offset:]))
+			return
+		} else {
+			err = fmt.Errorf("unknown pre-image %x", key)
+			return
+		}
+	})
+
+	so := oracle.NewStateOracle()
+	pre := vmState.Merkleize(so)
+
 	for i := 0; i < 2000_000; i++ {
 		sym := symbols.FindSymbol(vmState.PC)
-		//instr := vmState.Instr()
-		//fmt.Printf("i: %4d  pc: 0x%x  instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, instr, sym.Name, sym.Size)
+		instr := vmState.Instr()
+		fmt.Printf("i: %4d  pc: 0x%x  instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, instr, sym.Name, sym.Size)
 		if sym.Name == "runtime.throw" {
 			throwArg := vmState.Registers[10]
 			throwArgLen := vmState.Registers[11]
@@ -76,10 +98,26 @@ func TestFastSimple(t *testing.T) {
 			}
 			break
 		}
-		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
-			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		pc := vmState.PC
 
+		post, err := slow.Step(pre, so, slowPreimageOracle)
+		if err != nil {
+			t.Fatalf("slow VM err at step %d, PC %d: %v", i, pc, err)
 		}
+		pre = post
+
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			t.Fatalf("fast VM err at step %d, PC %d: %v", i, pc, err)
+		}
+
+		if i%10000 == 0 || (i >= 230670 && i < 230670+100) { // every 10k steps, check our work
+			fastRoot := vmState.Merkleize(so)
+			if post != fastRoot {
+				so.Diff(post, fastRoot, 1)
+				t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
+			}
+		}
+
 		if vmState.Exited {
 			break
 		}

@@ -41,7 +41,7 @@ type VMState struct {
 
 func NewVMState() *VMState {
 	return &VMState{
-		Memory: make(map[uint64]*[1024]byte),
+		Memory: make(map[uint64]*[pageSize]byte),
 		Heap:   1 << 28, // 0.25 GiB of program code space
 	}
 }
@@ -78,7 +78,11 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		binary.LittleEndian.PutUint64(out[:8], v)
 		return
 	}
-	merkleizePage := func(page *[1024]byte) [32]byte {
+	uint64AsBytes32BE := func(v uint64) (out [32]byte) {
+		binary.BigEndian.PutUint64(out[24:], v)
+		return
+	}
+	merkleizePage := func(page *[pageSize]byte) [32]byte {
 		return merkleize(pageAddrSize-5, func(index uint64) [32]byte { // 32 byte leaf values (5 bits)
 			return *(*[32]byte)(page[index*32 : index*32+32])
 		})
@@ -95,12 +99,12 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		if _, ok := pageBranches[left]; ok {
 			leftRoot = merkleizeMemory(left, depth+1)
 		} else {
-			leftRoot = zeroHashes[pageKeySize-depth+(pageAddrSize-5)]
+			leftRoot = zeroHashes[pageKeySize-(depth+1)+(pageAddrSize-5)]
 		}
 		if _, ok := pageBranches[right]; ok {
 			rightRoot = merkleizeMemory(right, depth+1)
 		} else {
-			rightRoot = zeroHashes[pageKeySize-depth+(pageAddrSize-5)]
+			rightRoot = zeroHashes[pageKeySize-(depth+1)+(pageAddrSize-5)]
 		}
 		return so.Remember(leftRoot, rightRoot)
 	}
@@ -112,6 +116,7 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 	csrRoot := merkleize(12, func(index uint64) [32]byte {
 		return uint64AsBytes32(state.CSR[index])
 	})
+	preimageRoot := so.Remember(state.PreimageKey, uint64AsBytes32BE(state.PreimageValueOffset))
 	return so.Remember(
 		so.Remember(
 			so.Remember(uint64AsBytes32(state.PC), memoryRoot), // 8, 9
@@ -119,8 +124,7 @@ func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
 		),
 		so.Remember(
 			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)), // 12, 13
-			so.Remember(uint64AsBytes32(state.LoadReservation), // 14
-				so.Remember(state.PreimageKey, uint64AsBytes32(state.PreimageValueOffset))), // 30, 31
+			so.Remember(uint64AsBytes32(state.LoadReservation), preimageRoot),     // 14, 15
 		),
 	)
 }
@@ -309,23 +313,23 @@ func (state *VMState) writeU256AlignedMemory(addr uint64, count uint64, dat [32]
 func (state *VMState) writePreimageKey(addr uint64, count uint64) uint64 {
 	dat, bits := state.readU256AlignedMemory(addr, count)
 
-	// Append to key type, key content using bitshifts
-	key0 := b32asBEWord(state.PreimageKey)
-	key0 = shl(u64ToU256(bits), key0)
-	key0 = or(key0, dat)
-	state.PreimageKey = beWordAsB32(key0)
+	// Append to key content by bit-shifting
+	key := b32asBEWord(state.PreimageKey)
+	key = shl(u64ToU256(bits), key)
+	key = or(key, dat)
+	state.PreimageKey = beWordAsB32(key)
 	state.PreimageValueOffset = 0
 	return shr64(toU64(3), bits)
 }
 
-func (state *VMState) readPreimageValue(addr uint64, size uint64) (uint64, error) {
+func (state *VMState) readPreimageValue(addr uint64, count uint64) (uint64, error) {
 	preimage, err := state.PreimageOracle(state.PreimageKey)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get preimage %x: %w", state.PreimageKey, err)
 	}
 	preimageSize := uint64(len(preimage))
 	remaining := preimageSize - state.PreimageValueOffset
-	n := size
+	n := count
 	if n > 32 {
 		n = 32
 	}

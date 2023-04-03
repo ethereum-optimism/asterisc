@@ -112,7 +112,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 	readPreimageValue := func(addr U64, size U64) U64 {
 		v, err := s.readPreimageValue(addr, size) // TODO
 		if err != nil {
-			panic(err)
+			revertWithCode(0xbadf00d, err)
 		}
 		return v
 	}
