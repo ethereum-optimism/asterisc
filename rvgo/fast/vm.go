@@ -106,15 +106,67 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 	}
 
 	writePreimageKey := func(addr U64, count U64) U64 {
-		return s.writePreimageKey(addr, count) // TODO
+		// adjust count down, so we only have to read a single 32 byte leaf of memory
+		alignment := and64(addr, toU64(31))
+		maxData := sub64(toU64(32), alignment)
+		if gt64(count, maxData) != 0 {
+			count = maxData
+		}
+
+		node := s.getMemoryB32(addr - alignment)
+		// mask the part of the data we are shifting in
+		bits := shl(toU256(3), u64ToU256(count))
+		mask := sub(shl(bits, toU256(1)), toU256(1))
+		dat := and(b32asBEWord(node), mask)
+
+		preImageKey := s.PreimageKey
+
+		// Append to key content by bit-shifting
+		key := b32asBEWord(preImageKey)
+		key = shl(bits, key)
+		key = or(key, dat)
+
+		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
+		s.PreimageKey = beWordAsB32(key)
+		s.PreimageValueOffset = 0
+		return count
 	}
 
-	readPreimageValue := func(addr U64, size U64) U64 {
-		v, err := s.readPreimageValue(addr, size) // TODO
+	readPreimageValue := func(addr U64, count U64) U64 {
+		preImageKey, offset := s.PreimageKey, s.PreimageValueOffset
+
+		pdatB32, pdatlen, err := s.ReadPreImagePart(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
 			revertWithCode(0xbadf00d, err)
 		}
-		return v
+		if iszero64(toU64(pdatlen)) { // EOF
+			return toU64(0)
+		}
+		alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
+		maxData := sub64(toU64(32), alignment) // higher alignment leaves less room for data this step
+		if gt64(count, maxData) != 0 {
+			count = maxData
+		}
+		if gt64(count, toU64(pdatlen)) != 0 { // cannot read more than pdatlen
+			count = toU64(pdatlen)
+		}
+
+		bits := shl64(toU64(3), sub64(toU64(32), count))             // 32-count, in bits
+		mask := not(sub(shl(u64ToU256(bits), toU256(1)), toU256(1))) // left-aligned mask for count bytes
+		alignmentBits := u64ToU256(shl64(toU64(3), alignment))
+		mask = shr(alignmentBits, mask)                  // mask of count bytes, shifted by alignment
+		pdat := shr(alignmentBits, b32asBEWord(pdatB32)) // pdat, shifted by alignment
+
+		// update pre-image reader with updated offset
+		newOffset := add64(offset, count)
+		//s.PreimageKey = preImageKey   // key stats the same
+		s.PreimageValueOffset = newOffset
+
+		node := s.getMemoryB32(addr - alignment)
+		dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
+		dat = or(dat, and(pdat, mask))           // fill with bytes from pdat
+		s.setMemoryB32(addr-alignment, beWordAsB32(dat))
+		return count
 	}
 
 	sysCall := func() {

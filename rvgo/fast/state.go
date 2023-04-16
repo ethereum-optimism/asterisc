@@ -237,110 +237,43 @@ func (state *VMState) writeRegister(reg uint64, v uint64) {
 	state.Registers[reg] = v
 }
 
-// readU256AlignedMemory reads bytes starting at addr from memory, no more than count are read.
-// At most 32 bytes are read.
-// If addr is not aligned to a multiple of 32 bytes, less bytes may be read,
-// to contain reading to a single 32-byte leaf.
-// A container with the data (zeroed right-padding if necessary),
-// and the length of the read data in bits (!!!), is returned.
-func (state *VMState) readU256AlignedMemory(addr uint64, count uint64) (dat U256, bits uint64) {
-	// find alignment, and reduce work if it is not aligned
-	alignment := addr % 32
-	// how many bytes we can read from this bytes32
-	maxData := 32 - alignment
-	// reduce count accordingly, if necessary
-	if count > maxData {
-		count = maxData
+func (state *VMState) getMemoryB32(addr uint64) (out [32]byte) {
+	if addr&31 != 0 {
+		panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 	}
-	bits = shl64(toU64(3), count)
-
-	// make sure addr is aligned with 32 bits
-	addr = addr & ^uint64(0x1f)
-
-	// load the key data
 	pageIndex := addr >> pageAddrSize
 	p, ok := state.Memory[pageIndex]
-	if !ok { // default to zeroed data if page does not exist
-		return U256{}, bits
+	if !ok {
+		return [32]byte{}
 	}
-
-	// Load the relevant bytes32
 	pageAddr := addr & pageAddrMask
-	dat = b32asBEWord(*(*[32]byte)(p[pageAddr : pageAddr+32]))
-
-	// shift out prefix and align with start of output
-	alignmentInBits := u64ToU256(shl64(toU64(3), alignment))
-	dat = shl(alignmentInBits, dat)
-	// remove suffix
-	shamt := u64ToU256(sub64(U64(256), bits))
-	dat = shl(shamt, shr(shamt, dat))
+	copy(out[:], p[pageAddr:pageAddr+32])
 	return
 }
 
-// writeU256AlignedMemory writes up to count bytes of the given data to the memory at the address.
-// At most 32 bytes are written.
-// If addr is not aligned to a multiple of 32 bytes, less bytes may be written,
-// to contain writing to a single 32-byte leaf.
-// The length of the written data in bytes is returned.
-func (state *VMState) writeU256AlignedMemory(addr uint64, count uint64, dat [32]byte) uint64 {
-	// find alignment, and reduce work if it is not aligned
-	alignment := addr % 32
-	// how many bytes we can write of this bytes32
-	maxData := 32 - alignment
-	// reduce count accordingly, if necessary
-	if count > maxData {
-		count = maxData
+func (state *VMState) setMemoryB32(addr uint64, v [32]byte) {
+	if addr&31 != 0 {
+		panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 	}
-
-	// make sure addr is aligned with 32 bytes
-	addr = addr & ^uint64(0x1f)
-
-	// load the key data
 	pageIndex := addr >> pageAddrSize
 	p, ok := state.Memory[pageIndex]
-	if !ok { // create page if it doesn't exist yet
+	if !ok {
 		p = &[pageSize]byte{}
 		state.Memory[pageIndex] = p
 	}
-
-	// overwrite the leaf part
 	pageAddr := addr & pageAddrMask
-	prev := p[pageAddr : pageAddr+32]
-	copy(prev[alignment:alignment+count], dat[:count])
-	return count
+	copy(p[pageAddr:pageAddr+32], v[:])
 }
 
-func (state *VMState) writePreimageKey(addr uint64, count uint64) uint64 {
-	dat, bits := state.readU256AlignedMemory(addr, count)
-
-	// Append to key content by bit-shifting
-	key := b32asBEWord(state.PreimageKey)
-	key = shl(u64ToU256(bits), key)
-	key = or(key, dat)
-	state.PreimageKey = beWordAsB32(key)
-	state.PreimageValueOffset = 0
-	return shr64(toU64(3), bits)
-}
-
-func (state *VMState) readPreimageValue(addr uint64, count uint64) (uint64, error) {
-	preimage, err := state.PreimageOracle(state.PreimageKey)
+// ReadPreImagePart returns pre-image data, left-aligned in a 32-byte value,
+// with the length of the data within that 32-bytes.
+func (state *VMState) ReadPreImagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error) {
+	preimage, err := state.PreimageOracle(key)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get preimage %x: %w", state.PreimageKey, err)
+		return [32]byte{}, 0, err
 	}
-	preimageSize := uint64(len(preimage))
-	remaining := preimageSize - state.PreimageValueOffset
-	n := count
-	if n > 32 {
-		n = 32
-	}
-	if n > remaining {
-		n = remaining
-	}
-	var x [32]byte
-	copy(x[:], preimage[state.PreimageValueOffset:state.PreimageValueOffset+n])
-	n = state.writeU256AlignedMemory(addr, n, x)
-	state.PreimageValueOffset += n
-	return n, nil
+	datlen = uint8(copy(dat[:], preimage[offset:]))
+	return
 }
 
 type memReader struct {

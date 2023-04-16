@@ -4,10 +4,19 @@ pragma solidity ^0.8.13;
 
 contract Step {
 
+    address public preimageOracle;
+
+    constructor(address _preimageOracle) public {
+        preimageOracle = _preimageOracle;
+    }
+
     // Executes a single RISC-V instruction, starting from the given state-root s,
     // using state-oracle witness data soData, and outputs a new state-root.
-    function step(bytes32 s, bytes calldata soData) public pure returns (bytes32 stateRootOut) {
+    function step(bytes32 s, bytes calldata soData) public returns (bytes32 stateRootOut) {
         assembly {
+            function preimageOraclePos() -> out {
+                out := 0
+            }
             // 0x00 and 0x20 are scratch.
             function stateRootMemAddr() -> out {
                 out := 0x40
@@ -139,6 +148,13 @@ contract Step {
                 }
                 if gt(x, 0) {
                     n := add(n, 1)
+                }
+            }
+
+            function endianSwap(x) -> out {
+                for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
+                    out := or(shl(8, out), and(x, 0xff))
+                    x := shr(8, x)
                 }
             }
 
@@ -418,22 +434,22 @@ contract Step {
                 switch dest
                 // TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
                 case 3 { // destCSRRW: atomic Read/Write bits in CSR
-                    out := stateValue
+                    out := endianSwap(stateValue)
                     dest := destWrite()
                 }
                 case 4 { // destCSRRS: atomic Read and Set bits in CSR
-                    out := stateValue
+                    out := endianSwap(stateValue)
                     value := or64(out, value) // set bits, v=0 will be no-op
                     dest := destWrite()
                 }
                 case 5 { // destCSRRC: atomic Read and Clear Bits in CSR
-                    out := stateValue
+                    out := endianSwap(stateValue)
                     value := and64(out, not64(value)) // clear bits, v=0 will be no-op
                     dest := destWrite()
                 }
                 case 2 { // destHeapIncr
                     // we want the heap value before we increase it
-                    out := stateValue
+                    out := endianSwap(stateValue)
                     value := add64(out, value)
                     dest := destWrite()
                 }
@@ -649,53 +665,62 @@ contract Step {
                 out := count
             }
 
+            function readPreimagePart(key, offset) -> dat, datlen {
+                let addr := sload(preimageOraclePos()) // calling Oracle.readPreimage(bytes32,uint256)
+                mstore(0x80, shl(224, 0xe03110e1)) // (32-4)*8=224: right-pad the function selector, and then store it as prefix
+                mstore(0x84, key)
+                mstore(0xa4, offset)
+                let cgas := 100000 // TODO change call gas
+                let res := call(cgas, addr, 0, 0x80, 0x44, 0x00, 0x40) // output into scratch space
+                if res { // 1 on success
+                    dat := mload(0x00)
+                    datlen := mload(0x20)
+                    leave
+                }
+                revertWithCode(0xbadf00d)
+            }
+
             function readPreimageValue(addr, count) -> out {
                 let node, stateStackHash := read(toU256(1), preimageGindex(), 2)
                 let preImageKey, preImageValueOffset := soGet(node)
 
-                let offset := b32asBEWord(preImageValueOffset)
+                let offset := u256ToU64(b32asBEWord(preImageValueOffset))
 
-                // TODO make call to pre-image oracle contract
-                let pdatB32 := 0
-                let pdatlen := 0
-//                pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.Uint64())
-//                if err {
-//                    revertWithCode(0xbadf00d, err)
-//                }
+                // make call to pre-image oracle contract
+                let pdatB32, pdatlen := readPreimagePart(preImageKey, offset)
                 if iszero64(toU64(pdatlen)) { // EOF
                     out := toU64(0)
                     leave
                 }
+                mstore(1009, pdatB32)
+                mstore(1010, pdatlen)
 
                 // align with memory
-                let alignment := and64(addr, toU64(31))
-                let maxData := sub64(toU64(32), alignment)
+                let alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
+                let maxData := sub64(toU64(32), alignment) // higher alignment leaves less room for data this step
                 if gt64(count, maxData) {
                     count := maxData
                 }
-                // limit to end of pre-image
-                if gt64(count, toU64(pdatlen)) {
+                if gt64(count, toU64(pdatlen)) { // cannot read more than pdatlen
                     count := toU64(pdatlen)
                 }
-                let pdat := b32asBEWord(pdatB32)
-                // if we've too much preimage data, shorten it
-                if gt64(toU64(pdatlen), count) {
-                    pdat := shr(pdat, sub(toU256(pdatlen), u64ToU256(count)))
-                }
+
+                let bits := shl64(toU64(3), sub64(toU64(32), count))             // 32-count, in bits
+                let mask := not(sub(shl(u64ToU256(bits), toU256(1)), toU256(1))) // left-aligned mask for count bytes
+                let alignmentBits := u64ToU256(shl64(toU64(3), alignment))
+                mask := shr(alignmentBits, mask)                  // mask of count bytes, shifted by alignment
+                let pdat := shr(alignmentBits, b32asBEWord(pdatB32)) // pdat, shifted by alignment
 
                 // update pre-image reader with updated offset
-                let newOffset := add(offset, u64ToU256(count))
-                let newPreImageRoot := soRemember(preImageKey, beWordAsB32(newOffset))
+                let newOffset := add64(offset, count)
+                let newPreImageRoot := soRemember(preImageKey, beWordAsB32(u64ToU256(newOffset)))
                 write(preimageGindex(), toU256(1), newPreImageRoot, stateStackHash)
 
                 // put data into memory
                 let memGindex := makeMemGindex(addr)
                 node, stateStackHash := read(toU256(1), memGindex, 61)
-                // mask the part of the data out that we are overwriting
-                let bits := shl(toU256(3), u64ToU256(count))
-                let mask := not(sub(shl(bits, toU256(1)), toU256(1)))
-                let dat := and(b32asBEWord(node), mask)
-                dat := or(dat, pdat)
+                let dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
+                dat := or(dat, and(pdat, mask))           // fill with bytes from pdat
 
                 write(memGindex, toU256(1), beWordAsB32(dat), stateStackHash)
                 out := count

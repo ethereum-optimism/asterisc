@@ -8,7 +8,7 @@ contract CounterTest is Test {
     Step public stepper;
 
     function setUp() public {
-        stepper = new Step();
+        stepper = new Step(address(42));
     }
 
     function testStep() public {

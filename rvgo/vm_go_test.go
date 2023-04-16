@@ -5,12 +5,16 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"testing"
 	"unicode/utf8"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/protolambda/asterisc/rvgo/fast"
 	"github.com/protolambda/asterisc/rvgo/oracle"
@@ -59,7 +63,11 @@ func TestSimple(t *testing.T) {
 		}
 	}
 
+	var preimageKey [32]byte
+	var preimagePartOffset uint64
 	slowPreimageOracle := oracle.PreImageReaderFn(func(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error) {
+		preimageKey = key
+		preimagePartOffset = offset
 		if v, ok := preImages[key]; ok {
 			if offset == uint64(len(v)) {
 				return [32]byte{}, 0, nil // datlen==0 signals EOF
@@ -76,13 +84,45 @@ func TestSimple(t *testing.T) {
 		}
 	})
 
+	sender := common.HexToAddress("0xaaaa")
+	stepCode := loadStepContractCode(t)
+	oracleCode := loadPreimageOracleContractCode(t)
+	vmenv := newEVMEnv(t, stepCode, oracleCode)
+
+	u64ToB32 := func(i uint64) []byte {
+		var out [32]byte
+		binary.BigEndian.PutUint64(out[24:], i)
+		return out[:]
+	}
+
+	preparePreimage := func() {
+		dat, ok := preImages[preimageKey]
+		if !ok {
+			panic("unknown preimage")
+		}
+		var part [32]byte
+		copy(part[:], dat[preimagePartOffset:])
+		// preimageLengths[key] = len(preimage)
+		vmenv.StateDB.SetState(preimageOracleAddr, crypto.Keccak256Hash(preimageKey[:], u64ToB32(0)), *(*[32]byte)(u64ToB32(uint64(len(dat)))))
+		// preimageParts[key][partOffset] = part
+		vmenv.StateDB.SetState(preimageOracleAddr, crypto.Keccak256Hash(u64ToB32(preimagePartOffset), crypto.Keccak256(preimageKey[:], u64ToB32(1))), part)
+		// preimagePartOk[key][partOffset] = true
+		vmenv.StateDB.SetState(preimageOracleAddr, crypto.Keccak256Hash(u64ToB32(preimagePartOffset), crypto.Keccak256(preimageKey[:], u64ToB32(2))), [32]byte{31: 1})
+	}
+
 	so := oracle.NewStateOracle()
 	pre := vmState.Merkleize(so)
 
+	var lastSym elf.Symbol
 	for i := 0; i < 2000_000; i++ {
 		sym := symbols.FindSymbol(vmState.PC)
-		instr := vmState.Instr()
-		fmt.Printf("i: %4d  pc: 0x%x  instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, instr, sym.Name, sym.Size)
+
+		if sym.Name != lastSym.Name {
+			instr := vmState.Instr()
+			fmt.Printf("i: %4d  pc: 0x%x  instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, instr, sym.Name, sym.Size)
+		}
+		lastSym = sym
+
 		if sym.Name == "runtime.throw" {
 			throwArg := vmState.Registers[10]
 			throwArgLen := vmState.Registers[11]
@@ -98,25 +138,46 @@ func TestSimple(t *testing.T) {
 			}
 			break
 		}
-		pc := vmState.PC
 
-		post, err := slow.Step(pre, so, slowPreimageOracle)
-		if err != nil {
-			t.Fatalf("slow VM err at step %d, PC %d: %v", i, pc, err)
-		}
-		pre = post
+		pc := vmState.PC
 
 		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
 			t.Fatalf("fast VM err at step %d, PC %d: %v", i, pc, err)
 		}
 
-		if i%10000 == 0 || (i >= 230670 && i < 230670+100) { // every 10k steps, check our work
-			fastRoot := vmState.Merkleize(so)
-			if post != fastRoot {
-				so.Diff(post, fastRoot, 1)
-				t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
-			}
+		var fastPost [32]byte
+		if i%10000 == 0 { // every 10k steps, check our work
+			so.BuildAccessList(false)
+			fastPost = vmState.Merkleize(so)
 		}
+
+		so.BuildAccessList(true)
+		slowPost, err := slow.Step(pre, so, slowPreimageOracle)
+		if err != nil {
+			t.Fatalf("slow VM err at step %d, PC %d: %v", i, pc, err)
+		}
+
+		if fastPost != ([32]byte{}) && slowPost != fastPost {
+			so.Diff(slowPost, fastPost, 1)
+			t.Fatalf("slow state %x must match fast state %x", slowPost, fastPost)
+		}
+
+		if preimageKey != (common.Hash{}) { // if this step needed a pre-image, prepare it for EVM
+			preparePreimage()
+			preimageKey = common.Hash{}
+		}
+
+		al := so.AccessList()
+		input := oracle.Input(al, pre)
+		startingGas := uint64(30_000_000)
+		ret, _, err := vmenv.Call(vm.AccountRef(sender), stepAddr, input, startingGas, big.NewInt(0))
+		require.NoError(t, err, "evm must not fail (ret: %x)", ret)
+		evmPost := common.BytesToHash(ret)
+		if slowPost != evmPost {
+			so.Diff(slowPost, evmPost, 1)
+			t.Fatalf("slow state %x must match EVM state %x", slowPost, evmPost)
+		}
+		pre = slowPost
 
 		if vmState.Exited {
 			break
@@ -165,10 +226,99 @@ func TestFastMinimal(t *testing.T) {
 			}
 			break
 		}
+
 		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
 			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
 
 		}
+		if vmState.Exited {
+			break
+		}
+	}
+	require.True(t, vmState.Exited, "ran out of steps")
+	if vmState.Exit != 0 {
+		t.Fatalf("failed with exit code %d", vmState.Exit)
+	}
+}
+
+func TestFastMinimalEVM(t *testing.T) {
+	programELF, err := elf.Open("../tests/go-tests/bin/minimal")
+	require.NoError(t, err)
+	defer programELF.Close()
+
+	vmState, err := fast.LoadELF(programELF)
+	require.NoError(t, err, "must load test suite ELF binary")
+
+	err = fast.PatchVM(programELF, vmState)
+	require.NoError(t, err, "must patch VM")
+
+	symbols, err := fast.Symbols(programELF)
+	require.NoError(t, err)
+
+	vmState.PreimageOracle = func(key [32]byte) ([]byte, error) {
+		return nil, fmt.Errorf("unknown key %x", key)
+	}
+
+	sender := common.HexToAddress("0xaaaa")
+	stepCode := loadStepContractCode(t)
+	vmenv := newEVMEnv(t, stepCode, []byte{1}) // no pre-image oracle
+
+	so := oracle.NewStateOracle()
+	pre := vmState.Merkleize(so)
+
+	for i := 0; i < 2000_000; i++ {
+		sym := symbols.FindSymbol(vmState.PC)
+		instr := vmState.Instr()
+		fmt.Printf("i: %4d  pc: 0x%x  offset: %03x instr: %08x  symbol name: %s size: %d\n", i, vmState.PC, vmState.PC-sym.Value, instr, sym.Name, sym.Size)
+		if sym.Name == "runtime.throw" {
+			throwArg := vmState.Registers[10]
+			throwArgLen := vmState.Registers[11]
+			if throwArgLen > 1000 {
+				throwArgLen = 1000
+			}
+			x := vmState.GetMemRange(throwArg, throwArgLen)
+			dat, _ := io.ReadAll(x)
+			if utf8.Valid(dat) {
+				fmt.Printf("THROW! %q\n", string(dat))
+			} else {
+				fmt.Printf("THROW! %016x: %x\n", throwArg, dat)
+			}
+			break
+		}
+
+		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
+			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		}
+
+		so.BuildAccessList(true)
+		slowPost, err := slow.Step(pre, so, nil)
+		if err != nil {
+			t.Fatalf("slow VM err at step %d: %v", i, err)
+		}
+
+		al := so.AccessList()
+
+		if i%10000 == 0 { // every 10k steps, check our work
+			so.BuildAccessList(false)
+			fastPost := vmState.Merkleize(so)
+			if slowPost != fastPost {
+				so.Diff(slowPost, fastPost, 1)
+				t.Fatalf("slow state %x must match fast state %x", slowPost, fastPost)
+			}
+		}
+
+		input := oracle.Input(al, pre)
+		startingGas := uint64(30_000_000)
+		ret, _, err := vmenv.Call(vm.AccountRef(sender), stepAddr, input, startingGas, big.NewInt(0))
+		require.NoError(t, err, "evm must not fail (ret: %x)", ret)
+		evmPost := common.BytesToHash(ret)
+		if slowPost != evmPost {
+			so.Diff(slowPost, evmPost, 1)
+			t.Fatalf("slow state %x must match EVM state %x", slowPost, evmPost)
+		}
+
+		pre = slowPost
+
 		if vmState.Exited {
 			break
 		}

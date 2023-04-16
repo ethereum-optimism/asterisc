@@ -179,27 +179,44 @@ func loadStepContractCode(t *testing.T) []byte {
 	return outDat.DeployedBytecode.Object
 }
 
+func loadPreimageOracleContractCode(t *testing.T) []byte {
+	dat, err := os.ReadFile("../rvsol/out/Oracle.sol/Oracle.json")
+	require.NoError(t, err)
+	var outDat struct {
+		DeployedBytecode struct {
+			Object hexutil.Bytes `json:"object"`
+		} `json:"deployedBytecode"`
+	}
+	err = json.Unmarshal(dat, &outDat)
+	require.NoError(t, err)
+	return outDat.DeployedBytecode.Object
+}
+
 var stepAddr = common.HexToAddress("0x1337")
 
-func newEVMEnv(t *testing.T, stepContractCode []byte) *vm.EVM {
+var preimageOracleAddr = common.HexToAddress("0xf00d")
+
+func newEVMEnv(t *testing.T, stepContractCode []byte, preimageOracleCode []byte) *vm.EVM {
 	chainCfg := params.MainnetChainConfig
 	bc := &dummyChain{}
 	header := bc.GetHeader(common.Hash{}, 100)
-	blockContext := core.NewEVMBlockContext(header, bc, nil)
-	vmCfg := vm.Config{}
 	db := rawdb.NewMemoryDatabase()
 	statedb := state.NewDatabase(db)
 	state, err := state.New(types.EmptyRootHash, statedb, nil)
 	require.NoError(t, err)
+	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
+	vmCfg := vm.Config{}
 
-	state.SetCode(stepAddr, stepContractCode)
-
-	return vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
+	env := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
+	env.StateDB.SetCode(stepAddr, stepContractCode)
+	env.StateDB.SetCode(preimageOracleAddr, preimageOracleCode)
+	env.StateDB.SetState(stepAddr, common.Hash{}, preimageOracleAddr.Hash())
+	return env
 }
 
 func runEVMTestSuite(t *testing.T, path string) {
 	code := loadStepContractCode(t)
-	vmenv := newEVMEnv(t, code)
+	vmenv := newEVMEnv(t, code, []byte{0}) // these tests run without pre-image oracle
 	vmenv.Config.Debug = false
 	vmenv.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
 
@@ -242,7 +259,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 		input := oracle.Input(al, pre)
 		startingGas := uint64(30_000_000)
 		ret, leftOverGas, err := vmenv.Call(vm.AccountRef(sender), stepAddr, input, startingGas, big.NewInt(0))
-		require.NoError(t, err, "evm must no fail (ret: %x)", ret)
+		require.NoError(t, err, "evm must not fail (ret: %x)", ret)
 		gasUsed := startingGas - leftOverGas
 		if gasUsed > maxGasUsed {
 			maxGasUsed = gasUsed

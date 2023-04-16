@@ -35,7 +35,7 @@ TODO
   - [ ] Forge solidity test VM step on snapshotted proof data
   - [x] Complete port of Go slow-mode emu to solidity/Yul
   - [x] Pass RISC-V test vectors
-  - [ ] read/write syscall based pre-image oracle (WIP)
+  - [x] read/write syscall based pre-image oracle
 - [ ] Misc:
   - [x] analyze Go runtime/compiler
   - [ ] CLI command to build VM snapshot from ELF

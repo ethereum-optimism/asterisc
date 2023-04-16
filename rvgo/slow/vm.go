@@ -362,45 +362,40 @@ func Step(s [32]byte, so oracle.VMStateOracle, po oracle.PreImageOracle) (stateR
 		node, stateStackHash := read(toU256(1), preimageGindex, 2)
 		preImageKey, preImageValueOffset := so.Get(node)
 
-		offset := b32asBEWord(preImageValueOffset)
+		offset := u256ToU64(b32asBEWord(preImageValueOffset))
 
-		pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.Uint64())
+		pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.val())
 		if err != nil {
 			revertWithCode(0xbadf00d, err)
 		}
 		if iszero64(toU64(pdatlen)) { // EOF
 			return toU64(0)
 		}
-
-		// align with memory
-		alignment := and64(addr, toU64(31))
-		maxData := sub64(toU64(32), alignment)
+		alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
+		maxData := sub64(toU64(32), alignment) // higher alignment leaves less room for data this step
 		if gt64(count, maxData) != (U64{}) {
 			count = maxData
 		}
-		// limit to end of pre-image
-		if gt64(count, toU64(pdatlen)) != (U64{}) {
+		if gt64(count, toU64(pdatlen)) != (U64{}) { // cannot read more than pdatlen
 			count = toU64(pdatlen)
 		}
-		pdat := b32asBEWord(pdatB32)
-		// if we've too much preimage data, shorten it
-		if gt64(toU64(pdatlen), count) != (U64{}) {
-			pdat = shr(pdat, sub(toU256(pdatlen), u64ToU256(count)))
-		}
+
+		bits := shl64(toU64(3), sub64(toU64(32), count))             // 32-count, in bits
+		mask := not(sub(shl(u64ToU256(bits), toU256(1)), toU256(1))) // left-aligned mask for count bytes
+		alignmentBits := u64ToU256(shl64(toU64(3), alignment))
+		mask = shr(alignmentBits, mask)                  // mask of count bytes, shifted by alignment
+		pdat := shr(alignmentBits, b32asBEWord(pdatB32)) // pdat, shifted by alignment
 
 		// update pre-image reader with updated offset
-		newOffset := add(offset, u64ToU256(count))
-		newPreImageRoot := so.Remember(preImageKey, beWordAsB32(newOffset))
+		newOffset := add64(offset, count)
+		newPreImageRoot := so.Remember(preImageKey, beWordAsB32(u64ToU256(newOffset)))
 		write(preimageGindex, toU256(1), newPreImageRoot, stateStackHash)
 
 		// put data into memory
 		memGindex := makeMemGindex(addr)
 		node, stateStackHash = read(toU256(1), memGindex, 61)
-		// mask the part of the data out that we are overwriting
-		bits := shl(toU256(3), u64ToU256(count))
-		mask := not(sub(shl(bits, toU256(1)), toU256(1)))
-		dat := and(b32asBEWord(node), mask)
-		dat = or(dat, pdat)
+		dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
+		dat = or(dat, and(pdat, mask))           // fill with bytes from pdat
 
 		write(memGindex, toU256(1), beWordAsB32(dat), stateStackHash)
 		return count

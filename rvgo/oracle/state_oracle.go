@@ -5,9 +5,10 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/holiman/uint256"
 )
 
 type VMStateOracle interface {
@@ -206,9 +207,13 @@ type Access struct {
 func (s *StateOracle) AccessList() (out []Access) {
 	out = make([]Access, len(s.accessList))
 	for i, k := range s.accessList {
+		v, ok := s.data[k]
+		if !ok {
+			panic("lost data of k")
+		}
 		out[i] = Access{
 			Key:   k,
-			Value: s.data[k],
+			Value: v,
 		}
 	}
 	return out
