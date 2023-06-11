@@ -18,10 +18,27 @@ const (
 	maxPageCount = 1 << pageKeySize
 )
 
+// 8 pc
+// 32 mem
+// 32*8
+// 32 csr
+// 1 exit code
+// 1 exited
+// 8 heap
+// 8 load reservation
+// 32 preimage key
+// 8 preimage offset
+// 8 + 32 + 32*8 + 32 + 1 + 1 + 8 + 8 + 32 + 8 = 386
+// /32 = 12.0625
+
+// mem-proof = 64 - 5 = 59 siblings
+// csr proof = log2(4096) - 1 = 11 siblings
+
+// pc + 1 mem op = 118
+
 type VMState struct {
-	PC uint64
-	// sparse memory, pages of 1KB, keyed by page number: start memory address truncated by 10 bits.
-	Memory    map[uint64]*[pageSize]byte
+	PC        uint64
+	Memory    *Memory
 	Registers [32]uint64
 
 	// 0xF14: mhartid  - riscv tests use this. Always hart 0, no parallelism supported
@@ -35,13 +52,11 @@ type VMState struct {
 
 	PreimageKey         [32]byte
 	PreimageValueOffset uint64
-
-	PreimageOracle func(key [32]byte) ([]byte, error)
 }
 
 func NewVMState() *VMState {
 	return &VMState{
-		Memory: make(map[uint64]*[pageSize]byte),
+		Memory: NewMemory(),
 		Heap:   1 << 28, // 0.25 GiB of program code space
 	}
 }
@@ -276,41 +291,8 @@ func (state *VMState) ReadPreImagePart(key [32]byte, offset uint64) (dat [32]byt
 	return
 }
 
-type memReader struct {
-	state *VMState
-	addr  uint64
-	count uint64
-}
-
-func (r *memReader) Read(dest []byte) (n int, err error) {
-	if r.count == 0 {
-		return 0, io.EOF
-	}
-
-	// Keep iterating over memory until we have all our data.
-	// It may wrap around the address range, and may not be aligned
-	endAddr := r.addr + r.count
-
-	pageIndex := r.addr >> pageAddrSize
-	start := r.addr & pageAddrMask
-	end := uint64(pageSize)
-
-	if pageIndex == (endAddr >> pageAddrSize) {
-		end = endAddr & pageAddrMask
-	}
-	p, ok := r.state.Memory[pageIndex]
-	if ok {
-		n = copy(dest, p[start:end])
-	} else {
-		n = copy(dest, make([]byte, end-start)) // default to zeroes
-	}
-	r.addr += uint64(n)
-	r.count -= uint64(n)
-	return n, nil
-}
-
 func (state *VMState) GetMemRange(addr uint64, count uint64) io.Reader {
-	return &memReader{state: state, addr: addr, count: count}
+	return state.Memory.ReadMemoryRange(addr, count)
 }
 
 func (state *VMState) SetMemRange(addr uint64, count uint64, r io.Reader) error {

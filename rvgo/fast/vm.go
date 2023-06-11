@@ -23,9 +23,14 @@ var (
 	destMAXU     = toU64(14)
 )
 
+type PreimageOracle interface {
+	Hint(v []byte)
+	GetPreimage(k [32]byte) []byte
+}
+
 // Step runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
-func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
+func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error) {
 	if s.Exited {
 		return nil
 	}
@@ -113,6 +118,9 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 			count = maxData
 		}
 
+		var dat [32]byte
+		s.Memory.GetUnaligned(addr, dat[:maxData])
+
 		node := s.getMemoryB32(addr - alignment)
 		// mask the part of the data we are shifting in
 		bits := shl(toU256(3), u64ToU256(count))
@@ -132,10 +140,20 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 		return count
 	}
 
+	preimageCall := func(key [32]byte, offset U64) (dat [32]byte, datLen U64, err error) {
+		val := po.GetPreimage(key)
+		// TODO caching pre-image
+
+		// TODO length-prefix
+
+		// TODO should pre-image oracle error?
+		return
+	}
+
 	readPreimageValue := func(addr U64, count U64) U64 {
 		preImageKey, offset := s.PreimageKey, s.PreimageValueOffset
 
-		pdatB32, pdatlen, err := s.ReadPreImagePart(preImageKey, offset) // pdat is left-aligned
+		pdatB32, pdatlen, err := preimageCall(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
 			revertWithCode(0xbadf00d, err)
 		}
@@ -225,7 +243,11 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 			case 0: // stdin
 				n = toU64(0) // never read anything from stdin
 				errCode = toU64(0)
-			case 3: // pre-image oracle
+			case 3: // hint-read
+				// say we read it all, to continue execution after reading the hint-write ack response
+				n = count
+				errCode = toU64(0)
+			case 5:
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
@@ -254,10 +276,12 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case 3: // pre-image oracle
+			case 4: // hint-write
+				// TODO
+			case 6: // pre-image key write
 				n = writePreimageKey(addr, count)
 				errCode = toU64(0) // no error
-			default: // any other file, including (4) pre-image hinter
+			default: // any other file, including (3) hint read (5) preimage read
 				n = u64Mask()         //  -1 (writing error)
 				errCode = toU64(0x4d) // EBADF
 			}
@@ -276,8 +300,14 @@ func Step(s *VMState, stdOut, stdErr io.Writer) (outErr error) {
 					out = toU64(1) // O_WRONLY
 				case 2: // stderr
 					out = toU64(1) // O_WRONLY
-				case 3: // pre-image oracle
-					out = toU64(2) // O_RDWR
+				case 3: // hint-read
+					out = toU64(0) // O_RDONLY
+				case 4: // hint-write
+					out = toU64(1) // O_WRONLY
+				case 5: // pre-image read
+					out = toU64(0) // O_RDONLY
+				case 6: // pre-image write
+					out = toU64(1) // O_WRONLY
 				default:
 					out = u64Mask()
 					errCode = toU64(0x4d) // EBADF
