@@ -2,10 +2,6 @@ package fast
 
 import (
 	"encoding/binary"
-	"fmt"
-	"io"
-
-	"github.com/protolambda/asterisc/rvgo/oracle"
 )
 
 // page size must be at least 32 bytes (one merkle node)
@@ -18,40 +14,27 @@ const (
 	maxPageCount = 1 << pageKeySize
 )
 
-// 8 pc
-// 32 mem
-// 32*8
-// 32 csr
-// 1 exit code
-// 1 exited
-// 8 heap
-// 8 load reservation
-// 32 preimage key
-// 8 preimage offset
-// 8 + 32 + 32*8 + 32 + 1 + 1 + 8 + 8 + 32 + 8 = 386
-// /32 = 12.0625
-
-// mem-proof = 64 - 5 = 59 siblings
-// csr proof = log2(4096) - 1 = 11 siblings
-
-// pc + 1 mem op = 118
-
 type VMState struct {
-	PC        uint64
-	Memory    *Memory
-	Registers [32]uint64
+	Memory *Memory `json:"memory"`
 
-	// 0xF14: mhartid  - riscv tests use this. Always hart 0, no parallelism supported
-	CSR [4096]uint64 // 12 bit addressing space
+	PreimageKey    [32]byte `json:"preimageKey"`
+	PreimageOffset uint64   `json:"preimageOffset"`
 
-	Exit   uint64
-	Exited bool
-	Heap   uint64 // for mmap to keep allocating new anon memory
+	PC uint64 `json:"pc"`
 
-	LoadReservation uint64
+	//0xF14: mhartid  - riscv tests use this. Always hart 0, no parallelism supported
+	//CSR [4096]uint64 // 12 bit addressing space
 
-	PreimageKey         [32]byte
-	PreimageValueOffset uint64
+	ExitCode uint8 `json:"exit"`
+	Exited   bool  `json:"exited"`
+
+	Step uint64 `json:"step"`
+
+	Heap uint64 `json:"heap"` // for mmap to keep allocating new anon memory
+
+	LoadReservation uint64 `json:"loadReservation"`
+
+	Registers [32]uint64 `json:"registers"`
 }
 
 func NewVMState() *VMState {
@@ -61,262 +44,30 @@ func NewVMState() *VMState {
 	}
 }
 
-func (state *VMState) Merkleize(so oracle.VMStateOracle) [32]byte {
-	var zeroHashes [256][32]byte
-	for i := 1; i < 256; i++ {
-		zeroHashes[i] = so.Remember(zeroHashes[i-1], zeroHashes[i-1])
+func (state *VMState) EncodeWitness() []byte {
+	out := make([]byte, 0)
+	memRoot := state.Memory.MerkleRoot()
+	out = append(out, memRoot[:]...)
+	out = append(out, state.PreimageKey[:]...)
+	out = binary.BigEndian.AppendUint64(out, state.PreimageOffset)
+	out = binary.BigEndian.AppendUint64(out, state.PC)
+	out = append(out, state.ExitCode)
+	if state.Exited {
+		out = append(out, 1)
+	} else {
+		out = append(out, 0)
 	}
-	pageBranches := make(map[uint64]struct{})
-	for pageKey := range state.Memory {
-		pageGindex := (1 << pageKeySize) | pageKey
-		for i := 0; i < pageKeySize; i++ {
-			gindex := pageGindex >> i
-			pageBranches[gindex] = struct{}{}
-		}
+	out = binary.BigEndian.AppendUint64(out, state.Step)
+	out = binary.BigEndian.AppendUint64(out, state.Heap)
+	out = binary.BigEndian.AppendUint64(out, state.LoadReservation)
+	for _, r := range state.Registers {
+		out = binary.BigEndian.AppendUint64(out, r)
 	}
-	merkleize := func(stackDepth uint64, getItem func(index uint64) [32]byte) [32]byte {
-		stack := make([][32]byte, stackDepth+1)
-		for i := uint64(0); i < (1 << stackDepth); i++ {
-			v := getItem(i)
-			for j := uint64(0); j <= stackDepth; j++ {
-				if i&(1<<j) == 0 {
-					stack[j] = v
-					break
-				} else {
-					v = so.Remember(stack[j], v)
-				}
-			}
-		}
-		return stack[stackDepth]
-	}
-	uint64AsBytes32 := func(v uint64) (out [32]byte) {
-		binary.LittleEndian.PutUint64(out[:8], v)
-		return
-	}
-	uint64AsBytes32BE := func(v uint64) (out [32]byte) {
-		binary.BigEndian.PutUint64(out[24:], v)
-		return
-	}
-	merkleizePage := func(page *[pageSize]byte) [32]byte {
-		return merkleize(pageAddrSize-5, func(index uint64) [32]byte { // 32 byte leaf values (5 bits)
-			return *(*[32]byte)(page[index*32 : index*32+32])
-		})
-	}
-	var merkleizeMemory func(gindex uint64, depth uint64) [32]byte
-	merkleizeMemory = func(gindex uint64, depth uint64) [32]byte {
-		if depth == pageKeySize {
-			pageKey := gindex & ((1 << pageKeySize) - 1)
-			return merkleizePage(state.Memory[pageKey])
-		}
-		left := gindex << 1
-		right := left | 1
-		var leftRoot, rightRoot [32]byte
-		if _, ok := pageBranches[left]; ok {
-			leftRoot = merkleizeMemory(left, depth+1)
-		} else {
-			leftRoot = zeroHashes[pageKeySize-(depth+1)+(pageAddrSize-5)]
-		}
-		if _, ok := pageBranches[right]; ok {
-			rightRoot = merkleizeMemory(right, depth+1)
-		} else {
-			rightRoot = zeroHashes[pageKeySize-(depth+1)+(pageAddrSize-5)]
-		}
-		return so.Remember(leftRoot, rightRoot)
-	}
-
-	registersRoot := merkleize(5, func(index uint64) [32]byte {
-		return uint64AsBytes32(state.Registers[index])
-	})
-	memoryRoot := merkleizeMemory(1, 0)
-	csrRoot := merkleize(12, func(index uint64) [32]byte {
-		return uint64AsBytes32(state.CSR[index])
-	})
-	preimageRoot := so.Remember(state.PreimageKey, uint64AsBytes32BE(state.PreimageValueOffset))
-	return so.Remember(
-		so.Remember(
-			so.Remember(uint64AsBytes32(state.PC), memoryRoot), // 8, 9
-			so.Remember(registersRoot, csrRoot),                // 10, 11
-		),
-		so.Remember(
-			so.Remember(uint64AsBytes32(state.Exit), uint64AsBytes32(state.Heap)), // 12, 13
-			so.Remember(uint64AsBytes32(state.LoadReservation), preimageRoot),     // 14, 15
-		),
-	)
-}
-
-func (state *VMState) loadOrCreatePage(pageIndex uint64) *[pageSize]byte {
-	if pageIndex >= maxPageCount {
-		panic("invalid page key")
-	}
-	p, ok := state.Memory[pageIndex]
-	if ok {
-		return p
-	}
-	p = &[pageSize]byte{}
-	state.Memory[pageIndex] = p
-	return p
-}
-
-func (state *VMState) loadMem(addr uint64, size uint64, signed bool) uint64 {
-	if size > 8 {
-		panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
-	}
-	var out [8]byte
-	pageIndex := addr >> pageAddrSize
-	p, ok := state.Memory[pageIndex]
-	if !ok { // if page does not exist, then it's a 0 value
-		return 0
-	}
-	copy(out[:], p[addr&pageAddrMask:])
-	end := addr + size - 1 // Can also wrap around total memory.
-	endPage := end >> pageAddrSize
-	if pageIndex != endPage { // if it spans across two pages.
-		if p, ok := state.Memory[endPage]; ok { // only if page exists, 0 otherwise
-			remaining := (end & pageAddrMask) + 1
-			copy(out[size-remaining:], p[:remaining])
-		}
-	}
-	v := binary.LittleEndian.Uint64(out[:]) & ((1 << (size * 8)) - 1)
-	if signed && v&((1<<(size<<3))>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
-		v |= 0xFFFF_FFFF_FFFF_FFFF << (size << 3)
-	} // otherwise just leave it zeroed
-	//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
-	return v
-}
-
-func (state *VMState) storeMem(addr uint64, size uint64, value uint64) {
-	if size > 8 {
-		panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
-	}
-	var bytez [8]byte
-	binary.LittleEndian.PutUint64(bytez[:], value)
-	pageIndex := addr >> pageAddrSize
-	p, ok := state.Memory[pageIndex]
-	if !ok { // create page if it does not exist
-		p = &[pageSize]byte{}
-		state.Memory[pageIndex] = p
-	}
-	copy(p[addr&pageAddrMask:], bytez[:size])
-	end := addr + size - 1
-	endPage := end >> pageAddrSize
-	if pageIndex != endPage { // if it spans across two pages. Can also wrap around total memory.
-		p, ok := state.Memory[endPage]
-		if !ok { // create page if it does not exist
-			p = &[pageSize]byte{}
-			state.Memory[endPage] = p
-		}
-		remaining := (end & pageAddrMask) + 1
-		copy(p[:remaining], bytez[size-remaining:])
-	}
-	//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
-}
-
-func (state *VMState) getPC() uint64 {
-	return state.PC
-}
-
-func (state *VMState) setPC(pc uint64) {
-	state.PC = pc
-}
-
-func (state *VMState) loadRegister(reg uint64) uint64 {
-	//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
-	return state.Registers[reg]
-}
-
-func (state *VMState) writeCSR(num uint64, v uint64) {
-	state.CSR[num] = v
-}
-
-func (state *VMState) readCSR(num uint64) uint64 {
-	return state.CSR[num]
-}
-
-func (state *VMState) setLoadReservation(addr uint64) {
-	state.LoadReservation = addr
-}
-
-func (state *VMState) getLoadReservation() uint64 {
-	return state.LoadReservation
-}
-
-func (state *VMState) writeRegister(reg uint64, v uint64) {
-	//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
-	if reg == 0 { // reg 0 must stay 0
-		// v is a HINT, but no hints are specified by standard spec, or used by us.
-		return
-	}
-	if reg >= 32 {
-		panic(fmt.Errorf("unknown register %d, cannot write %x", reg, v))
-	}
-	state.Registers[reg] = v
-}
-
-func (state *VMState) getMemoryB32(addr uint64) (out [32]byte) {
-	if addr&31 != 0 {
-		panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
-	}
-	pageIndex := addr >> pageAddrSize
-	p, ok := state.Memory[pageIndex]
-	if !ok {
-		return [32]byte{}
-	}
-	pageAddr := addr & pageAddrMask
-	copy(out[:], p[pageAddr:pageAddr+32])
-	return
-}
-
-func (state *VMState) setMemoryB32(addr uint64, v [32]byte) {
-	if addr&31 != 0 {
-		panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
-	}
-	pageIndex := addr >> pageAddrSize
-	p, ok := state.Memory[pageIndex]
-	if !ok {
-		p = &[pageSize]byte{}
-		state.Memory[pageIndex] = p
-	}
-	pageAddr := addr & pageAddrMask
-	copy(p[pageAddr:pageAddr+32], v[:])
-}
-
-// ReadPreImagePart returns pre-image data, left-aligned in a 32-byte value,
-// with the length of the data within that 32-bytes.
-func (state *VMState) ReadPreImagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error) {
-	preimage, err := state.PreimageOracle(key)
-	if err != nil {
-		return [32]byte{}, 0, err
-	}
-	datlen = uint8(copy(dat[:], preimage[offset:]))
-	return
-}
-
-func (state *VMState) GetMemRange(addr uint64, count uint64) io.Reader {
-	return state.Memory.ReadMemoryRange(addr, count)
-}
-
-func (state *VMState) SetMemRange(addr uint64, count uint64, r io.Reader) error {
-	end := addr + count
-	for addr := addr; addr < end; {
-		// map address to page index, and start within page
-		page := state.loadOrCreatePage(addr >> pageAddrSize)
-		pageStart := addr & pageAddrMask
-		// copy till end of page
-		pageEnd := uint64(pageSize)
-		// unless we reached the end
-		if (addr&^pageAddrMask)+pageSize > end {
-			pageEnd = end & pageAddrMask
-		}
-		if _, err := io.ReadFull(r, page[pageStart:pageEnd]); err != nil {
-			return fmt.Errorf("failed to read data into memory %d: %w", pageStart, err)
-		}
-		addr += pageEnd - pageStart
-	}
-	return nil
+	return out
 }
 
 func (state *VMState) Instr() uint32 {
 	var out [4]byte
-	_, _ = io.ReadFull(state.GetMemRange(state.PC, 4), out[:])
+	state.Memory.GetUnaligned(state.PC, out[:])
 	return binary.LittleEndian.Uint32(out[:])
 }

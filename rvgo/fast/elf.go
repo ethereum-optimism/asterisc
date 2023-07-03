@@ -11,10 +11,9 @@ import (
 func LoadELF(f *elf.File) (*VMState, error) {
 	out := &VMState{
 		PC:        0,
-		Memory:    make(map[uint64]*[pageSize]byte),
+		Memory:    NewMemory(),
 		Registers: [32]uint64{},
-		CSR:       [4096]uint64{},
-		Exit:      0,
+		ExitCode:  0,
 		Exited:    false,
 		// Note: Go heap arenas in 64 bit riscv start at 0xc0_00_00_00_00
 		// (c0 << 32) and range to 7f_00_00_00_00_00  (7f << 40) and specifies these with mmap hints.
@@ -49,8 +48,7 @@ func LoadELF(f *elf.File) (*VMState, error) {
 			}
 		}
 
-		// copy the segment into its assigned virtual memory, page by page
-		if err := out.SetMemRange(prog.Vaddr, prog.Memsz, r); err != nil {
+		if err := out.Memory.SetMemoryRange(prog.Vaddr, r); err != nil {
 			return nil, fmt.Errorf("failed to read program segment %d: %w", i, err)
 		}
 	}
@@ -74,17 +72,15 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 			"runtime.check":
 			// RISCV patch: ret (pseudo instruction)
 			// 00008067 = jalr zero, ra, 0
-			// 00000000 = invalid, make sure it never enters the actual function
 			// Jump And Link Register, but rd=zero so no linking, and thus only jumping to the return address.
 			// (return address is in register $ra based on RISCV call convention)
-			if err := vmState.SetMemRange(s.Value, 8, bytes.NewReader([]byte{
+			if err := vmState.Memory.SetMemoryRange(s.Value, bytes.NewReader([]byte{
 				0x67, 0x80, 0x00, 0x00,
-				0, 0, 0, 0,
 			})); err != nil {
 				return fmt.Errorf("failed to patch Go runtime.gcenable: %w", err)
 			}
 		case "runtime.MemProfileRate":
-			if vmState.SetMemRange(s.Value, 8, bytes.NewReader(make([]byte, 8))); err != nil { // disable mem profiling, to avoid a lot of unnecessary floating point ops
+			if err := vmState.Memory.SetMemoryRange(s.Value, bytes.NewReader(make([]byte, 8))); err != nil { // disable mem profiling, to avoid a lot of unnecessary floating point ops
 				return err
 			}
 		}

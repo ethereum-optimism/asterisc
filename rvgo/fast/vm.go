@@ -1,6 +1,7 @@
 package fast
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 )
@@ -23,14 +24,11 @@ var (
 	destMAXU     = toU64(14)
 )
 
-type PreimageOracle interface {
-	Hint(v []byte)
-	GetPreimage(k [32]byte) []byte
-}
-
-// Step runs a single instruction
+// riscvStep runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
-func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error) {
+func (inst *InstrumentedState) riscvStep() (outErr error) {
+	s := inst.state
+
 	if s.Exited {
 		return nil
 	}
@@ -49,14 +47,83 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 		panic(err)
 	}
 
-	loadMem := s.loadMem
-	storeMem := s.storeMem
-	loadRegister := s.loadRegister
-	writeRegister := s.writeRegister
-	setLoadReservation := s.setLoadReservation
-	getLoadReservation := s.getLoadReservation
-	getPC := s.getPC
-	setPC := s.setPC
+	loadMem := func(addr uint64, size uint64, signed bool) uint64 {
+		if size > 8 {
+			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
+		}
+		var out [8]byte
+		s.Memory.GetUnaligned(addr, out[8-size:])
+		bitSize := size << 3
+		v := binary.LittleEndian.Uint64(out[:]) & ((1 << bitSize) - 1)
+		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
+			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
+		} // otherwise just leave it zeroed
+		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
+		return v
+	}
+	storeMem := func(addr uint64, size uint64, value uint64) {
+		if size > 8 {
+			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
+		}
+		var bytez [8]byte
+		binary.LittleEndian.PutUint64(bytez[:], value)
+		s.Memory.SetUnaligned(addr, bytez[:size])
+		//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
+	}
+
+	getMemoryB32 := func(addr uint64) (out [32]byte) {
+		if addr&31 != 0 {
+			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+		}
+		s.Memory.GetUnaligned(addr, out[:])
+		return
+	}
+
+	setMemoryB32 := func(addr uint64, v [32]byte) {
+		if addr&31 != 0 {
+			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+		}
+		s.Memory.SetUnaligned(addr, v[:])
+	}
+
+	loadRegister := func(reg uint64) uint64 {
+		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
+		return s.Registers[reg]
+	}
+	writeRegister := func(reg uint64, v uint64) {
+		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
+		if reg == 0 { // reg 0 must stay 0
+			// v is a HINT, but no hints are specified by standard spec, or used by us.
+			return
+		}
+		if reg >= 32 {
+			panic(fmt.Errorf("unknown register %d, cannot write %x", reg, v))
+		}
+		s.Registers[reg] = v
+	}
+
+	getLoadReservation := func() uint64 {
+		return s.LoadReservation
+	}
+	setLoadReservation := func(addr uint64) {
+		s.LoadReservation = addr
+	}
+
+	writeCSR := func(num uint64, v uint64) {
+		// TODO: do we need CSR?
+	}
+
+	readCSR := func(num uint64) uint64 {
+		// TODO: do we need CSR?
+		return 0
+	}
+
+	getPC := func() uint64 {
+		return s.PC
+	}
+	setPC := func(pc uint64) {
+		s.PC = pc
+	}
 
 	opMem := func(op U64, addr U64, size U64, value U64) U64 {
 		v := loadMem(addr, size, true)
@@ -96,7 +163,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 	}
 
 	updateCSR := func(num U64, v U64, mode U64) (out U64) {
-		out = s.readCSR(num)
+		out = readCSR(num)
 		switch mode {
 		case 1: // ?01 = CSRRW(I)
 		case 2: // ?10 = CSRRS(I)
@@ -106,7 +173,7 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 		default:
 			revertWithCode(0xbadc0de0, fmt.Errorf("unkwown CSR mode: %d", mode))
 		}
-		s.writeCSR(num, v)
+		writeCSR(num, v)
 		return
 	}
 
@@ -119,45 +186,30 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 		}
 
 		var dat [32]byte
-		s.Memory.GetUnaligned(addr, dat[:maxData])
-
-		node := s.getMemoryB32(addr - alignment)
-		// mask the part of the data we are shifting in
+		s.Memory.GetUnaligned(addr, dat[32-maxData:])
 		bits := shl(toU256(3), u64ToU256(count))
-		mask := sub(shl(bits, toU256(1)), toU256(1))
-		dat := and(b32asBEWord(node), mask)
 
 		preImageKey := s.PreimageKey
 
 		// Append to key content by bit-shifting
 		key := b32asBEWord(preImageKey)
 		key = shl(bits, key)
-		key = or(key, dat)
+		key = or(key, b32asBEWord(dat))
 
 		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
 		s.PreimageKey = beWordAsB32(key)
-		s.PreimageValueOffset = 0
+		s.PreimageOffset = 0
 		return count
 	}
 
-	preimageCall := func(key [32]byte, offset U64) (dat [32]byte, datLen U64, err error) {
-		val := po.GetPreimage(key)
-		// TODO caching pre-image
-
-		// TODO length-prefix
-
-		// TODO should pre-image oracle error?
-		return
-	}
-
 	readPreimageValue := func(addr U64, count U64) U64 {
-		preImageKey, offset := s.PreimageKey, s.PreimageValueOffset
+		preImageKey, offset := s.PreimageKey, s.PreimageOffset
 
-		pdatB32, pdatlen, err := preimageCall(preImageKey, offset) // pdat is left-aligned
+		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
 			revertWithCode(0xbadf00d, err)
 		}
-		if iszero64(toU64(pdatlen)) { // EOF
+		if iszero64(pdatlen) { // EOF
 			return toU64(0)
 		}
 		alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
@@ -165,8 +217,8 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 		if gt64(count, maxData) != 0 {
 			count = maxData
 		}
-		if gt64(count, toU64(pdatlen)) != 0 { // cannot read more than pdatlen
-			count = toU64(pdatlen)
+		if gt64(count, pdatlen) != 0 { // cannot read more than pdatlen
+			count = pdatlen
 		}
 
 		bits := shl64(toU64(3), sub64(toU64(32), count))             // 32-count, in bits
@@ -178,12 +230,12 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 		// update pre-image reader with updated offset
 		newOffset := add64(offset, count)
 		//s.PreimageKey = preImageKey   // key stats the same
-		s.PreimageValueOffset = newOffset
+		s.PreimageOffset = newOffset
 
-		node := s.getMemoryB32(addr - alignment)
+		node := getMemoryB32(addr - alignment)
 		dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
 		dat = or(dat, and(pdat, mask))           // fill with bytes from pdat
-		s.setMemoryB32(addr-alignment, beWordAsB32(dat))
+		setMemoryB32(addr-alignment, beWordAsB32(dat))
 		return count
 	}
 
@@ -193,12 +245,12 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 		switch a7 {
 		case 93: // exit the calling thread. No multi-thread support yet, so just exit.
 			a0 := loadRegister(toU64(10))
-			s.Exit = a0
+			s.ExitCode = uint8(a0)
 			s.Exited = true
 			// program stops here, no need to change registers.
 		case 94: // exit-group
 			a0 := loadRegister(toU64(10))
-			s.Exit = a0
+			s.ExitCode = uint8(a0)
 			s.Exited = true
 		case 214: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
@@ -263,14 +315,14 @@ func Step(s *VMState, stdOut, stdErr io.Writer, po PreimageOracle) (outErr error
 			var n, errCode U64
 			switch fd {
 			case 1: // stdout
-				_, err := io.Copy(stdOut, s.GetMemRange(addr, count))
+				_, err := io.Copy(inst.stdOut, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stdout writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
 			case 2: // stderr
-				_, err := io.Copy(stdErr, s.GetMemRange(addr, count))
+				_, err := io.Copy(inst.stdErr, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stderr writing err: %w", err))
 				}

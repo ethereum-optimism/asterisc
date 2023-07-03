@@ -67,8 +67,8 @@ func runFastTestSuite(t *testing.T, path string) {
 		}
 	}
 	require.True(t, vmState.Exited, "ran out of steps")
-	if vmState.Exit != 0 {
-		testCaseNum := vmState.Exit >> 1
+	if vmState.ExitCode != 0 {
+		testCaseNum := vmState.ExitCode >> 1
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }
@@ -127,8 +127,8 @@ func runSlowTestSuite(t *testing.T, path string) {
 	t.Logf("max access-list length: %d", maxAccessListLen)
 
 	require.True(t, vmState.Exited, "ran out of steps")
-	if vmState.Exit != 0 {
-		testCaseNum := vmState.Exit >> 1
+	if vmState.ExitCode != 0 {
+		testCaseNum := vmState.ExitCode >> 1
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }
@@ -180,7 +180,7 @@ func loadStepContractCode(t *testing.T) []byte {
 }
 
 func loadPreimageOracleContractCode(t *testing.T) []byte {
-	dat, err := os.ReadFile("../rvsol/out/Oracle.sol/Oracle.json")
+	dat, err := os.ReadFile("../rvsol/out/PreimageOracle.sol/PreimageOracle.json")
 	require.NoError(t, err)
 	var outDat struct {
 		DeployedBytecode struct {
@@ -285,8 +285,8 @@ func runEVMTestSuite(t *testing.T, path string) {
 	t.Logf("max gas used: %d", maxGasUsed)
 
 	require.True(t, vmState.Exited, "ran out of steps")
-	if vmState.Exit != 0 {
-		testCaseNum := vmState.Exit >> 1
+	if vmState.ExitCode != 0 {
+		testCaseNum := vmState.ExitCode >> 1
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }

@@ -1,7 +1,6 @@
 package fast
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -262,19 +261,6 @@ func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
 	} else {
 		copy(dest[d:], p.Data[pageAddr:])
 	}
-}
-
-func (m *Memory) GetMemory(addr uint64) uint64 {
-	// addr must be aligned to 4 bytes
-	if addr&0x3 != 0 {
-		panic(fmt.Errorf("unaligned memory access: %x", addr))
-	}
-	p, ok := m.pageLookup(addr >> PageAddrSize)
-	if !ok {
-		return 0
-	}
-	pageAddr := addr & PageAddrMask
-	return binary.BigEndian.Uint64(p.Data[pageAddr : pageAddr+8])
 }
 
 func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {

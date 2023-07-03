@@ -21,6 +21,21 @@ import (
 	"github.com/protolambda/asterisc/rvgo/slow"
 )
 
+type testOracle struct {
+	hint        func(v []byte) error
+	getPreimage func(k [32]byte) ([]byte, error)
+}
+
+func (t *testOracle) Hint(v []byte) error {
+	return t.hint(v)
+}
+
+func (t *testOracle) GetPreimage(k [32]byte) ([]byte, error) {
+	return t.getPreimage(k)
+}
+
+var _ fast.PreimageOracle = (*testOracle)(nil)
+
 func TestSimple(t *testing.T) {
 	programELF, err := elf.Open("../tests/go-tests/bin/simple")
 	require.NoError(t, err)
@@ -55,13 +70,21 @@ func TestSimple(t *testing.T) {
 	addPreimage([]byte("hello"))                          // pre-state pre-image
 	addPreimage([]byte("world"))                          // input pre-image
 
-	vmState.PreimageOracle = func(key [32]byte) ([]byte, error) {
-		if v, ok := preImages[key]; ok {
-			return v, nil
-		} else {
-			return nil, fmt.Errorf("unknown pre-image %x", key)
-		}
+	po := &testOracle{
+		hint: func(v []byte) error {
+			t.Logf("received hint: %x", v)
+			return nil
+		},
+		getPreimage: func(k [32]byte) ([]byte, error) {
+			t.Logf("reading pre-image: %x", k)
+			if v, ok := preImages[k]; ok {
+				return v, nil
+			} else {
+				return nil, fmt.Errorf("unknown pre-image %x", k)
+			}
+		},
 	}
+	instState := fast.NewInstrumentedState(vmState, po, os.Stdout, os.Stderr)
 
 	var preimageKey [32]byte
 	var preimagePartOffset uint64
@@ -76,6 +99,7 @@ func TestSimple(t *testing.T) {
 				err = fmt.Errorf("cannot read past pre-image (%x) size: %d >= %d", key, offset, len(v))
 				return
 			}
+			// TODO: length-prefix part
 			datlen = uint8(copy(dat[:], v[offset:]))
 			return
 		} else {
@@ -88,30 +112,6 @@ func TestSimple(t *testing.T) {
 	stepCode := loadStepContractCode(t)
 	oracleCode := loadPreimageOracleContractCode(t)
 	vmenv := newEVMEnv(t, stepCode, oracleCode)
-
-	u64ToB32 := func(i uint64) []byte {
-		var out [32]byte
-		binary.BigEndian.PutUint64(out[24:], i)
-		return out[:]
-	}
-
-	preparePreimage := func() {
-		dat, ok := preImages[preimageKey]
-		if !ok {
-			panic("unknown preimage")
-		}
-		var part [32]byte
-		copy(part[:], dat[preimagePartOffset:])
-		// preimageLengths[key] = len(preimage)
-		vmenv.StateDB.SetState(preimageOracleAddr, crypto.Keccak256Hash(preimageKey[:], u64ToB32(0)), *(*[32]byte)(u64ToB32(uint64(len(dat)))))
-		// preimageParts[key][partOffset] = part
-		vmenv.StateDB.SetState(preimageOracleAddr, crypto.Keccak256Hash(u64ToB32(preimagePartOffset), crypto.Keccak256(preimageKey[:], u64ToB32(1))), part)
-		// preimagePartOk[key][partOffset] = true
-		vmenv.StateDB.SetState(preimageOracleAddr, crypto.Keccak256Hash(u64ToB32(preimagePartOffset), crypto.Keccak256(preimageKey[:], u64ToB32(2))), [32]byte{31: 1})
-	}
-
-	so := oracle.NewStateOracle()
-	pre := vmState.Merkleize(so)
 
 	var lastSym elf.Symbol
 	for i := 0; i < 2000_000; i++ {
@@ -129,7 +129,7 @@ func TestSimple(t *testing.T) {
 			if throwArgLen > 1000 {
 				throwArgLen = 1000
 			}
-			x := vmState.GetMemRange(throwArg, throwArgLen)
+			x := vmState.Memory.ReadMemoryRange(throwArg, throwArgLen)
 			dat, _ := io.ReadAll(x)
 			if utf8.Valid(dat) {
 				fmt.Printf("THROW! %q\n", string(dat))
@@ -184,8 +184,8 @@ func TestSimple(t *testing.T) {
 		}
 	}
 	require.True(t, vmState.Exited, "ran out of steps")
-	if vmState.Exit != 0 {
-		t.Fatalf("failed with exit code %d", vmState.Exit)
+	if vmState.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d", vmState.ExitCode)
 	}
 }
 
@@ -217,7 +217,7 @@ func TestFastMinimal(t *testing.T) {
 			if throwArgLen > 1000 {
 				throwArgLen = 1000
 			}
-			x := vmState.GetMemRange(throwArg, throwArgLen)
+			x := vmState.Memory.ReadMemoryRange(throwArg, throwArgLen)
 			dat, _ := io.ReadAll(x)
 			if utf8.Valid(dat) {
 				fmt.Printf("THROW! %q\n", string(dat))
@@ -236,8 +236,8 @@ func TestFastMinimal(t *testing.T) {
 		}
 	}
 	require.True(t, vmState.Exited, "ran out of steps")
-	if vmState.Exit != 0 {
-		t.Fatalf("failed with exit code %d", vmState.Exit)
+	if vmState.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d", vmState.ExitCode)
 	}
 }
 
@@ -276,7 +276,7 @@ func TestFastMinimalEVM(t *testing.T) {
 			if throwArgLen > 1000 {
 				throwArgLen = 1000
 			}
-			x := vmState.GetMemRange(throwArg, throwArgLen)
+			x := vmState.Memory.ReadMemoryRange(throwArg, throwArgLen)
 			dat, _ := io.ReadAll(x)
 			if utf8.Valid(dat) {
 				fmt.Printf("THROW! %q\n", string(dat))
@@ -324,7 +324,7 @@ func TestFastMinimalEVM(t *testing.T) {
 		}
 	}
 	require.True(t, vmState.Exited, "ran out of steps")
-	if vmState.Exit != 0 {
-		t.Fatalf("failed with exit code %d", vmState.Exit)
+	if vmState.ExitCode != 0 {
+		t.Fatalf("failed with exit code %d", vmState.ExitCode)
 	}
 }
