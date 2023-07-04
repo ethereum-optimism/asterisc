@@ -88,6 +88,9 @@ func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]b
 }
 
 func (m *InstrumentedState) trackMemAccess(effAddr uint64) {
+	if effAddr&31 != 0 {
+		panic("effective memory access must be aligned to 32 bytes")
+	}
 	if m.memProofEnabled && m.lastMemAccess != effAddr {
 		if m.lastMemAccess != ^uint64(0) {
 			panic(fmt.Errorf("unexpected different mem access at %08x, already have access at %08x buffered", effAddr, m.lastMemAccess))

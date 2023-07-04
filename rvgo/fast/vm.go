@@ -61,6 +61,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if size > 8 {
 			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
+		inst.trackMemAccess(addr &^ 31)
+		if (addr+size-1)&31 != addr&31 {
+			inst.trackMemAccess((addr + size - 1) &^ 31)
+		}
 		var out [8]byte
 		s.Memory.GetUnaligned(addr, out[:size])
 		v := binary.LittleEndian.Uint64(out[:])
@@ -75,6 +79,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if size > 8 {
 			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
 		}
+		inst.trackMemAccess(addr &^ 31)
+		if (addr+size-1)&31 != addr&31 {
+			inst.trackMemAccess((addr + size - 1) &^ 31)
+		}
 		var bytez [8]byte
 		binary.LittleEndian.PutUint64(bytez[:], value)
 		s.Memory.SetUnaligned(addr, bytez[:size])
@@ -85,6 +93,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if addr&31 != 0 {
 			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
+		inst.trackMemAccess(addr)
 		s.Memory.GetUnaligned(addr, out[:])
 		return
 	}
@@ -195,8 +204,12 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			count = maxData
 		}
 
-		var dat [32]byte
-		s.Memory.GetUnaligned(addr, dat[32-maxData:])
+		dat := b32asBEWord(getMemoryB32(addr - alignment))
+		// shift out leading bits
+		dat = shl(u64ToU256(shl64(3, alignment)), dat)
+		// shift to right end, remove trailing bits
+		dat = shr(u64ToU256(shl64(3, sub64(32, count))), dat)
+
 		bits := shl(toU256(3), u64ToU256(count))
 
 		preImageKey := s.PreimageKey
@@ -204,7 +217,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// Append to key content by bit-shifting
 		key := b32asBEWord(preImageKey)
 		key = shl(bits, key)
-		key = or(key, b32asBEWord(dat))
+		key = or(key, dat)
 
 		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
 		s.PreimageKey = beWordAsB32(key)
