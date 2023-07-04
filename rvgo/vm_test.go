@@ -2,28 +2,10 @@ package fast
 
 import (
 	"debug/elf"
-	"encoding/binary"
-	"encoding/json"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
-	"github.com/ethereum/go-ethereum/params"
-
-	"github.com/protolambda/asterisc/rvgo/oracle"
-	"github.com/protolambda/asterisc/rvgo/slow"
 
 	"github.com/stretchr/testify/require"
 
@@ -57,10 +39,12 @@ func runFastTestSuite(t *testing.T, path string) {
 	vmState, err := fast.LoadELF(testSuiteELF)
 	require.NoError(t, err, "must load test suite ELF binary")
 
+	inState := fast.NewInstrumentedState(vmState, nil, os.Stdout, os.Stderr)
+
 	for i := 0; i < 10_000; i++ {
 		//fmt.Printf("pc: 0x%x\n", vmState.PC)
-		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
-			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		if _, err := inState.Step(false); err != nil {
+			t.Fatalf("VM err at step %d, PC %x: %v", i, vmState.PC, err)
 		}
 		if vmState.Exited {
 			break
@@ -73,6 +57,7 @@ func runFastTestSuite(t *testing.T, path string) {
 	}
 }
 
+/*
 func runSlowTestSuite(t *testing.T, path string) {
 	testSuiteELF, err := elf.Open(path)
 	require.NoError(t, err)
@@ -290,6 +275,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }
+*/
 
 func TestFastStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
@@ -304,6 +290,7 @@ func TestFastStep(t *testing.T) {
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 
+/*
 func TestSlowStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
 	runTestCategory := func(name string) {
@@ -329,3 +316,4 @@ func TestEVMStep(t *testing.T) {
 	runTestCategory("rv64ua-p")
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
+*/

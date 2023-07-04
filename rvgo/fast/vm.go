@@ -6,6 +6,16 @@ import (
 	"io"
 )
 
+const (
+	fdStdin         = 0
+	fdStdout        = 1
+	fdStderr        = 2
+	fdHintRead      = 3
+	fdHintWrite     = 4
+	fdPreimageRead  = 5
+	fdPreimageWrite = 6
+)
+
 var (
 	destRead     = toU64(0)
 	destWrite    = toU64(1)
@@ -52,9 +62,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
 		var out [8]byte
-		s.Memory.GetUnaligned(addr, out[8-size:])
+		s.Memory.GetUnaligned(addr, out[:size])
+		v := binary.LittleEndian.Uint64(out[:])
 		bitSize := size << 3
-		v := binary.LittleEndian.Uint64(out[:]) & ((1 << bitSize) - 1)
 		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
 			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
 		} // otherwise just leave it zeroed
@@ -292,14 +302,14 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			count := loadRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd {
-			case 0: // stdin
+			case fdStdin: // stdin
 				n = toU64(0) // never read anything from stdin
 				errCode = toU64(0)
-			case 3: // hint-read
+			case fdHintRead: // hint-read
 				// say we read it all, to continue execution after reading the hint-write ack response
 				n = count
 				errCode = toU64(0)
-			case 5:
+			case fdPreimageRead:
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
@@ -314,23 +324,36 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			count := loadRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd {
-			case 1: // stdout
+			case fdStdout: // stdout
 				_, err := io.Copy(inst.stdOut, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stdout writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case 2: // stderr
+			case fdStderr: // stderr
 				_, err := io.Copy(inst.stdErr, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stderr writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case 4: // hint-write
-				// TODO
-			case 6: // pre-image key write
+			case fdHintWrite: // hint-write
+				hintData, _ := io.ReadAll(s.Memory.ReadMemoryRange(addr, count))
+				s.LastHint = append(inst.state.LastHint, hintData...)
+				for len(s.LastHint) >= 4 { // process while there is enough data to check if there are any hints
+					hintLen := binary.BigEndian.Uint32(s.LastHint[:4])
+					if hintLen >= uint32(len(s.LastHint[4:])) {
+						hint := s.LastHint[4 : 4+hintLen] // without the length prefix
+						s.LastHint = s.LastHint[4+hintLen:]
+						inst.preimageOracle.Hint(hint)
+					} else {
+						break // stop processing hints if there is incomplete data buffered
+					}
+				}
+				n = count
+				errCode = toU64(0)
+			case fdPreimageWrite: // pre-image key write
 				n = writePreimageKey(addr, count)
 				errCode = toU64(0) // no error
 			default: // any other file, including (3) hint read (5) preimage read

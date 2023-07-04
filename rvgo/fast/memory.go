@@ -75,11 +75,6 @@ func (m *Memory) ForEachPage(fn func(pageIndex uint64, page *Page) error) error 
 }
 
 func (m *Memory) Invalidate(addr uint64) {
-	// addr must be aligned to 4 bytes
-	if addr&0x3 != 0 {
-		panic(fmt.Errorf("unaligned memory access: %x", addr))
-	}
-
 	// find page, and invalidate addr within it
 	if p, ok := m.pageLookup(addr >> PageAddrSize); ok {
 		prevValid := p.Ok[1]
@@ -92,7 +87,7 @@ func (m *Memory) Invalidate(addr uint64) {
 	}
 
 	// find the gindex of the first page covering the address
-	gindex := ((uint64(1) << 32) | uint64(addr)) >> PageAddrSize
+	gindex := (uint64(addr) >> PageAddrSize) | (1 << (64 - PageAddrSize))
 
 	for gindex > 0 {
 		m.nodes[gindex] = nil
@@ -112,7 +107,7 @@ func (m *Memory) MerkleizeSubtree(gindex uint64) [32]byte {
 			pageGindex := (1 << depthIntoPage) | (gindex & ((1 << depthIntoPage) - 1))
 			return p.MerkleizeSubtree(pageGindex)
 		} else {
-			return zeroHashes[28-l] // page does not exist
+			return zeroHashes[64-5+1-l] // page does not exist
 		}
 	}
 	if l > PageKeySize+1 {
@@ -121,7 +116,7 @@ func (m *Memory) MerkleizeSubtree(gindex uint64) [32]byte {
 	n, ok := m.nodes[gindex]
 	if !ok {
 		// if the node doesn't exist, the whole sub-tree is zeroed
-		return zeroHashes[28-l]
+		return zeroHashes[64-5+1-l]
 	}
 	if n != nil {
 		return *n

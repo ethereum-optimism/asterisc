@@ -3,6 +3,7 @@ package fast
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"sort"
@@ -93,19 +94,25 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 
 	// setup stack pointer
 	sp := uint64(0x10_00_00_00_00_00_00_00)
-	vmState.writeRegister(2, sp)
+	vmState.Registers[2] = sp
+
+	storeMem := func(addr uint64, v uint64) {
+		var dat [8]byte
+		binary.LittleEndian.PutUint64(dat[:], v)
+		_ = vmState.Memory.SetMemoryRange(addr, bytes.NewReader(dat[:]))
+	}
 
 	// init argc, argv, aux on stack
-	vmState.storeMem(sp+8*1, 8, 0x42)                // argc = 0 (argument count)
-	vmState.storeMem(sp+8*2, 8, 0x35)                // argv[n] = 0 (terminating argv)
-	vmState.storeMem(sp+8*3, 8, 0)                   // envp[term] = 0 (no env vars)
-	vmState.storeMem(sp+8*4, 8, 6)                   // auxv[0] = _AT_PAGESZ = 6 (key)
-	vmState.storeMem(sp+8*5, 8, 4096)                // auxv[1] = page size of 4 KiB (value) - (== minPhysPageSize)
-	vmState.storeMem(sp+8*6, 8, 25)                  // auxv[2] = AT_RANDOM
-	vmState.storeMem(sp+8*7, 8, sp+8*9)              // auxv[3] = address of 16 bytes containing random value
-	vmState.storeMem(sp+8*8, 8, 0)                   // auxv[term] = 0
-	vmState.storeMem(sp+8*9, 8, 0x6f727020646e6172)  // randomness 8/16
-	vmState.storeMem(sp+8*10, 8, 0x6164626d616c6f74) // randomness 16/16
+	storeMem(sp+8*1, 0x42)                // argc = 0 (argument count)
+	storeMem(sp+8*2, 0x35)                // argv[n] = 0 (terminating argv)
+	storeMem(sp+8*3, 0)                   // envp[term] = 0 (no env vars)
+	storeMem(sp+8*4, 6)                   // auxv[0] = _AT_PAGESZ = 6 (key)
+	storeMem(sp+8*5, 4096)                // auxv[1] = page size of 4 KiB (value) - (== minPhysPageSize)
+	storeMem(sp+8*6, 25)                  // auxv[2] = AT_RANDOM
+	storeMem(sp+8*7, sp+8*9)              // auxv[3] = address of 16 bytes containing random value
+	storeMem(sp+8*8, 0)                   // auxv[term] = 0
+	storeMem(sp+8*9, 0x6f727020646e6172)  // randomness 8/16
+	storeMem(sp+8*10, 0x6164626d616c6f74) // randomness 16/16
 
 	// entrypoint is set as part of elf load function
 	return nil

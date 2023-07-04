@@ -2,6 +2,7 @@ package fast
 
 import (
 	"encoding/binary"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // page size must be at least 32 bytes (one merkle node)
@@ -35,6 +36,16 @@ type VMState struct {
 	LoadReservation uint64 `json:"loadReservation"`
 
 	Registers [32]uint64 `json:"registers"`
+
+	// LastHint is optional metadata, and not part of the VM state itself.
+	// It is used to remember the last pre-image hint,
+	// so a VM can start from any state without fetching prior pre-images,
+	// and instead just repeat the last hint on setup,
+	// to make sure pre-image requests can be served.
+	// The first 4 bytes are a uin32 length prefix.
+	// Warning: the hint MAY NOT BE COMPLETE. I.e. this is buffered,
+	// and should only be read when len(LastHint) > 4 && uint32(LastHint[:4]) >= len(LastHint[4:])
+	LastHint hexutil.Bytes `json:"lastHint,omitempty"`
 }
 
 func NewVMState() *VMState {

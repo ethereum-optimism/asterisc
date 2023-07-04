@@ -1,14 +1,6 @@
 package slow
 
-import (
-	"encoding/binary"
-	"fmt"
-
-	"github.com/holiman/uint256"
-
-	"github.com/protolambda/asterisc/rvgo/oracle"
-)
-
+/*
 // tree:
 // ```
 //
@@ -87,8 +79,7 @@ func decodeU64(v []byte) (out U64) {
 	return
 }
 
-func Step(s [32]byte, so oracle.VMStateOracle, po oracle.PreImageOracle) (stateRoot [32]byte, outErr error) {
-	stateRoot = s
+func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRoot [32]byte, outErr error) {
 
 	var revertCode uint64
 	defer func() {
@@ -104,6 +95,8 @@ func Step(s [32]byte, so oracle.VMStateOracle, po oracle.PreImageOracle) (stateR
 		revertCode = code
 		panic(err)
 	}
+
+
 
 	read := func(stateStackGindex U256, stateGindex U256, stateStackDepth uint8) (stateValue [32]byte, stateStackHash [32]byte) {
 		// READING MODE: if the stack gindex is lower than target, then traverse to target
@@ -931,3 +924,4 @@ func Step(s [32]byte, so oracle.VMStateOracle, po oracle.PreImageOracle) (stateR
 
 	return
 }
+*/
