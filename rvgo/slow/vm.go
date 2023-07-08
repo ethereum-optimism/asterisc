@@ -1,55 +1,21 @@
 package slow
 
-/*
-// tree:
-// ```
-//
-//	         1
-//	    2          3
-//	 4    5     6     7
-//	8 9 10 11 12 13 14 15
-//
-// ```
-var (
-	pcGindex        = toU256(8)
-	memoryGindex    = toU256(9)
-	registersGindex = toU256(10)
-	csrGindex       = toU256(11)
-	exitGindex      = toU256(12)
-	heapGindex      = toU256(13)
-	loadResGindex   = toU256(14)
-	preimageGindex  = toU256(15)
+import (
+	"encoding/binary"
+	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/protolambda/asterisc/rvgo/oracle"
 )
 
-func makeMemGindex(byteIndex U64) U256 {
-	// memory is packed in 32 byte leaf values. = 5 bits, thus 64-5=59 bit path
-	return or(shl(toU256(59), memoryGindex), shr(toU256(5), U256(byteIndex)))
-}
-
-func makeRegisterGindex(register U64) U256 {
-	if x := U256(register); x.Uint64() >= 32 {
-		panic("there are only 32 valid registers")
-	}
-	return or(shl(toU256(5), registersGindex), U256(register))
-}
-
-func makeCSRGindex(num U64) U256 {
-	if x := U256(num); x.Uint64() >= 4096 {
-		panic("there are only 4096 valid CSR registers")
-	}
-	return or(shl(toU256(12), csrGindex), U256(num))
-}
-
-func memToStateOp(memIndex U64, size U64) (offset uint8, gindex1, gindex2 U256) {
-	gindex1 = makeMemGindex(memIndex)
-	offset = uint8(and64(memIndex, toU64(31)).val())
-	gindex2 = U256{}
-	if iszero(lt(add(toU256(offset), U256(size)), toU256(32))) { // if offset+size >= 32, then it spans into the next memory chunk
-		// note: intentional overflow, circular 64 bit memory is part of riscv5 spec (chapter 1.4)
-		gindex2 = makeMemGindex(add64(memIndex, sub64(size, toU64(1))))
-	}
-	return
-}
+const (
+	fdStdin         = 0
+	fdStdout        = 1
+	fdStderr        = 2
+	fdHintRead      = 3
+	fdHintWrite     = 4
+	fdPreimageRead  = 5
+	fdPreimageWrite = 6
+)
 
 var (
 	destRead     = toU64(0)
@@ -79,7 +45,59 @@ func decodeU64(v []byte) (out U64) {
 	return
 }
 
-func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRoot [32]byte, outErr error) {
+func encodeU64(v U64, dest []byte) {
+	if len(dest) != 8 {
+		panic("bad u64 encode")
+	}
+	binary.LittleEndian.PutUint64(dest, v.val())
+}
+
+const (
+	stateSizeMemRoot         = 32
+	stateSizePreimageKey     = 32
+	stateSizePreimageOffset  = 8
+	stateSizePC              = 8
+	stateSizeExitCode        = 1
+	stateSizeExited          = 1
+	stateSizeStep            = 8
+	stateSizeHeap            = 8
+	stateSizeLoadReservation = 8
+	stateSizeRegisters       = 8 * 32
+)
+
+const (
+	stateOffsetMemRoot         = 0
+	stateOffsetPreimageKey     = stateOffsetMemRoot + stateSizeMemRoot
+	stateOffsetPreimageOffset  = stateOffsetPreimageKey + stateSizePreimageKey
+	stateOffsetPC              = stateOffsetPreimageOffset + stateSizePreimageOffset
+	stateOffsetExitCode        = stateOffsetPC + stateSizePC
+	stateOffsetExited          = stateOffsetExitCode + stateSizeExitCode
+	stateOffsetStep            = stateOffsetExited + stateSizeExited
+	stateOffsetHeap            = stateOffsetStep + stateSizeStep
+	stateOffsetLoadReservation = stateOffsetHeap + stateSizeHeap
+	stateOffsetRegisters       = stateOffsetLoadReservation + stateSizeLoadReservation
+	stateSize                  = stateOffsetRegisters + stateSizeRegisters
+)
+
+func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr error) {
+
+	computeStateHash := func() [32]byte {
+		return crypto.Keccak256Hash(stateData)
+	}
+
+	getExited := func() (exited bool) {
+		return stateData[stateOffsetExited] != 0
+	}
+	setExited := func() {
+		stateData[stateOffsetExited] = 1
+	}
+	setExitCode := func(v uint8) {
+		stateData[stateOffsetExitCode] = v
+	}
+
+	if getExited() {
+		return computeStateHash(), nil
+	}
 
 	var revertCode uint64
 	defer func() {
@@ -87,7 +105,7 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 			outErr = fmt.Errorf("revert: %v", err)
 		}
 		if revertCode != 0 {
-			outErr = fmt.Errorf("code %d %w", revertCode, outErr)
+			outErr = fmt.Errorf("revert %x: %w", revertCode, outErr)
 		}
 	}()
 
@@ -96,177 +114,95 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 		panic(err)
 	}
 
-
-
-	read := func(stateStackGindex U256, stateGindex U256, stateStackDepth uint8) (stateValue [32]byte, stateStackHash [32]byte) {
-		// READING MODE: if the stack gindex is lower than target, then traverse to target
-		for stateStackGindex.Lt(&stateGindex) {
-			if stateStackGindex.Eq(uint256.NewInt(1)) {
-				stateValue = stateRoot
-			}
-			stateStackGindex = shl(toU256(1), stateStackGindex)
-			a, b := so.Get(stateValue)
-			if and(shr(toU256(stateStackDepth), stateGindex), toU256(1)) != (U256{}) {
-				stateStackGindex = or(stateStackGindex, toU256(1))
-				stateValue = b
-				// keep track of where we have been, to use the trail to go back up the stack when writing
-				stateStackHash = so.Remember(stateStackHash, a)
-			} else {
-				stateValue = a
-				// keep track of where we have been, to use the trail to go back up the stack when writing
-				stateStackHash = so.Remember(stateStackHash, b)
-			}
-			stateStackDepth -= 1
+	getMemoryB32 := func(addr U64) (out [32]byte) {
+		if and64(addr, toU64(31)) != (U64{}) {
+			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
+		// TODO verify mem proof, return leaf
 		return
 	}
 
-	write := func(stateStackGindex U256, stateGindex U256, stateValue [32]byte, stateStackHash [32]byte) {
-		// WRITING MODE: if the stack gindex is higher than the target, then traverse back to root and update along the way
-		for stateStackGindex.Gt(&stateGindex) {
-			prevStackHash, prevSibling := so.Get(stateStackHash)
-			stateStackHash = prevStackHash
-			if eq(and(stateStackGindex, toU256(1)), toU256(1)) != (U256{}) {
-				stateValue = so.Remember(prevSibling, stateValue)
-			} else {
-				stateValue = so.Remember(stateValue, prevSibling)
-			}
-			stateStackGindex = shr(toU256(1), stateStackGindex)
-			if stateStackGindex == toU256(1) {
-				stateRoot = stateValue
-			}
+	setMemoryB32 := func(addr U64, v [32]byte) {
+		if and64(addr, toU64(31)) != (U64{}) {
+			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
+		// TODO recombine with leaf, update mem root
 	}
 
-	mutate := func(gindex1 U256, gindex2 U256, offset uint8, size U64, dest U64, value U64) (out U64) {
-		// if we have not reached the gindex yet, then we need to start traversal to it
-		rootGindex := toU256(1)
-		stateStackDepth := uint8(gindex1.BitLen()) - 2
-		targetGindex := gindex1
-
-		stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
-
-		switch dest {
-		// TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-		case destCSRRW: // atomic Read/Write bits in CSR
-			out = decodeU64(stateValue[:8])
-			dest = destWrite
-		case destCSRRS: // atomic Read and Set bits in CSR
-			out = decodeU64(stateValue[:8])
-			value = or64(out, value) // set bits, v=0 will be no-op
-			dest = destWrite
-		case destCSRRC: // atomic Read and Clear Bits in CSR
-			out = decodeU64(stateValue[:8])
-			value = and64(out, not64(value)) // clear bits, v=0 will be no-op
-			dest = destWrite
-		case destHeapIncr:
-			// we want the heap value before we increase it
-			out = decodeU64(stateValue[:8])
-			value = add64(out, value)
-			dest = destWrite
+	loadMem := func(addr U64, size U64, signed bool) U64 {
+		if size > 8 {
+			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
-
-		firstChunkBytes := sub64(toU64(32), toU64(offset))
-		if gt64(firstChunkBytes, size) != (U64{}) {
-			firstChunkBytes = size
+		inst.trackMemAccess(addr &^ 31)
+		if (addr+size-1)&31 != addr&31 {
+			inst.trackMemAccess((addr + size - 1) &^ 31)
 		}
-
-		base := b32asBEWord(stateValue)
-		// we reached the value, now load/write it
-		switch dest {
-		case destWrite:
-			for i := uint8(0); i < uint8(firstChunkBytes.val()); i++ {
-				shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
-				valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
-				maskByte := shl(shamt, toU256(0xff))
-				value = shr64(toU64(8), value)
-				base = or(and(base, not(maskByte)), valByte)
-			}
-			write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
-		case destRead:
-			for i := uint8(0); i < uint8(firstChunkBytes.val()); i++ {
-				shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
-				valByte := U64(and(shr(shamt, base), toU256(0xff)))
-				out = or64(out, shl64(shl64(toU64(3), toU64(i)), valByte))
-			}
-		}
-
-		if gindex2 == (U256{}) {
-			return
-		}
-
-		stateStackDepth = uint8(gindex2.BitLen()) - 2
-		targetGindex = gindex2
-
-		stateValue, stateStackHash = read(rootGindex, targetGindex, stateStackDepth)
-
-		secondChunkBytes := sub64(size, firstChunkBytes)
-
-		base = b32asBEWord(stateValue)
-		// we reached the value, now load/write it
-		switch dest {
-		case destWrite:
-			// note: StateValue holds the old 32 bytes, some of which may stay the same
-			for i := uint64(0); i < secondChunkBytes.val(); i++ {
-				shamt := shl(toU256(3), toU256(31-uint8(i)))
-				valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
-				maskByte := shl(shamt, toU256(0xff))
-				value = shr64(toU64(8), value)
-				base = or(and(base, not(maskByte)), valByte)
-			}
-			write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
-		case destRead:
-			for i := uint8(0); i < uint8(secondChunkBytes.val()); i++ {
-				shamt := shl(toU256(3), sub(toU256(31), toU256(i)))
-				valByte := U64(and(shr(shamt, base), toU256(0xff)))
-				out = or64(out, shl64(shl64(toU64(3), add64(toU64(i), firstChunkBytes)), valByte))
-			}
-		}
-		return
+		var out [8]byte
+		s.Memory.GetUnaligned(addr, out[:size])
+		v := binary.LittleEndian.Uint64(out[:])
+		bitSize := size << 3
+		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
+			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
+		} // otherwise just leave it zeroed
+		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
+		return v
 	}
-
-	loadMem := func(addr U64, size U64, signed bool) (out U64) {
-		offset, gindex1, gindex2 := memToStateOp(addr, size)
-		out = mutate(gindex1, gindex2, offset, size, destRead, U64{})
-		if signed {
-			topBitIndex := sub64(shl64(toU64(3), size), toU64(1))
-			out = signExtend64(out, topBitIndex)
-		}
-		return
-	}
-
 	storeMem := func(addr U64, size U64, value U64) {
-		offset, gindex1, gindex2 := memToStateOp(addr, size)
-		mutate(gindex1, gindex2, offset, size, destWrite, value)
+		if size > 8 {
+			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
+		}
+		inst.trackMemAccess(addr &^ 31)
+		if (addr+size-1)&31 != addr&31 {
+			inst.trackMemAccess((addr + size - 1) &^ 31)
+		}
+		var bytez [8]byte
+		binary.LittleEndian.PutUint64(bytez[:], value)
+		s.Memory.SetUnaligned(addr, bytez[:size])
+		//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
 	}
 
-	loadRegister := func(num U64) (out U64) {
-		out = mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead, U64{})
-		return
+	loadRegister := func(reg U64) U64 {
+		if gt64(reg, toU64(31)) != (U64{}) {
+			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg.val()))
+		}
+		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
+		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
+		return decodeU64(stateData[offset.val() : offset.val()+8])
 	}
-
-	writeRegister := func(num U64, val U64) {
-		if iszero64(num) { // reg 0 must stay 0
+	writeRegister := func(reg U64, v U64) {
+		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
+		if iszero64(reg) { // reg 0 must stay 0
 			// v is a HINT, but no hints are specified by standard spec, or used by us.
 			return
 		}
-		mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite, val)
-	}
-
-	setLoadReservation := func(addr U64) {
-		mutate(loadResGindex, toU256(0), 0, toU64(8), destWrite, addr)
+		if gt64(reg, toU64(31)) != (U64{}) {
+			revertWithCode(0xbad4e9, fmt.Errorf("cannot write invalid register %d value %x", reg.val(), v.val()))
+		}
+		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
+		encodeU64(v, stateData[offset.val():offset.val()+8])
 	}
 
 	getLoadReservation := func() U64 {
-		return mutate(loadResGindex, toU256(0), 0, toU64(8), destRead, U64{})
+		return decodeU64(stateData[stateOffsetLoadReservation : stateOffsetLoadReservation+8])
+	}
+	setLoadReservation := func(addr U64) {
+		encodeU64(addr, stateData[stateOffsetLoadReservation:stateOffsetLoadReservation+8])
+	}
+
+	writeCSR := func(num U64, v U64) {
+		// TODO: do we need CSR?
+	}
+
+	readCSR := func(num U64) U64 {
+		// TODO: do we need CSR?
+		return toU64(0)
 	}
 
 	getPC := func() U64 {
-		return mutate(pcGindex, toU256(0), 0, toU64(8), destRead, U64{})
+		return decodeU64(stateData[stateOffsetPC : stateOffsetPC+8])
 	}
-
 	setPC := func(pc U64) {
-		mutate(pcGindex, toU256(0), 0, toU64(8), destWrite, pc)
+		encodeU64(pc, stateData[stateOffsetPC:stateOffsetPC+8])
 	}
 
 	opMem := func(op U64, addr U64, size U64, value U64) U64 {
@@ -307,18 +243,17 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 	}
 
 	updateCSR := func(num U64, v U64, mode U64) (out U64) {
-		var dest U64
+		out = readCSR(num)
 		switch mode.val() {
-		case 1:
-			dest = destCSRRW // ?01 = CSRRW(I)
-		case 2:
-			dest = destCSRRS // ?10 = CSRRS(I)
-		case 3:
-			dest = destCSRRC // ?11 = CSRRC(I)
+		case 1: // ?01 = CSRRW(I)
+		case 2: // ?10 = CSRRS(I)
+			v = or64(out, v)
+		case 3: // ?11 = CSRRC(I)
+			v = and64(out, not64(v))
 		default:
 			revertWithCode(0xbadc0de0, fmt.Errorf("unkwown CSR mode: %d", mode.val()))
 		}
-		out = mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), dest, v)
+		writeCSR(num, v)
 		return
 	}
 
@@ -330,15 +265,15 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 			count = maxData
 		}
 
-		memGindex := makeMemGindex(addr)
-		node, stateStackHash := read(toU256(1), memGindex, 61) // top tree + mem tree - root bit - inspect bit = 4 + (64-5) - 1 - 1 = 61
-		// mask the part of the data we are shifting in
-		bits := shl(toU256(3), u64ToU256(count))
-		mask := sub(shl(bits, toU256(1)), toU256(1))
-		dat := and(b32asBEWord(node), mask)
+		dat := b32asBEWord(getMemoryB32(sub64(addr, alignment)))
+		// shift out leading bits
+		dat = shl(u64ToU256(shl64(toU64(3), alignment)), dat)
+		// shift to right end, remove trailing bits
+		dat = shr(u64ToU256(shl64(toU64(3), sub64(toU64(32), count))), dat)
 
-		node, stateStackHash = read(toU256(1), preimageGindex, 2)
-		preImageKey, _ := so.Get(node)
+		bits := shl(toU256(3), u64ToU256(count))
+
+		preImageKey := s.PreimageKey
 
 		// Append to key content by bit-shifting
 		key := b32asBEWord(preImageKey)
@@ -346,22 +281,19 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 		key = or(key, dat)
 
 		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
-		newPreImageRoot := so.Remember(beWordAsB32(key), [32]byte{})
-		write(preimageGindex, toU256(1), newPreImageRoot, stateStackHash)
+		s.PreimageKey = beWordAsB32(key)
+		s.PreimageOffset = 0
 		return count
 	}
 
 	readPreimageValue := func(addr U64, count U64) U64 {
-		node, stateStackHash := read(toU256(1), preimageGindex, 2)
-		preImageKey, preImageValueOffset := so.Get(node)
+		preImageKey, offset := s.PreimageKey, s.PreimageOffset
 
-		offset := u256ToU64(b32asBEWord(preImageValueOffset))
-
-		pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.val())
+		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
 			revertWithCode(0xbadf00d, err)
 		}
-		if iszero64(toU64(pdatlen)) { // EOF
+		if iszero64(pdatlen) { // EOF
 			return toU64(0)
 		}
 		alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
@@ -381,16 +313,13 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 
 		// update pre-image reader with updated offset
 		newOffset := add64(offset, count)
-		newPreImageRoot := so.Remember(preImageKey, beWordAsB32(u64ToU256(newOffset)))
-		write(preimageGindex, toU256(1), newPreImageRoot, stateStackHash)
+		//s.PreimageKey = preImageKey   // key stays the same
+		s.PreimageOffset = newOffset
 
-		// put data into memory
-		memGindex := makeMemGindex(addr)
-		node, stateStackHash = read(toU256(1), memGindex, 61)
+		node := getMemoryB32(sub64(addr, alignment))
 		dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
 		dat = or(dat, and(pdat, mask))           // fill with bytes from pdat
-
-		write(memGindex, toU256(1), beWordAsB32(dat), stateStackHash)
+		setMemoryB32(sub64(addr, alignment), beWordAsB32(dat))
 		return count
 	}
 
@@ -399,11 +328,13 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 		switch a7.val() {
 		case 93: // exit the calling thread. No multi-thread support yet, so just exit.
 			a0 := loadRegister(toU64(10))
-			mutate(exitGindex, toU256(0), 0, toU64(8), destWrite, a0)
+			setExitCode(uint8(a0.val()))
+			setExited()
 			// program stops here, no need to change registers.
 		case 94: // exit-group
 			a0 := loadRegister(toU64(10))
-			mutate(exitGindex, toU256(0), 0, toU64(8), destWrite, a0)
+			setExitCode(uint8(a0.val()))
+			setExited()
 		case 214: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
@@ -430,8 +361,8 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 				if align != (U64{}) {
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
-				heap := mutate(heapGindex, toU256(0), 0, toU64(8), destHeapIncr, length) // increment heap with length
-				writeRegister(toU64(10), heap)
+				writeRegister(toU64(10), s.Heap)
+				s.Heap += length // increment heap with length
 				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
@@ -444,10 +375,14 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 			count := loadRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd.val() {
-			case 0: // stdin
+			case fdStdin: // stdin
 				n = toU64(0) // never read anything from stdin
 				errCode = toU64(0)
-			case 3: // pre-image oracle
+			case fdHintRead: // hint-read
+				// say we read it all, to continue execution after reading the hint-write ack response
+				n = count
+				errCode = toU64(0)
+			case fdPreimageRead:
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
@@ -462,24 +397,19 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 			count := loadRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd.val() {
-			case 1: // stdout
-				//_, err := io.Copy(stdOut, s.GetMemRange(addr, count)) // TODO stdout
-				//if err != nil {
-				//	panic(fmt.Errorf("stdout writing err: %w", err))
-				//}
+			case fdStdout: // stdout
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case 2: // stderr
-				//_, err := io.Copy(stdErr, s.GetMemRange(addr, count)) // TODO stderr
-				//if err != nil {
-				//	panic(fmt.Errorf("stderr writing err: %w", err))
-				//}
+			case fdStderr: // stderr
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case 3: // pre-image oracle
+			case fdHintWrite: // hint-write
+				n = count
+				errCode = toU64(0)
+			case fdPreimageWrite: // pre-image key write
 				n = writePreimageKey(addr, count)
 				errCode = toU64(0) // no error
-			default: // any other file, including (4) pre-image hinter
+			default: // any other file, including (3) hint read (5) preimage read
 				n = u64Mask()         //  -1 (writing error)
 				errCode = toU64(0x4d) // EBADF
 			}
@@ -498,8 +428,14 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 					out = toU64(1) // O_WRONLY
 				case 2: // stderr
 					out = toU64(1) // O_WRONLY
-				case 3: // pre-image oracle
-					out = toU64(2) // O_RDWR
+				case 3: // hint-read
+					out = toU64(0) // O_RDONLY
+				case 4: // hint-write
+					out = toU64(1) // O_WRONLY
+				case 5: // pre-image read
+					out = toU64(0) // O_RDONLY
+				case 6: // pre-image write
+					out = toU64(1) // O_WRONLY
 				default:
 					out = u64Mask()
 					errCode = toU64(0x4d) // EBADF
@@ -551,7 +487,7 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 	}
 
 	pc := getPC()
-	instr := loadMem(pc, toU64(4), false)
+	instr := loadMem(pc, toU64(4), false) // raw instruction
 
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
@@ -924,4 +860,3 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateRo
 
 	return
 }
-*/

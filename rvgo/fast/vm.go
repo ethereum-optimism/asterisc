@@ -45,7 +45,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
-			outErr = fmt.Errorf("err: %v", err)
+			outErr = fmt.Errorf("revert: %v", err)
 		}
 		if revertCode != 0 {
 			outErr = fmt.Errorf("revert %x: %w", revertCode, outErr)
@@ -175,7 +175,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				v = value
 			}
 		default:
-			panic(fmt.Errorf("unrecognized mem op: %d", op))
+			revertWithCode(0xbadc0de1, fmt.Errorf("unrecognized mem op: %d", op))
 		}
 		storeMem(addr, size, v)
 		return out
@@ -252,7 +252,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		// update pre-image reader with updated offset
 		newOffset := add64(offset, count)
-		//s.PreimageKey = preImageKey   // key stats the same
+		//s.PreimageKey = preImageKey   // key stays the same
 		s.PreimageOffset = newOffset
 
 		node := getMemoryB32(addr - alignment)
@@ -447,7 +447,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 
 	pc := getPC()
-	instr := loadMem(pc, 4, false) // raw instruction
+	instr := loadMem(pc, toU64(4), false) // raw instruction
 
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
