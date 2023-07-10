@@ -79,7 +79,13 @@ const (
 	stateSize                  = stateOffsetRegisters + stateSizeRegisters
 )
 
-func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr error) {
+func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr error) {
+	calldataload := func(offset U64) (out [32]byte) {
+		copy(out[:], calldata[offset.val():])
+		return
+	}
+
+	stateData := calldata[4 : 4+stateSize]
 
 	computeStateHash := func() [32]byte {
 		return crypto.Keccak256Hash(stateData)
@@ -114,51 +120,187 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateHa
 		panic(err)
 	}
 
-	getMemoryB32 := func(addr U64) (out [32]byte) {
-		if and64(addr, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
-		}
-		// TODO verify mem proof, return leaf
+	getMemRoot := func() (out [32]byte) {
+		copy(out[:], stateData[stateOffsetMemRoot:stateOffsetMemRoot+32])
+		return
+	}
+	setMemRoot := func(v [32]byte) {
+		copy(stateData[stateOffsetMemRoot:stateOffsetMemRoot+32], v[:])
+	}
+
+	proofOffset := func(proofIndex uint8) (offset U64) {
+		// proof size: 63 siblings, 1 leaf value, each 32 bytes
+		offset = mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
+		offset = add64(offset, shortToU64(4+stateSize))
 		return
 	}
 
-	setMemoryB32 := func(addr U64, v [32]byte) {
+	hashPair := func(a [32]byte, b [32]byte) (h [32]byte) {
+		return crypto.Keccak256Hash(a[:], b[:])
+	}
+
+	getMemoryB32 := func(addr U64, proofIndex uint8) (out [32]byte) {
+		if and64(addr, toU64(31)) != (U64{}) { // quick addr alignment check
+			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+		}
+		offset := proofOffset(proofIndex)
+		leaf := calldataload(offset)
+		offset = add64(offset, toU64(32))
+
+		path := shr64(toU64(5), addr) // 32 bytes of memory per leaf
+		node := leaf                  // starting from the leaf node, work back up by combining with siblings, to reconstruct the root
+		for i := uint8(0); i < 64-5; i++ {
+			sibling := calldataload(offset)
+			offset = add64(offset, toU64(32))
+			switch and64(shr64(toU64(i), path), toU64(1)).val() {
+			case 0:
+				node = hashPair(node, sibling)
+			case 1:
+				node = hashPair(sibling, node)
+			}
+		}
+		memRoot := getMemRoot()
+		if iszero(eq(b32asBEWord(node), b32asBEWord(memRoot))) { // verify the root matches
+			revertWithCode(0x0badf00d, fmt.Errorf("reconstructed mem root: %x, expected %x", node, memRoot))
+		}
+		out = leaf
+		return
+	}
+
+	// warning: setMemoryB32 does not verify the proof,
+	// it assumes the same memory proof has been verified with getMemoryB32
+	setMemoryB32 := func(addr U64, v [32]byte, proofIndex uint8) {
 		if and64(addr, toU64(31)) != (U64{}) {
 			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
-		// TODO recombine with leaf, update mem root
+		offset := proofOffset(proofIndex)
+		leaf := v
+		offset = add64(offset, toU64(32))
+		path := shr64(toU64(5), addr) // 32 bytes of memory per leaf
+		node := leaf                  // starting from the leaf node, work back up by combining with siblings, to reconstruct the root
+		for i := uint8(0); i < 64-5; i++ {
+			sibling := calldataload(offset)
+			offset = add64(offset, toU64(32))
+
+			switch and64(shr64(toU64(i), path), toU64(1)).val() {
+			case 0:
+				node = hashPair(node, sibling)
+			case 1:
+				node = hashPair(sibling, node)
+			}
+		}
+		setMemRoot(node) // store new memRoot
 	}
 
-	loadMem := func(addr U64, size U64, signed bool) U64 {
+	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
+	loadMem := func(addr U64, size U64, signed bool, proofIndex uint8) (out U64) {
 		if size > 8 {
 			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
-		inst.trackMemAccess(addr &^ 31)
-		if (addr+size-1)&31 != addr&31 {
-			inst.trackMemAccess((addr + size - 1) &^ 31)
+		// load/verify left part
+		leftAddr := and64(addr, not64(toU64(31)))
+		left := b32asBEWord(getMemoryB32(leftAddr, proofIndex))
+		alignment := sub64(addr, leftAddr)
+
+		right := U256{}
+		rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
+		leftShamt := sub64(sub64(toU64(32), alignment), size)
+		rightShamt := toU64(0)
+		if iszero64(eq64(leftAddr, rightAddr)) {
+			// if unaligned, use second proof for the right part
+			proofIndex += 1
+			// load/verify right part (against updated mem-root)
+			right = b32asBEWord(getMemoryB32(rightAddr, proofIndex))
+			// left content is aligned to right of 32 bytes
+			leftShamt = toU64(0)
+			rightShamt = sub64(sub64(toU64(64), alignment), size)
 		}
-		var out [8]byte
-		s.Memory.GetUnaligned(addr, out[:size])
-		v := binary.LittleEndian.Uint64(out[:])
-		bitSize := size << 3
-		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
-			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
-		} // otherwise just leave it zeroed
-		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
-		return v
+
+		// left: prepare for byte-taking by right-aligning
+		left = shr(u64ToU256(shl64(toU64(3), leftShamt)), left)
+		// right: right-align for byte-taking by right-aligning
+		right = shr(u64ToU256(shl64(toU64(3), rightShamt)), right)
+		// loop:
+		for i := uint8(0); i < uint8(size.val()); i++ {
+			// translate to reverse byte lookup, since we are reading little-endian memory, and need the highest byte first.
+			// effAddr := (addr + size - 1 - i) &^ 31
+			effAddr := and64(sub64(sub64(add64(addr, size), toU64(1)), toU64(i)), not64(toU64(31)))
+			// take a byte from either left or right, depending on the effective address
+			b := toU256(0)
+			if eq64(effAddr, leftAddr) != (U64{}) {
+				b = and(left, toU256(0xff))
+				left = shr(toU256(8), left)
+			}
+			if eq64(effAddr, rightAddr) != (U64{}) {
+				b = and(right, toU256(0xff))
+				right = shr(toU256(8), right)
+			}
+			// append it to the output
+			out = or64(shl64(toU64(8), out), u256ToU64(b))
+		}
+
+		if signed {
+			signBitShift := sub64(shl64(toU64(3), size), toU64(1))
+			out = signExtend64(out, signBitShift)
+		}
+		return
 	}
-	storeMem := func(addr U64, size U64, value U64) {
+
+	storeMem := func(addr U64, size U64, value U64, proofIndex uint8) {
 		if size > 8 {
 			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
 		}
-		inst.trackMemAccess(addr &^ 31)
-		if (addr+size-1)&31 != addr&31 {
-			inst.trackMemAccess((addr + size - 1) &^ 31)
+
+		leftAddr := and64(addr, not64(toU64(31)))
+		rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
+		alignment := sub64(addr, leftAddr)
+		leftPatch := toU256(0)
+		rightPatch := toU256(0)
+		leftMask := toU256(0)
+		rightMask := toU256(0)
+		shift8 := toU256(8)
+		min := alignment
+		max := add64(alignment, size)
+		for i := uint8(0); i < 64; i++ {
+			index := toU64(i)
+			leftSide := lt64(index, toU64(32)) != (U64{})
+			if leftSide {
+				leftPatch = shl(shift8, leftPatch)
+				leftMask = shl(shift8, leftMask)
+			} else {
+				rightPatch = shl(shift8, rightPatch)
+				rightMask = shl(shift8, rightMask)
+			}
+			if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) != (U64{}) { // if alignment <= i < alignment+size
+				b := u64ToU256(and64(shr64(value, shr64(toU64(3), sub64(index, alignment))), toU64(0xff)))
+				if leftSide {
+					leftPatch = or(leftPatch, b)
+					leftMask = or(leftMask, toU256(0xff))
+				} else {
+					rightPatch = or(rightPatch, b)
+					rightMask = or(rightMask, toU256(0xff))
+				}
+			}
 		}
-		var bytez [8]byte
-		binary.LittleEndian.PutUint64(bytez[:], value)
-		s.Memory.SetUnaligned(addr, bytez[:size])
-		//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
+
+		// load the left base
+		left := b32asBEWord(getMemoryB32(leftAddr, proofIndex))
+		// apply the left patch
+		left = or(and(left, not(leftMask)), leftPatch)
+		// write the left
+		setMemoryB32(leftAddr, beWordAsB32(left), proofIndex)
+
+		proofIndex += 1
+		// if aligned: nothing more to do here
+		if eq64(leftAddr, rightAddr) != (U64{}) {
+			return
+		}
+		// load the right base (with updated mem root)
+		right := b32asBEWord(getMemoryB32(rightAddr, proofIndex))
+		// apply the right patch
+		right = or(and(right, not(rightMask)), rightPatch)
+		// write the right (with updated mem root)
+		setMemoryB32(rightAddr, beWordAsB32(right), proofIndex)
 	}
 
 	loadRegister := func(reg U64) U64 {
@@ -203,6 +345,13 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateHa
 	}
 	setPC := func(pc U64) {
 		encodeU64(pc, stateData[stateOffsetPC:stateOffsetPC+8])
+	}
+
+	getHeap := func() U64 {
+		return decodeU64(stateData[stateOffsetHeap : stateOffsetHeap+8])
+	}
+	setHeap := func(pc U64) {
+		encodeU64(pc, stateData[stateOffsetHeap:stateOffsetHeap+8])
 	}
 
 	opMem := func(op U64, addr U64, size U64, value U64) U64 {
@@ -361,8 +510,9 @@ func Step(stateData []byte, proofData []byte, po oracle.PreImageOracle) (stateHa
 				if align != (U64{}) {
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
-				writeRegister(toU64(10), s.Heap)
-				s.Heap += length // increment heap with length
+				prevHeap := getHeap()
+				writeRegister(toU64(10), prevHeap)
+				setHeap(add64(prevHeap, length)) // increment heap with length
 				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)

@@ -79,14 +79,20 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if size > 8 {
 			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
 		}
-		inst.trackMemAccess(addr &^ 31)
-		if (addr+size-1)&31 != addr&31 {
-			inst.trackMemAccess((addr + size - 1) &^ 31)
-		}
 		var bytez [8]byte
 		binary.LittleEndian.PutUint64(bytez[:], value)
-		s.Memory.SetUnaligned(addr, bytez[:size])
-		//fmt.Printf("store mem: %016x  size: %d  value: %016x\n", addr, size, bytez[:size])
+		leftAddr := addr &^ 31
+		inst.trackMemAccess(leftAddr)
+		if (addr+size-1)&31 == addr&31 { // if aligned
+			s.Memory.SetUnaligned(addr, bytez[:size])
+			return
+		}
+		// if not aligned
+		rightAddr := leftAddr + 32
+		leftSize := rightAddr - addr
+		s.Memory.SetUnaligned(addr, bytez[:leftSize])
+		inst.trackMemAccess(rightAddr)
+		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
 	}
 
 	getMemoryB32 := func(addr uint64) (out [32]byte) {
