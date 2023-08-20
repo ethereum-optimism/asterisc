@@ -17,24 +17,6 @@ const (
 	fdPreimageWrite = 6
 )
 
-var (
-	destRead     = toU64(0)
-	destWrite    = toU64(1)
-	destHeapIncr = toU64(2)
-	destCSRRW    = toU64(3)
-	destCSRRS    = toU64(4)
-	destCSRRC    = toU64(5)
-	destADD      = toU64(6)
-	destSWAP     = toU64(7)
-	destXOR      = toU64(8)
-	destOR       = toU64(9)
-	destAND      = toU64(10)
-	destMIN      = toU64(11)
-	destMAX      = toU64(12)
-	destMINU     = toU64(13)
-	destMAXU     = toU64(14)
-)
-
 func decodeU64(v []byte) (out U64) {
 	if len(v) > 8 {
 		panic("bad u64 decode")
@@ -193,13 +175,13 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
-	loadMem := func(addr U64, size U64, signed bool, proofIndex uint8) (out U64) {
-		if size > 8 {
+	loadMem := func(addr U64, size U64, signed bool, proofIndexL uint8, proofIndexR uint8) (out U64) {
+		if size.val() > 8 {
 			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
 		// load/verify left part
 		leftAddr := and64(addr, not64(toU64(31)))
-		left := b32asBEWord(getMemoryB32(leftAddr, proofIndex))
+		left := b32asBEWord(getMemoryB32(leftAddr, proofIndexL))
 		alignment := sub64(addr, leftAddr)
 
 		right := U256{}
@@ -208,9 +190,11 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		rightShamt := toU64(0)
 		if iszero64(eq64(leftAddr, rightAddr)) {
 			// if unaligned, use second proof for the right part
-			proofIndex += 1
-			// load/verify right part (against updated mem-root)
-			right = b32asBEWord(getMemoryB32(rightAddr, proofIndex))
+			if proofIndexR == 0xff {
+				panic("unexpected need for right-side proof in loadMem")
+			}
+			// load/verify right part
+			right = b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
 			// left content is aligned to right of 32 bytes
 			leftShamt = toU64(0)
 			rightShamt = sub64(sub64(toU64(64), alignment), size)
@@ -246,9 +230,9 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		return
 	}
 
-	storeMem := func(addr U64, size U64, value U64, proofIndex uint8) {
-		if size > 8 {
-			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
+	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
+		if size.val() > 32 {
+			panic(fmt.Errorf("cannot store more than 32 bytes: %d", size))
 		}
 
 		leftAddr := and64(addr, not64(toU64(31)))
@@ -272,7 +256,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				rightMask = shl(shift8, rightMask)
 			}
 			if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) != (U64{}) { // if alignment <= i < alignment+size
-				b := u64ToU256(and64(shr64(value, shr64(toU64(3), sub64(index, alignment))), toU64(0xff)))
+				b := and(shr(u64ToU256(shr64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
 				if leftSide {
 					leftPatch = or(leftPatch, b)
 					leftMask = or(leftMask, toU256(0xff))
@@ -284,23 +268,28 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		}
 
 		// load the left base
-		left := b32asBEWord(getMemoryB32(leftAddr, proofIndex))
+		left := b32asBEWord(getMemoryB32(leftAddr, proofIndexL))
 		// apply the left patch
 		left = or(and(left, not(leftMask)), leftPatch)
 		// write the left
-		setMemoryB32(leftAddr, beWordAsB32(left), proofIndex)
+		setMemoryB32(leftAddr, beWordAsB32(left), proofIndexL)
 
-		proofIndex += 1
 		// if aligned: nothing more to do here
 		if eq64(leftAddr, rightAddr) != (U64{}) {
 			return
 		}
+		if proofIndexR == 0xff {
+			panic("unexpected need for right-side proof in storeMem")
+		}
 		// load the right base (with updated mem root)
-		right := b32asBEWord(getMemoryB32(rightAddr, proofIndex))
+		right := b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
 		// apply the right patch
 		right = or(and(right, not(rightMask)), rightPatch)
 		// write the right (with updated mem root)
-		setMemoryB32(rightAddr, beWordAsB32(right), proofIndex)
+		setMemoryB32(rightAddr, beWordAsB32(right), proofIndexR)
+	}
+	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8) {
+		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
 	}
 
 	loadRegister := func(reg U64) U64 {
@@ -318,7 +307,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			return
 		}
 		if gt64(reg, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad4e9, fmt.Errorf("cannot write invalid register %d value %x", reg.val(), v.val()))
+			revertWithCode(0xbad4e9, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
 		}
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
 		encodeU64(v, stateData[offset.val():offset.val()+8])
@@ -350,45 +339,22 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	getHeap := func() U64 {
 		return decodeU64(stateData[stateOffsetHeap : stateOffsetHeap+8])
 	}
-	setHeap := func(pc U64) {
-		encodeU64(pc, stateData[stateOffsetHeap:stateOffsetHeap+8])
+	setHeap := func(v U64) {
+		encodeU64(v, stateData[stateOffsetHeap:stateOffsetHeap+8])
 	}
 
-	opMem := func(op U64, addr U64, size U64, value U64) U64 {
-		v := loadMem(addr, size, true)
-		out := v
-		switch op {
-		case destADD:
-			v = add64(v, value)
-		case destSWAP:
-			v = value
-		case destXOR:
-			v = xor64(v, value)
-		case destOR:
-			v = or64(v, value)
-		case destAND:
-			v = and64(v, value)
-		case destMIN:
-			if slt64(value, v) != (U64{}) {
-				v = value
-			}
-		case destMAX:
-			if sgt64(value, v) != (U64{}) {
-				v = value
-			}
-		case destMINU:
-			if lt64(value, v) != (U64{}) {
-				v = value
-			}
-		case destMAXU:
-			if gt64(value, v) != (U64{}) {
-				v = value
-			}
-		default:
-			revertWithCode(0xbadc0de1, fmt.Errorf("unrecognized mem op: %d", op))
-		}
-		storeMem(addr, size, v)
-		return out
+	getPreimageKey := func() [32]byte {
+		return *(*[32]byte)(stateData[stateOffsetPreimageKey : stateOffsetPreimageKey+32])
+	}
+	setPreimageKey := func(k [32]byte) {
+		copy(stateData[stateOffsetPreimageKey:stateOffsetPreimageKey+32], k[:])
+	}
+
+	getPreimageOffset := func() U64 {
+		return decodeU64(stateData[stateOffsetPreimageOffset : stateOffsetPreimageOffset+8])
+	}
+	setPreimageOffset := func(v U64) {
+		encodeU64(v, stateData[stateOffsetPreimageOffset:stateOffsetPreimageOffset+8])
 	}
 
 	updateCSR := func(num U64, v U64, mode U64) (out U64) {
@@ -414,7 +380,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			count = maxData
 		}
 
-		dat := b32asBEWord(getMemoryB32(sub64(addr, alignment)))
+		dat := b32asBEWord(getMemoryB32(sub64(addr, alignment), 1))
 		// shift out leading bits
 		dat = shl(u64ToU256(shl64(toU64(3), alignment)), dat)
 		// shift to right end, remove trailing bits
@@ -422,7 +388,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 
 		bits := shl(toU256(3), u64ToU256(count))
 
-		preImageKey := s.PreimageKey
+		preImageKey := getPreimageKey()
 
 		// Append to key content by bit-shifting
 		key := b32asBEWord(preImageKey)
@@ -430,19 +396,19 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		key = or(key, dat)
 
 		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
-		s.PreimageKey = beWordAsB32(key)
-		s.PreimageOffset = 0
+		setPreimageKey(beWordAsB32(key))
+		setPreimageOffset(toU64(0))
 		return count
 	}
 
 	readPreimageValue := func(addr U64, count U64) U64 {
-		preImageKey, offset := s.PreimageKey, s.PreimageOffset
+		preImageKey, offset := getPreimageKey(), getPreimageOffset()
 
-		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
+		pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.val()) // pdat is left-aligned
 		if err != nil {
 			revertWithCode(0xbadf00d, err)
 		}
-		if iszero64(pdatlen) { // EOF
+		if iszero64(toU64(pdatlen)) { // EOF
 			return toU64(0)
 		}
 		alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
@@ -462,13 +428,12 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 
 		// update pre-image reader with updated offset
 		newOffset := add64(offset, count)
-		//s.PreimageKey = preImageKey   // key stays the same
-		s.PreimageOffset = newOffset
+		setPreimageOffset(newOffset)
 
-		node := getMemoryB32(sub64(addr, alignment))
+		node := getMemoryB32(sub64(addr, alignment), 1)
 		dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
 		dat = or(dat, and(pdat, mask))           // fill with bytes from pdat
-		setMemoryB32(sub64(addr, alignment), beWordAsB32(dat))
+		setMemoryB32(sub64(addr, alignment), beWordAsB32(dat), 1)
 		return count
 	}
 
@@ -603,9 +568,10 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			writeRegister(toU64(10), toU64(0))
 			writeRegister(toU64(11), toU64(0))
 		case 113: // clock_gettime
-			addr := loadRegister(toU64(11))                      // addr of timespec struct
-			storeMem(addr, toU64(8), shortToU64(1337))           // seconds
-			storeMem(add64(addr, toU64(8)), toU64(8), toU64(42)) // nanoseconds: must be nonzero to pass Go runtimeInitTime check
+			addr := loadRegister(toU64(11)) // addr of timespec struct
+			// first 8 bytes: tv_sec: 1337 seconds
+			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
+			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
 			writeRegister(toU64(10), toU64(0))
 			writeRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
@@ -626,8 +592,9 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			addr := loadRegister(toU64(11))
 			switch res.val() {
 			case 0x7: // RLIMIT_NOFILE
-				storeMem(addr, toU64(8), shortToU64(1024))                  // soft limit. 1024 file handles max open
-				storeMem(add64(addr, toU64(8)), toU64(8), shortToU64(1024)) // hard limit
+				// first 8 bytes: soft limit. 1024 file handles max open
+				// second 8 bytes: hard limit
+				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2)
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
@@ -637,7 +604,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	pc := getPC()
-	instr := loadMem(pc, toU64(4), false) // raw instruction
+	instr := loadMem(pc, toU64(4), false, 0, 0xff) // raw instruction
 
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
@@ -655,7 +622,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		rs1Value := loadRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-		rdValue := loadMem(memIndex, size, signed)
+		rdValue := loadMem(memIndex, size, signed, 1, 2)
 		writeRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x23: // 010_0011: memory storing
@@ -665,7 +632,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		value := loadRegister(rs2)
 		rs1Value := loadRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-		storeMem(memIndex, size, value)
+		storeMem(memIndex, size, value, 1, 2)
 		setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
 		rs1Value := loadRegister(rs1)
@@ -946,14 +913,14 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		op := shr64(toU64(2), funct7)
 		switch op.val() {
 		case 0x2: // 00010 = LR = Load Reserved
-			v := loadMem(addr, size, true)
+			v := loadMem(addr, size, true, 1, 2)
 			writeRegister(rd, v)
 			setLoadReservation(addr)
 		case 0x3: // 00011 = SC = Store Conditional
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != (U64{}) {
 				rs2Value := loadRegister(rs2)
-				storeMem(addr, size, rs2Value)
+				storeMem(addr, size, rs2Value, 1, 2)
 				rdValue = toU64(0)
 			}
 			writeRegister(rd, rdValue)
@@ -963,33 +930,40 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			if eq64(size, toU64(4)) != (U64{}) {
 				rs2Value = mask32Signed64(rs2Value)
 			}
-			// Specifying the operation allows us to implement it closer to the memory for smaller witness data.
-			// And that too can be optimized: only one 32 bytes leaf is affected,
-			// since AMOs are always 4 or 8 byte aligned (Zam extension not supported here).
-			var dest U64
+			value := rs2Value
+			v := loadMem(addr, size, true, 1, 2)
 			switch op.val() {
 			case 0x0: // 00000 = AMOADD = add
-				dest = destADD
+				v = add64(v, value)
 			case 0x1: // 00001 = AMOSWAP
-				dest = destSWAP
+				v = value
 			case 0x4: // 00100 = AMOXOR = xor
-				dest = destXOR
+				v = xor64(v, value)
 			case 0x8: // 01000 = AMOOR = or
-				dest = destOR
+				v = or64(v, value)
 			case 0xc: // 01100 = AMOAND = and
-				dest = destAND
+				v = and64(v, value)
 			case 0x10: // 10000 = AMOMIN = min signed
-				dest = destMIN
+				if slt64(value, v) != (U64{}) {
+					v = value
+				}
 			case 0x14: // 10100 = AMOMAX = max signed
-				dest = destMAX
+				if sgt64(value, v) != (U64{}) {
+					v = value
+				}
 			case 0x18: // 11000 = AMOMINU = min unsigned
-				dest = destMINU
+				if lt64(value, v) != (U64{}) {
+					v = value
+				}
 			case 0x1c: // 11100 = AMOMAXU = max unsigned
-				dest = destMAXU
+				if gt64(value, v) != (U64{}) {
+					v = value
+				}
 			default:
 				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
 			}
-			rdValue := opMem(dest, addr, size, rs2Value) // TODO
+			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
+			rdValue := v
 			writeRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))
@@ -1007,6 +981,5 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	default:
 		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
-
 	return
 }

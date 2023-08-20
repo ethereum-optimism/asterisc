@@ -87,7 +87,7 @@ func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]b
 	return
 }
 
-func (m *InstrumentedState) trackMemAccess(effAddr uint64) {
+func (m *InstrumentedState) trackMemAccess(effAddr uint64, proofIndex uint8) {
 	if effAddr&31 != 0 {
 		panic("effective memory access must be aligned to 32 bytes")
 	}

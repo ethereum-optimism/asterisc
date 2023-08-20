@@ -16,32 +16,25 @@ const (
 	fdPreimageWrite = 6
 )
 
-var (
-	destRead     = toU64(0)
-	destWrite    = toU64(1)
-	destHeapIncr = toU64(2)
-	destCSRRW    = toU64(3)
-	destCSRRS    = toU64(4)
-	destCSRRC    = toU64(5)
-	destADD      = toU64(6)
-	destSWAP     = toU64(7)
-	destXOR      = toU64(8)
-	destOR       = toU64(9)
-	destAND      = toU64(10)
-	destMIN      = toU64(11)
-	destMAX      = toU64(12)
-	destMINU     = toU64(13)
-	destMAXU     = toU64(14)
-)
-
 // riscvStep runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
 func (inst *InstrumentedState) riscvStep() (outErr error) {
 	s := inst.state
 
-	if s.Exited {
+	getExited := func() (exited bool) {
+		return s.Exited
+	}
+	setExited := func() {
+		s.Exited = true
+	}
+	setExitCode := func(v uint8) {
+		s.ExitCode = v
+	}
+
+	if getExited() {
 		return nil
 	}
+
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
@@ -57,13 +50,16 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		panic(err)
 	}
 
-	loadMem := func(addr uint64, size uint64, signed bool) uint64 {
+	loadMem := func(addr uint64, size uint64, signed bool, proofIndexL uint8, proofIndexR uint8) uint64 {
 		if size > 8 {
 			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
-		inst.trackMemAccess(addr &^ 31)
+		inst.trackMemAccess(addr&^31, proofIndexL)
 		if (addr+size-1)&31 != addr&31 {
-			inst.trackMemAccess((addr + size - 1) &^ 31)
+			if proofIndexR == 0xff {
+				panic("unexpected need for right-side proof in loadMem")
+			}
+			inst.trackMemAccess((addr+size-1)&^31, proofIndexR)
 		}
 		var out [8]byte
 		s.Memory.GetUnaligned(addr, out[:size])
@@ -75,15 +71,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
 		return v
 	}
-	storeMem := func(addr uint64, size uint64, value uint64) {
+	storeMem := func(addr uint64, size uint64, value uint64, proofIndexL uint8, proofIndexR uint8) {
 		if size > 8 {
 			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
 		}
 		var bytez [8]byte
 		binary.LittleEndian.PutUint64(bytez[:], value)
 		leftAddr := addr &^ 31
-		inst.trackMemAccess(leftAddr)
+		inst.trackMemAccess(leftAddr, proofIndexL)
 		if (addr+size-1)&31 == addr&31 { // if aligned
+			if proofIndexR == 0xff {
+				panic("unexpected need for right-side proof in storeMem")
+			}
 			s.Memory.SetUnaligned(addr, bytez[:size])
 			return
 		}
@@ -91,31 +90,61 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
 		s.Memory.SetUnaligned(addr, bytez[:leftSize])
-		inst.trackMemAccess(rightAddr)
+		inst.trackMemAccess(rightAddr, proofIndexR)
+		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
+	}
+	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
+		if size > 32 {
+			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
+		}
+		var bytez [32]byte
+		binary.LittleEndian.PutUint64(bytez[:8], value[0])
+		binary.LittleEndian.PutUint64(bytez[8:16], value[1])
+		binary.LittleEndian.PutUint64(bytez[16:24], value[2])
+		binary.LittleEndian.PutUint64(bytez[24:], value[3])
+
+		leftAddr := addr &^ 31
+		inst.trackMemAccess(leftAddr, proofIndexL)
+		if (addr+size-1)&31 == addr&31 { // if aligned
+			if proofIndexR == 0xff {
+				panic("unexpected need for right-side proof in storeMem")
+			}
+			s.Memory.SetUnaligned(addr, bytez[:size])
+			return
+		}
+		// if not aligned
+		rightAddr := leftAddr + 32
+		leftSize := rightAddr - addr
+		s.Memory.SetUnaligned(addr, bytez[:leftSize])
+		inst.trackMemAccess(rightAddr, proofIndexR)
 		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
 	}
 
-	getMemoryB32 := func(addr uint64) (out [32]byte) {
+	getMemoryB32 := func(addr uint64, proofIndex uint8) (out [32]byte) {
 		if addr&31 != 0 {
 			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
-		inst.trackMemAccess(addr)
+		inst.trackMemAccess(addr, proofIndex)
 		s.Memory.GetUnaligned(addr, out[:])
 		return
 	}
 
-	setMemoryB32 := func(addr uint64, v [32]byte) {
+	setMemoryB32 := func(addr uint64, v [32]byte, proofIndex uint8) {
 		if addr&31 != 0 {
 			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
+		inst.trackMemAccess(addr, proofIndex)
 		s.Memory.SetUnaligned(addr, v[:])
 	}
 
-	loadRegister := func(reg uint64) uint64 {
+	loadRegister := func(reg U64) U64 {
+		if reg > 31 {
+			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg))
+		}
 		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		return s.Registers[reg]
 	}
-	writeRegister := func(reg uint64, v uint64) {
+	writeRegister := func(reg U64, v U64) {
 		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
 		if reg == 0 { // reg 0 must stay 0
 			// v is a HINT, but no hints are specified by standard spec, or used by us.
@@ -127,64 +156,48 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		s.Registers[reg] = v
 	}
 
-	getLoadReservation := func() uint64 {
+	getLoadReservation := func() U64 {
 		return s.LoadReservation
 	}
-	setLoadReservation := func(addr uint64) {
+	setLoadReservation := func(addr U64) {
 		s.LoadReservation = addr
 	}
 
-	writeCSR := func(num uint64, v uint64) {
+	writeCSR := func(num U64, v U64) {
 		// TODO: do we need CSR?
 	}
 
-	readCSR := func(num uint64) uint64 {
+	readCSR := func(num U64) U64 {
 		// TODO: do we need CSR?
-		return 0
+		return toU64(0)
 	}
 
-	getPC := func() uint64 {
+	getPC := func() U64 {
 		return s.PC
 	}
-	setPC := func(pc uint64) {
+	setPC := func(pc U64) {
 		s.PC = pc
 	}
 
-	opMem := func(op U64, addr U64, size U64, value U64) U64 {
-		v := loadMem(addr, size, true)
-		out := v
-		switch op {
-		case destADD:
-			v = add64(v, value)
-		case destSWAP:
-			v = value
-		case destXOR:
-			v = xor64(v, value)
-		case destOR:
-			v = or64(v, value)
-		case destAND:
-			v = and64(v, value)
-		case destMIN:
-			if slt64(value, v) != 0 {
-				v = value
-			}
-		case destMAX:
-			if sgt64(value, v) != 0 {
-				v = value
-			}
-		case destMINU:
-			if lt64(value, v) != 0 {
-				v = value
-			}
-		case destMAXU:
-			if gt64(value, v) != 0 {
-				v = value
-			}
-		default:
-			revertWithCode(0xbadc0de1, fmt.Errorf("unrecognized mem op: %d", op))
-		}
-		storeMem(addr, size, v)
-		return out
+	getHeap := func() U64 {
+		return s.Heap
+	}
+	setHeap := func(v U64) {
+		s.Heap = v
+	}
+
+	getPreimageKey := func() [32]byte {
+		return s.PreimageKey
+	}
+	setPreimageKey := func(k [32]byte) {
+		s.PreimageKey = k
+	}
+
+	getPreimageOffset := func() U64 {
+		return s.PreimageOffset
+	}
+	setPreimageOffset := func(v U64) {
+		s.PreimageOffset = v
 	}
 
 	updateCSR := func(num U64, v U64, mode U64) (out U64) {
@@ -210,15 +223,15 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			count = maxData
 		}
 
-		dat := b32asBEWord(getMemoryB32(addr - alignment))
+		dat := b32asBEWord(getMemoryB32(sub64(addr, alignment), 1))
 		// shift out leading bits
-		dat = shl(u64ToU256(shl64(3, alignment)), dat)
+		dat = shl(u64ToU256(shl64(toU64(3), alignment)), dat)
 		// shift to right end, remove trailing bits
-		dat = shr(u64ToU256(shl64(3, sub64(32, count))), dat)
+		dat = shr(u64ToU256(shl64(toU64(3), sub64(toU64(32), count))), dat)
 
 		bits := shl(toU256(3), u64ToU256(count))
 
-		preImageKey := s.PreimageKey
+		preImageKey := getPreimageKey()
 
 		// Append to key content by bit-shifting
 		key := b32asBEWord(preImageKey)
@@ -226,13 +239,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		key = or(key, dat)
 
 		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
-		s.PreimageKey = beWordAsB32(key)
-		s.PreimageOffset = 0
+		setPreimageKey(beWordAsB32(key))
+		setPreimageOffset(toU64(0))
 		return count
 	}
 
 	readPreimageValue := func(addr U64, count U64) U64 {
-		preImageKey, offset := s.PreimageKey, s.PreimageOffset
+		preImageKey, offset := getPreimageKey(), getPreimageOffset()
 
 		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
@@ -258,29 +271,27 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		// update pre-image reader with updated offset
 		newOffset := add64(offset, count)
-		//s.PreimageKey = preImageKey   // key stays the same
-		s.PreimageOffset = newOffset
+		setPreimageOffset(newOffset)
 
-		node := getMemoryB32(addr - alignment)
+		node := getMemoryB32(sub64(addr, alignment), 1)
 		dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
 		dat = or(dat, and(pdat, mask))           // fill with bytes from pdat
-		setMemoryB32(addr-alignment, beWordAsB32(dat))
+		setMemoryB32(sub64(addr, alignment), beWordAsB32(dat), 1)
 		return count
 	}
 
 	sysCall := func() {
 		a7 := loadRegister(toU64(17))
-
 		switch a7 {
 		case 93: // exit the calling thread. No multi-thread support yet, so just exit.
 			a0 := loadRegister(toU64(10))
-			s.ExitCode = uint8(a0)
-			s.Exited = true
+			setExitCode(uint8(a0))
+			setExited()
 			// program stops here, no need to change registers.
 		case 94: // exit-group
 			a0 := loadRegister(toU64(10))
-			s.ExitCode = uint8(a0)
-			s.Exited = true
+			setExitCode(uint8(a0))
+			setExited()
 		case 214: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
@@ -307,8 +318,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				if align != 0 {
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
-				writeRegister(toU64(10), s.Heap)
-				s.Heap += length // increment heap with length
+				prevHeap := getHeap()
+				writeRegister(toU64(10), prevHeap)
+				setHeap(add64(prevHeap, length)) // increment heap with length
 				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
@@ -419,9 +431,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			writeRegister(toU64(10), toU64(0))
 			writeRegister(toU64(11), toU64(0))
 		case 113: // clock_gettime
-			addr := loadRegister(toU64(11))                      // addr of timespec struct
-			storeMem(addr, toU64(8), shortToU64(1337))           // seconds
-			storeMem(add64(addr, toU64(8)), toU64(8), toU64(42)) // nanoseconds: must be nonzero to pass Go runtimeInitTime check
+			addr := loadRegister(toU64(11)) // addr of timespec struct
+			// first 8 bytes: tv_sec: 1337 seconds
+			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
+			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
 			writeRegister(toU64(10), toU64(0))
 			writeRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
@@ -442,8 +455,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			addr := loadRegister(toU64(11))
 			switch res {
 			case 0x7: // RLIMIT_NOFILE
-				storeMem(addr, toU64(8), shortToU64(1024))                  // soft limit. 1024 file handles max open
-				storeMem(add64(addr, toU64(8)), toU64(8), shortToU64(1024)) // hard limit
+				// first 8 bytes: soft limit. 1024 file handles max open
+				// second 8 bytes: hard limit
+				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2)
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
@@ -453,7 +467,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 
 	pc := getPC()
-	instr := loadMem(pc, toU64(4), false) // raw instruction
+	instr := loadMem(pc, toU64(4), false, 0, 0xff) // raw instruction
 
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
@@ -471,7 +485,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		rs1Value := loadRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-		rdValue := loadMem(memIndex, size, signed)
+		rdValue := loadMem(memIndex, size, signed, 1, 2)
 		writeRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x23: // 010_0011: memory storing
@@ -481,7 +495,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		value := loadRegister(rs2)
 		rs1Value := loadRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-		storeMem(memIndex, size, value)
+		storeMem(memIndex, size, value, 1, 2)
 		setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
 		rs1Value := loadRegister(rs1)
@@ -762,14 +776,14 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		op := shr64(toU64(2), funct7)
 		switch op {
 		case 0x2: // 00010 = LR = Load Reserved
-			v := loadMem(addr, size, true)
+			v := loadMem(addr, size, true, 1, 2)
 			writeRegister(rd, v)
 			setLoadReservation(addr)
 		case 0x3: // 00011 = SC = Store Conditional
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != 0 {
 				rs2Value := loadRegister(rs2)
-				storeMem(addr, size, rs2Value)
+				storeMem(addr, size, rs2Value, 1, 2)
 				rdValue = toU64(0)
 			}
 			writeRegister(rd, rdValue)
@@ -779,33 +793,40 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			if eq64(size, toU64(4)) != 0 {
 				rs2Value = mask32Signed64(rs2Value)
 			}
-			// Specifying the operation allows us to implement it closer to the memory for smaller witness data.
-			// And that too can be optimized: only one 32 bytes leaf is affected,
-			// since AMOs are always 4 or 8 byte aligned (Zam extension not supported here).
-			var dest U64
+			value := rs2Value
+			v := loadMem(addr, size, true, 1, 2)
 			switch op {
 			case 0x0: // 00000 = AMOADD = add
-				dest = destADD
+				v = add64(v, value)
 			case 0x1: // 00001 = AMOSWAP
-				dest = destSWAP
+				v = value
 			case 0x4: // 00100 = AMOXOR = xor
-				dest = destXOR
+				v = xor64(v, value)
 			case 0x8: // 01000 = AMOOR = or
-				dest = destOR
+				v = or64(v, value)
 			case 0xc: // 01100 = AMOAND = and
-				dest = destAND
+				v = and64(v, value)
 			case 0x10: // 10000 = AMOMIN = min signed
-				dest = destMIN
+				if slt64(value, v) != 0 {
+					v = value
+				}
 			case 0x14: // 10100 = AMOMAX = max signed
-				dest = destMAX
+				if sgt64(value, v) != 0 {
+					v = value
+				}
 			case 0x18: // 11000 = AMOMINU = min unsigned
-				dest = destMINU
+				if lt64(value, v) != 0 {
+					v = value
+				}
 			case 0x1c: // 11100 = AMOMAXU = max unsigned
-				dest = destMAXU
+				if gt64(value, v) != 0 {
+					v = value
+				}
 			default:
 				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
 			}
-			rdValue := opMem(dest, addr, size, rs2Value)
+			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
+			rdValue := v
 			writeRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))

@@ -23,6 +23,14 @@ func shortToU64(v uint16) U64 {
 	return U64(*uint256.NewInt(uint64(v)))
 }
 
+func shortToU256(v uint16) U256 {
+	return *uint256.NewInt(uint64(v))
+}
+
+func longToU256(v uint64) U256 {
+	return *uint256.NewInt(v)
+}
+
 func u256ToU64(v U256) U64 {
 	return U64(and(v, U256(u64Mask())))
 }
