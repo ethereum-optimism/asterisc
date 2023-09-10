@@ -62,31 +62,6 @@ const (
 )
 
 func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr error) {
-	calldataload := func(offset U64) (out [32]byte) {
-		copy(out[:], calldata[offset.val():])
-		return
-	}
-
-	stateData := calldata[4 : 4+stateSize]
-
-	computeStateHash := func() [32]byte {
-		return crypto.Keccak256Hash(stateData)
-	}
-
-	getExited := func() (exited bool) {
-		return stateData[stateOffsetExited] != 0
-	}
-	setExited := func() {
-		stateData[stateOffsetExited] = 1
-	}
-	setExitCode := func(v uint8) {
-		stateData[stateOffsetExitCode] = v
-	}
-
-	if getExited() {
-		return computeStateHash(), nil
-	}
-
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
@@ -102,6 +77,44 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		panic(err)
 	}
 
+	//
+	// Yul64 - functions to do 64 bit math - see yul64.go
+	//
+
+	//
+	// Bit hacking util
+	//
+
+	//
+	// State layout
+	//
+
+	//
+	// Initial EVM memory / calldata checks
+	//
+	calldataload := func(offset U64) (out [32]byte) {
+		copy(out[:], calldata[offset.val():])
+		return
+	}
+	// TODO check length
+	// TODO check calldata stateData size
+
+	//
+	// State loading
+	//
+	// TODO
+	stateData := calldata[:stateSize]
+
+	//
+	// State output
+	//
+	computeStateHash := func() [32]byte {
+		return crypto.Keccak256Hash(stateData)
+	}
+
+	//
+	// State access
+	//
 	getMemRoot := func() (out [32]byte) {
 		copy(out[:], stateData[stateOffsetMemRoot:stateOffsetMemRoot+32])
 		return
@@ -110,6 +123,88 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		copy(stateData[stateOffsetMemRoot:stateOffsetMemRoot+32], v[:])
 	}
 
+	getPreimageKey := func() [32]byte {
+		return *(*[32]byte)(stateData[stateOffsetPreimageKey : stateOffsetPreimageKey+32])
+	}
+	setPreimageKey := func(k [32]byte) {
+		copy(stateData[stateOffsetPreimageKey:stateOffsetPreimageKey+32], k[:])
+	}
+
+	getPreimageOffset := func() U64 {
+		return decodeU64(stateData[stateOffsetPreimageOffset : stateOffsetPreimageOffset+8])
+	}
+	setPreimageOffset := func(v U64) {
+		encodeU64(v, stateData[stateOffsetPreimageOffset:stateOffsetPreimageOffset+8])
+	}
+
+	getPC := func() U64 {
+		return decodeU64(stateData[stateOffsetPC : stateOffsetPC+8])
+	}
+	setPC := func(pc U64) {
+		encodeU64(pc, stateData[stateOffsetPC:stateOffsetPC+8])
+	}
+
+	getExited := func() (exited bool) {
+		return stateData[stateOffsetExited] != 0
+	}
+	setExited := func() {
+		stateData[stateOffsetExited] = 1
+	}
+
+	// no getExitCode necessary
+	setExitCode := func(v uint8) {
+		stateData[stateOffsetExitCode] = v
+	}
+
+	getStep := func() U64 {
+		return decodeU64(stateData[stateOffsetStep : stateOffsetStep+8])
+	}
+	setStep := func(v U64) {
+		encodeU64(v, stateData[stateOffsetStep:stateOffsetStep+8])
+	}
+
+	getHeap := func() U64 {
+		return decodeU64(stateData[stateOffsetHeap : stateOffsetHeap+8])
+	}
+	setHeap := func(v U64) {
+		encodeU64(v, stateData[stateOffsetHeap:stateOffsetHeap+8])
+	}
+
+	getLoadReservation := func() U64 {
+		return decodeU64(stateData[stateOffsetLoadReservation : stateOffsetLoadReservation+8])
+	}
+	setLoadReservation := func(addr U64) {
+		encodeU64(addr, stateData[stateOffsetLoadReservation:stateOffsetLoadReservation+8])
+	}
+
+	getRegister := func(reg U64) U64 {
+		if gt64(reg, toU64(31)) != (U64{}) {
+			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg.val()))
+		}
+		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
+		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
+		return decodeU64(stateData[offset.val() : offset.val()+8])
+	}
+	setRegister := func(reg U64, v U64) {
+		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
+		if iszero64(reg) { // reg 0 must stay 0
+			// v is a HINT, but no hints are specified by standard spec, or used by us.
+			return
+		}
+		if gt64(reg, toU64(31)) != (U64{}) {
+			revertWithCode(0xbad4e9, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
+		}
+		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
+		encodeU64(v, stateData[offset.val():offset.val()+8])
+	}
+
+	//
+	// Parse - functions to parse RISC-V instructions - see parse.go
+	//
+
+	//
+	// Memory functions
+	//
 	proofOffset := func(proofIndex uint8) (offset U64) {
 		// proof size: 63 siblings, 1 leaf value, each 32 bytes
 		offset = mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
@@ -294,69 +389,16 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
 	}
 
-	loadRegister := func(reg U64) U64 {
-		if gt64(reg, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg.val()))
-		}
-		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
-		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
-		return decodeU64(stateData[offset.val() : offset.val()+8])
-	}
-	writeRegister := func(reg U64, v U64) {
-		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
-		if iszero64(reg) { // reg 0 must stay 0
-			// v is a HINT, but no hints are specified by standard spec, or used by us.
-			return
-		}
-		if gt64(reg, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad4e9, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
-		}
-		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
-		encodeU64(v, stateData[offset.val():offset.val()+8])
-	}
-
-	getLoadReservation := func() U64 {
-		return decodeU64(stateData[stateOffsetLoadReservation : stateOffsetLoadReservation+8])
-	}
-	setLoadReservation := func(addr U64) {
-		encodeU64(addr, stateData[stateOffsetLoadReservation:stateOffsetLoadReservation+8])
-	}
-
-	writeCSR := func(num U64, v U64) {
-		// TODO: do we need CSR?
-	}
-
+	//
+	// CSR (control and status registers) functions
+	//
 	readCSR := func(num U64) U64 {
 		// TODO: do we need CSR?
 		return toU64(0)
 	}
 
-	getPC := func() U64 {
-		return decodeU64(stateData[stateOffsetPC : stateOffsetPC+8])
-	}
-	setPC := func(pc U64) {
-		encodeU64(pc, stateData[stateOffsetPC:stateOffsetPC+8])
-	}
-
-	getHeap := func() U64 {
-		return decodeU64(stateData[stateOffsetHeap : stateOffsetHeap+8])
-	}
-	setHeap := func(v U64) {
-		encodeU64(v, stateData[stateOffsetHeap:stateOffsetHeap+8])
-	}
-
-	getPreimageKey := func() [32]byte {
-		return *(*[32]byte)(stateData[stateOffsetPreimageKey : stateOffsetPreimageKey+32])
-	}
-	setPreimageKey := func(k [32]byte) {
-		copy(stateData[stateOffsetPreimageKey:stateOffsetPreimageKey+32], k[:])
-	}
-
-	getPreimageOffset := func() U64 {
-		return decodeU64(stateData[stateOffsetPreimageOffset : stateOffsetPreimageOffset+8])
-	}
-	setPreimageOffset := func(v U64) {
-		encodeU64(v, stateData[stateOffsetPreimageOffset:stateOffsetPreimageOffset+8])
+	writeCSR := func(num U64, v U64) {
+		// TODO: do we need CSR?
 	}
 
 	updateCSR := func(num U64, v U64, mode U64) (out U64) {
@@ -374,6 +416,9 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		return
 	}
 
+	//
+	// Preimage oracle interactions
+	//
 	writePreimageKey := func(addr U64, count U64) U64 {
 		// adjust count down, so we only have to read a single 32 byte leaf of memory
 		alignment := and64(addr, toU64(31))
@@ -440,16 +485,19 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		return count
 	}
 
+	//
+	// Syscall handling
+	//
 	sysCall := func() {
-		a7 := loadRegister(toU64(17))
+		a7 := getRegister(toU64(17))
 		switch a7.val() {
 		case 93: // exit the calling thread. No multi-thread support yet, so just exit.
-			a0 := loadRegister(toU64(10))
+			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0.val()))
 			setExited()
 			// program stops here, no need to change registers.
 		case 94: // exit-group
-			a0 := loadRegister(toU64(10))
+			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0.val()))
 			setExited()
 		case 214: // brk
@@ -457,13 +505,13 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 
 			// brk(0) changes nothing about the memory, and returns the current page break
 			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
-			writeRegister(toU64(10), v)
-			writeRegister(toU64(11), toU64(0)) // no error
+			setRegister(toU64(10), v)
+			setRegister(toU64(11), toU64(0)) // no error
 		case 222: // mmap
 			// A0 = addr (hint)
-			addr := loadRegister(toU64(10))
+			addr := getRegister(toU64(10))
 			// A1 = n (length)
-			length := loadRegister(toU64(11))
+			length := getRegister(toU64(11))
 			// A2 = prot (memory protection type, can ignore)
 			// A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe assert the MAP_ANONYMOUS flag is set
 			// A4 = fd (file descriptor, can ignore because we support anon memory only)
@@ -479,18 +527,18 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
 				prevHeap := getHeap()
-				writeRegister(toU64(10), prevHeap)
+				setRegister(toU64(10), prevHeap)
 				setHeap(add64(prevHeap, length)) // increment heap with length
 				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
 				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
-			writeRegister(toU64(11), toU64(0)) // no error
+			setRegister(toU64(11), toU64(0)) // no error
 		case 63: // read
-			fd := loadRegister(toU64(10))    // A0 = fd
-			addr := loadRegister(toU64(11))  // A1 = *buf addr
-			count := loadRegister(toU64(12)) // A2 = count
+			fd := getRegister(toU64(10))    // A0 = fd
+			addr := getRegister(toU64(11))  // A1 = *buf addr
+			count := getRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd.val() {
 			case fdStdin: // stdin
@@ -507,12 +555,12 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				n = u64Mask()         //  -1 (reading error)
 				errCode = toU64(0x4d) // EBADF
 			}
-			writeRegister(toU64(10), n)
-			writeRegister(toU64(11), errCode)
+			setRegister(toU64(10), n)
+			setRegister(toU64(11), errCode)
 		case 64: // write
-			fd := loadRegister(toU64(10))    // A0 = fd
-			addr := loadRegister(toU64(11))  // A1 = *buf addr
-			count := loadRegister(toU64(12)) // A2 = count
+			fd := getRegister(toU64(10))    // A0 = fd
+			addr := getRegister(toU64(11))  // A1 = *buf addr
+			count := getRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd.val() {
 			case fdStdout: // stdout
@@ -531,11 +579,11 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				n = u64Mask()         //  -1 (writing error)
 				errCode = toU64(0x4d) // EBADF
 			}
-			writeRegister(toU64(10), n)
-			writeRegister(toU64(11), errCode)
+			setRegister(toU64(10), n)
+			setRegister(toU64(11), errCode)
 		case 25: // fcntl - file descriptor manipulation / info lookup
-			fd := loadRegister(toU64(10))  // A0 = fd
-			cmd := loadRegister(toU64(11)) // A1 = cmd
+			fd := getRegister(toU64(10))  // A0 = fd
+			cmd := getRegister(toU64(11)) // A1 = cmd
 			var out, errCode U64
 			switch cmd.val() {
 			case 0x3: // F_GETFL: get file descriptor flags
@@ -562,37 +610,37 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				out = u64Mask()
 				errCode = toU64(0x16) // EINVAL (cmd not recognized by this kernel)
 			}
-			writeRegister(toU64(10), out)
-			writeRegister(toU64(11), errCode) // EBADF
+			setRegister(toU64(10), out)
+			setRegister(toU64(11), errCode) // EBADF
 		case 56: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
-			writeRegister(toU64(10), u64Mask())
-			writeRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+			setRegister(toU64(10), u64Mask())
+			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
 		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 113: // clock_gettime
-			addr := loadRegister(toU64(11)) // addr of timespec struct
+			addr := getRegister(toU64(11)) // addr of timespec struct
 			// first 8 bytes: tv_sec: 1337 seconds
 			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
 			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 132: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 178: // gettid - hardcode to 0
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 134: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		//case 220: // clone - not supported
 		case 163: // getrlimit
-			res := loadRegister(toU64(10))
-			addr := loadRegister(toU64(11))
+			res := getRegister(toU64(10))
+			addr := getRegister(toU64(11))
 			switch res.val() {
 			case 0x7: // RLIMIT_NOFILE
 				// first 8 bytes: soft limit. 1024 file handles max open
@@ -605,6 +653,15 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
 	}
+
+	//
+	// Instruction execution
+	//
+
+	if getExited() { // early exit if we can
+		return computeStateHash(), nil
+	}
+	setStep(add64(getStep(), toU64(1)))
 
 	pc := getPC()
 	instr := loadMem(pc, toU64(4), false, 0, 0xff) // raw instruction
@@ -623,23 +680,23 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
 		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := loadMem(memIndex, size, signed, 1, 2)
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
 		size := shl64(funct3, toU64(1))
-		value := loadRegister(rs2)
-		rs1Value := loadRegister(rs1)
+		value := getRegister(rs2)
+		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		storeMem(memIndex, size, value, 1, 2)
 		setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
-		rs1Value := loadRegister(rs1)
-		rs2Value := loadRegister(rs2)
+		rs1Value := getRegister(rs1)
+		rs2Value := getRegister(rs2)
 		branchHit := toU64(0)
 		switch funct3.val() {
 		case 0: // 000 = BEQ
@@ -667,7 +724,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		setPC(pc)
 	case 0x13: // 001_0011: immediate arithmetic and logic
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3.val() {
@@ -693,10 +750,10 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		case 7: // 111 = ANDI
 			rdValue = and64(rs1Value, imm)
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3.val() {
@@ -713,11 +770,11 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x33: // 011_0011: register arithmetic and logic
-		rs1Value := loadRegister(rs1)
-		rs2Value := loadRegister(rs2)
+		rs1Value := getRegister(rs1)
+		rs2Value := getRegister(rs2)
 		var rdValue U64
 		switch funct7.val() {
 		case 1: // RV M extension
@@ -789,11 +846,11 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				rdValue = and64(rs1Value, rs2Value)
 			}
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
-		rs1Value := loadRegister(rs1)
-		rs2Value := loadRegister(rs2)
+		rs1Value := getRegister(rs1)
+		rs2Value := getRegister(rs2)
 		var rdValue U64
 		switch funct7.val() {
 		case 1: // RV M extension
@@ -850,28 +907,28 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				}
 			}
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
 		rdValue := shl64(toU64(12), imm)
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
 		rdValue := add64(pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3.val() {
@@ -887,11 +944,11 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			imm := parseCSSR(instr)
 			value := rs1
 			if iszero64(and64(funct3, toU64(4))) {
-				value = loadRegister(rs1)
+				value = getRegister(rs1)
 			}
 			mode := and64(funct3, toU64(3))
 			rdValue := updateCSR(imm, value, mode)
-			writeRegister(rd, rdValue)
+			setRegister(rd, rdValue)
 			setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
@@ -910,26 +967,26 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		if lt64(size, toU64(4)) != (U64{}) {
 			revertWithCode(0xbada70, fmt.Errorf("bad AMO size: %d", size))
 		}
-		addr := loadRegister(rs1)
+		addr := getRegister(rs1)
 		// TODO check if addr is aligned
 
 		op := shr64(toU64(2), funct7)
 		switch op.val() {
 		case 0x2: // 00010 = LR = Load Reserved
 			v := loadMem(addr, size, true, 1, 2)
-			writeRegister(rd, v)
+			setRegister(rd, v)
 			setLoadReservation(addr)
 		case 0x3: // 00011 = SC = Store Conditional
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != (U64{}) {
-				rs2Value := loadRegister(rs2)
+				rs2Value := getRegister(rs2)
 				storeMem(addr, size, rs2Value, 1, 2)
 				rdValue = toU64(0)
 			}
-			writeRegister(rd, rdValue)
+			setRegister(rd, rdValue)
 			setLoadReservation(toU64(0))
 		default: // AMO: Atomic Memory Operation
-			rs2Value := loadRegister(rs2)
+			rs2Value := getRegister(rs2)
 			if eq64(size, toU64(4)) != (U64{}) {
 				rs2Value = mask32Signed64(rs2Value)
 			}
@@ -967,7 +1024,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			}
 			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
 			rdValue := v
-			writeRegister(rd, rdValue)
+			setRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))
 	case 0x0F: // 000_1111: fence
@@ -984,5 +1041,5 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	default:
 		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
-	return
+	return computeStateHash(), nil
 }

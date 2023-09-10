@@ -346,9 +346,7 @@ contract Step {
                 writeState(stateOffsetExited(), stateSizeExited(), v)
             }
 
-            function getExitCode() -> out {
-                out := readState(stateOffsetExitCode(), stateSizeExitCode())
-            }
+            // no getExitCode necessary
             function setExitCode(v) {
                 writeState(stateOffsetExitCode(), stateSizeExitCode(), v)
             }
@@ -374,15 +372,14 @@ contract Step {
                 writeState(stateOffsetLoadReservation(), stateSizeLoadReservation(), addr)
             }
 
-            function loadRegister(reg) -> out {
+            function getRegister(reg) -> out {
                 if gt64(reg, toU64(31)) {
                     revertWithCode(0xbad4e9) // cannot load invalid register
                 }
                 let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
                 out := readState(offset, 8)
             }
-
-            function writeRegister(reg, val) {
+            function setRegister(reg, val) {
                 if iszero64(reg) { // reg 0 must stay 0
                     // v is a HINT, but no hints are specified by standard spec, or used by us.
                     leave
@@ -773,15 +770,15 @@ contract Step {
             // Syscall handling
             //
             function sysCall() {
-                let a7 := loadRegister(toU64(17))
+                let a7 := getRegister(toU64(17))
                 switch a7
                 case 93 { // exit the calling thread. No multi-thread support yet, so just exit.
-                    let a0 := loadRegister(toU64(10))
+                    let a0 := getRegister(toU64(10))
                     setExitCode(and(a0, 0xff))
                     setExited()
                     // program stops here, no need to change registers.
                 } case 94 { // exit-group
-                    let a0 := loadRegister(toU64(10))
+                    let a0 := getRegister(toU64(10))
                     setExitCode(and(a0, 0xff))
                     setExited()
                 } case 214 { // brk
@@ -789,13 +786,13 @@ contract Step {
 
                     // brk(0) changes nothing about the memory, and returns the current page break
                     let v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
-                    writeRegister(toU64(10), v)
-                    writeRegister(toU64(11), toU64(0)) // no error
+                    setRegister(toU64(10), v)
+                    setRegister(toU64(11), toU64(0)) // no error
                 } case 222 { // mmap
                     // A0 = addr (hint)
-                    let addr := loadRegister(toU64(10))
+                    let addr := getRegister(toU64(10))
                     // A1 = n (length)
-                    let length := loadRegister(toU64(11))
+                    let length := getRegister(toU64(11))
                     // A2 = prot (memory protection type, can ignore)
                     // A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe assert the MAP_ANONYMOUS flag is set
                     // A4 = fd (file descriptor, can ignore because we support anon memory only)
@@ -811,17 +808,17 @@ contract Step {
                             length := add64(length, sub64(shortToU64(4096), align))
                         }
                         let prevHeap := getHeap()
-                        writeRegister(toU64(10), prevHeap)
+                        setRegister(toU64(10), prevHeap)
                         setHeap(add64(prevHeap, length)) // increment heap with length
                     }
                     default {
                         // allow hinted memory address (leave it in A0 as return argument)
                     }
-                    writeRegister(toU64(11), toU64(0)) // no error
+                    setRegister(toU64(11), toU64(0)) // no error
                 } case 63 { // read
-                    let fd := loadRegister(toU64(10))    // A0 = fd
-                    let addr := loadRegister(toU64(11))  // A1 = *buf addr
-                    let count := loadRegister(toU64(12)) // A2 = count
+                    let fd := getRegister(toU64(10))    // A0 = fd
+                    let addr := getRegister(toU64(11))  // A1 = *buf addr
+                    let count := getRegister(toU64(12)) // A2 = count
                     let n := 0
                     let errCode := 0
                     switch fd
@@ -839,12 +836,12 @@ contract Step {
                         n := u64Mask()         //  -1 (reading error)
                         errCode := toU64(0x4d) // EBADF
                     }
-                    writeRegister(toU64(10), n)
-                    writeRegister(toU64(11), errCode)
+                    setRegister(toU64(10), n)
+                    setRegister(toU64(11), errCode)
                 } case 64 { // write
-                    let fd := loadRegister(toU64(10))    // A0 = fd
-                    let addr := loadRegister(toU64(11))  // A1 = *buf addr
-                    let count := loadRegister(toU64(12)) // A2 = count
+                    let fd := getRegister(toU64(10))    // A0 = fd
+                    let addr := getRegister(toU64(11))  // A1 = *buf addr
+                    let count := getRegister(toU64(12)) // A2 = count
                     let n := 0
                     let errCode := 0
                     switch fd
@@ -864,11 +861,11 @@ contract Step {
                         n := u64Mask()         //  -1 (writing error)
                         errCode := toU64(0x4d) // EBADF
                     }
-                    writeRegister(toU64(10), n)
-                    writeRegister(toU64(11), errCode)
+                    setRegister(toU64(10), n)
+                    setRegister(toU64(11), errCode)
                 } case 25 { // fcntl - file descriptor manipulation / info lookup
-                    let fd := loadRegister(toU64(10))  // A0 = fd
-                    let cmd := loadRegister(toU64(11)) // A1 = cmd
+                    let fd := getRegister(toU64(10))  // A0 = fd
+                    let cmd := getRegister(toU64(11)) // A1 = cmd
                     let out := 0
                     let errCode := 0
                     switch cmd
@@ -896,37 +893,37 @@ contract Step {
                         out := u64Mask()
                         errCode := toU64(0x16) // EINVAL (cmd not recognized by this kernel)
                     }
-                    writeRegister(toU64(10), out)
-                    writeRegister(toU64(11), errCode) // EBADF
+                    setRegister(toU64(10), out)
+                    setRegister(toU64(11), errCode) // EBADF
                 } case 56 { // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
-                    writeRegister(toU64(10), u64Mask())
-                    writeRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+                    setRegister(toU64(10), u64Mask())
+                    setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
                 } case 123 { // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
-                    writeRegister(toU64(10), toU64(0))
-                    writeRegister(toU64(11), toU64(0))
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 } case 113 { // clock_gettime
-                    let addr := loadRegister(toU64(11)) // addr of timespec struct
+                    let addr := getRegister(toU64(11)) // addr of timespec struct
                     // first 8 bytes: tv_sec: 1337 seconds
                     // second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
                     storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
-                    writeRegister(toU64(10), toU64(0))
-                    writeRegister(toU64(11), toU64(0))
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 } case 135 { // rt_sigprocmask - ignore any sigset changes
-                    writeRegister(toU64(10), toU64(0))
-                    writeRegister(toU64(11), toU64(0))
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 } case 132 { // sigaltstack - ignore any hints of an alternative signal receiving stack addr
-                    writeRegister(toU64(10), toU64(0))
-                    writeRegister(toU64(11), toU64(0))
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 } case 178 { // gettid - hardcode to 0
-                    writeRegister(toU64(10), toU64(0))
-                    writeRegister(toU64(11), toU64(0))
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 } case 134 { // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
-                    writeRegister(toU64(10), toU64(0))
-                    writeRegister(toU64(11), toU64(0))
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 //case 220 // clone - not supported
                 } case 163 { // getrlimit
-                    let res := loadRegister(toU64(10))
-                    let addr := loadRegister(toU64(11))
+                    let res := getRegister(toU64(10))
+                    let addr := getRegister(toU64(11))
                     switch res
                     case 0x7 {  // RLIMIT_NOFILE
                         // first 8 bytes: soft limit. 1024 file handles max open
@@ -948,6 +945,8 @@ contract Step {
                 mstore(0, computeStateHash())
                 return(0, 0x20)
             }
+            setStep(add64(getStep(), toU64(1)))
+
             let _pc := getPC()
             let instr := loadMem(_pc, toU64(4), false, 0, 0xff) // raw instruction
 
@@ -965,23 +964,23 @@ contract Step {
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
                 let size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
-                let rs1Value := loadRegister(rs1)
+                let rs1Value := getRegister(rs1)
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 let rdValue := loadMem(memIndex, size, signed, 1, 2)
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x23 { // 010_0011: memory storing
                 // SB, SH, SW, SD
                 let imm := parseImmTypeS(instr)
                 let size := shl64(funct3, toU64(1))
-                let value := loadRegister(rs2)
-                let rs1Value := loadRegister(rs1)
+                let value := getRegister(rs2)
+                let rs1Value := getRegister(rs1)
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
                 storeMem(memIndex, size, value, 1, 2)
                 setPC(add64(_pc, toU64(4)))
             } case 0x63 { // 110_0011: branching
-                let rs1Value := loadRegister(rs1)
-                let rs2Value := loadRegister(rs2)
+                let rs1Value := getRegister(rs1)
+                let rs2Value := getRegister(rs2)
                 let branchHit := toU64(0)
                 switch funct3
                 case 0 { // 000 = BEQ
@@ -1009,7 +1008,7 @@ contract Step {
                 // not like the other opcodes: nothing to write to rd register, and PC has already changed
                 setPC(_pc)
             } case 0x13 { // 001_0011: immediate arithmetic and logic
-		        let rs1Value := loadRegister(rs1)
+		        let rs1Value := getRegister(rs1)
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
                 switch funct3
@@ -1035,10 +1034,10 @@ contract Step {
                 } case 7 { // 111 = ANDI
                     rdValue := and64(rs1Value, imm)
                 }
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x1B { // 001_1011: immediate arithmetic and logic signed 32 bit
-		        let rs1Value := loadRegister(rs1)
+		        let rs1Value := getRegister(rs1)
                 let imm := parseImmTypeI(instr)
                 let rdValue := 0
                 switch funct3
@@ -1055,11 +1054,11 @@ contract Step {
                         rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
                     }
                 }
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x33 { // 011_0011: register arithmetic and logic
-		        let rs1Value := loadRegister(rs1)
-		        let rs2Value := loadRegister(rs2)
+		        let rs1Value := getRegister(rs1)
+		        let rs2Value := getRegister(rs2)
                 let rdValue := 0
                 switch funct7
                 case 1 { // RV M extension
@@ -1131,11 +1130,11 @@ contract Step {
                         rdValue := and64(rs1Value, rs2Value)
                     }
                 }
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x3B { // 011_1011: register arithmetic and logic in 32 bits
-                let rs1Value := loadRegister(rs1)
-                let rs2Value := loadRegister(rs2)
+                let rs1Value := getRegister(rs1)
+                let rs2Value := getRegister(rs2)
                 let rdValue := 0
                 switch funct7
                 case 1 { // RV M extension
@@ -1192,28 +1191,28 @@ contract Step {
                         }
                     }
                 }
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x37 { // 011_0111: LUI = Load upper immediate
                 let imm := parseImmTypeU(instr)
                 let rdValue := shl64(toU64(12), imm)
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x17 { // 001_0111: AUIPC = Add upper immediate to PC
                 let imm := parseImmTypeU(instr)
                 let rdValue := add64(_pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x6F { // 110_1111: JAL = Jump and link
                 let imm := parseImmTypeJ(instr)
                 let rdValue := add64(_pc, toU64(4))
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(add64(_pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
             } case 0x67 { // 110_0111: JALR = Jump and link register
-		        let rs1Value := loadRegister(rs1)
+		        let rs1Value := getRegister(rs1)
                 let imm := parseImmTypeI(instr)
                 let rdValue := add64(_pc, toU64(4))
-                writeRegister(rd, rdValue)
+                setRegister(rd, rdValue)
                 setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
             } case 0x73 { // 111_0011: environment things
                 switch funct3
@@ -1229,11 +1228,11 @@ contract Step {
                     let imm := parseCSSR(instr)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
-                        value := loadRegister(rs1)
+                        value := getRegister(rs1)
                     }
                     let mode := and64(funct3, toU64(3))
                     let rdValue := updateCSR(imm, value, mode)
-                    writeRegister(rd, rdValue)
+                    setRegister(rd, rdValue)
                     setPC(add64(_pc, toU64(4)))
                 }
             } case 0x2F { // 010_1111: RV32A and RV32A atomic operations extension
@@ -1252,26 +1251,26 @@ contract Step {
                 if lt64(size, toU64(4)) {
                     revertWithCode(0xbada70) // bad AMO size
                 }
-                let addr := loadRegister(rs1)
+                let addr := getRegister(rs1)
                 // TODO check if addr is aligned
 
                 let op := shr64(toU64(2), funct7)
                 switch op
                 case 0x2 { // 00010 = LR = Load Reserved
                     let v := loadMem(addr, size, true)
-                    writeRegister(rd, v)
+                    setRegister(rd, v)
                     setLoadReservation(addr)
                 } case 0x3 { // 00011 = SC = Store Conditional
                     let rdValue := toU64(1)
                     if eq64(addr, getLoadReservation()) {
-                        let rs2Value := loadRegister(rs2)
+                        let rs2Value := getRegister(rs2)
                         storeMem(addr, size, rs2Value)
                         rdValue := toU64(0)
                     }
-                    writeRegister(rd, rdValue)
+                    setRegister(rd, rdValue)
                     setLoadReservation(toU64(0))
                 } default { // AMO: Atomic Memory Operation
-                    let rs2Value := loadRegister(rs2)
+                    let rs2Value := getRegister(rs2)
                     if eq64(size, toU64(4)) {
                         rs2Value := mask32Signed64(rs2Value)
                     }
@@ -1309,7 +1308,7 @@ contract Step {
                     }
                     storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
                     let rdValue := v
-                    writeRegister(rd, rdValue)
+                    setRegister(rd, rdValue)
                 }
                 setPC(add64(_pc, toU64(4)))
             } case 0x0F { // 000_1111: fence

@@ -31,10 +31,6 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		s.ExitCode = v
 	}
 
-	if getExited() {
-		return nil
-	}
-
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
@@ -137,14 +133,14 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		s.Memory.SetUnaligned(addr, v[:])
 	}
 
-	loadRegister := func(reg U64) U64 {
+	getRegister := func(reg U64) U64 {
 		if reg > 31 {
 			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg))
 		}
 		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		return s.Registers[reg]
 	}
-	writeRegister := func(reg U64, v U64) {
+	setRegister := func(reg U64, v U64) {
 		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
 		if reg == 0 { // reg 0 must stay 0
 			// v is a HINT, but no hints are specified by standard spec, or used by us.
@@ -177,6 +173,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 	setPC := func(pc U64) {
 		s.PC = pc
+	}
+
+	getStep := func() U64 {
+		return s.Step
+	}
+	setStep := func(v U64) {
+		s.Step = v
 	}
 
 	getHeap := func() U64 {
@@ -281,15 +284,15 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 
 	sysCall := func() {
-		a7 := loadRegister(toU64(17))
+		a7 := getRegister(toU64(17))
 		switch a7 {
 		case 93: // exit the calling thread. No multi-thread support yet, so just exit.
-			a0 := loadRegister(toU64(10))
+			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0))
 			setExited()
 			// program stops here, no need to change registers.
 		case 94: // exit-group
-			a0 := loadRegister(toU64(10))
+			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0))
 			setExited()
 		case 214: // brk
@@ -297,13 +300,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 			// brk(0) changes nothing about the memory, and returns the current page break
 			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
-			writeRegister(toU64(10), v)
-			writeRegister(toU64(11), toU64(0)) // no error
+			setRegister(toU64(10), v)
+			setRegister(toU64(11), toU64(0)) // no error
 		case 222: // mmap
 			// A0 = addr (hint)
-			addr := loadRegister(toU64(10))
+			addr := getRegister(toU64(10))
 			// A1 = n (length)
-			length := loadRegister(toU64(11))
+			length := getRegister(toU64(11))
 			// A2 = prot (memory protection type, can ignore)
 			// A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe assert the MAP_ANONYMOUS flag is set
 			// A4 = fd (file descriptor, can ignore because we support anon memory only)
@@ -319,18 +322,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					length = add64(length, sub64(shortToU64(4096), align))
 				}
 				prevHeap := getHeap()
-				writeRegister(toU64(10), prevHeap)
+				setRegister(toU64(10), prevHeap)
 				setHeap(add64(prevHeap, length)) // increment heap with length
 				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
 				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
-			writeRegister(toU64(11), toU64(0)) // no error
+			setRegister(toU64(11), toU64(0)) // no error
 		case 63: // read
-			fd := loadRegister(toU64(10))    // A0 = fd
-			addr := loadRegister(toU64(11))  // A1 = *buf addr
-			count := loadRegister(toU64(12)) // A2 = count
+			fd := getRegister(toU64(10))    // A0 = fd
+			addr := getRegister(toU64(11))  // A1 = *buf addr
+			count := getRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd {
 			case fdStdin: // stdin
@@ -347,12 +350,12 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				n = u64Mask()         //  -1 (reading error)
 				errCode = toU64(0x4d) // EBADF
 			}
-			writeRegister(toU64(10), n)
-			writeRegister(toU64(11), errCode)
+			setRegister(toU64(10), n)
+			setRegister(toU64(11), errCode)
 		case 64: // write
-			fd := loadRegister(toU64(10))    // A0 = fd
-			addr := loadRegister(toU64(11))  // A1 = *buf addr
-			count := loadRegister(toU64(12)) // A2 = count
+			fd := getRegister(toU64(10))    // A0 = fd
+			addr := getRegister(toU64(11))  // A1 = *buf addr
+			count := getRegister(toU64(12)) // A2 = count
 			var n, errCode U64
 			switch fd {
 			case fdStdout: // stdout
@@ -391,11 +394,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				n = u64Mask()         //  -1 (writing error)
 				errCode = toU64(0x4d) // EBADF
 			}
-			writeRegister(toU64(10), n)
-			writeRegister(toU64(11), errCode)
+			setRegister(toU64(10), n)
+			setRegister(toU64(11), errCode)
 		case 25: // fcntl - file descriptor manipulation / info lookup
-			fd := loadRegister(toU64(10))  // A0 = fd
-			cmd := loadRegister(toU64(11)) // A1 = cmd
+			fd := getRegister(toU64(10))  // A0 = fd
+			cmd := getRegister(toU64(11)) // A1 = cmd
 			var out, errCode U64
 			switch cmd {
 			case 0x3: // F_GETFL: get file descriptor flags
@@ -422,37 +425,37 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				out = u64Mask()
 				errCode = toU64(0x16) // EINVAL (cmd not recognized by this kernel)
 			}
-			writeRegister(toU64(10), out)
-			writeRegister(toU64(11), errCode) // EBADF
+			setRegister(toU64(10), out)
+			setRegister(toU64(11), errCode) // EBADF
 		case 56: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
-			writeRegister(toU64(10), u64Mask())
-			writeRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+			setRegister(toU64(10), u64Mask())
+			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
 		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 113: // clock_gettime
-			addr := loadRegister(toU64(11)) // addr of timespec struct
+			addr := getRegister(toU64(11)) // addr of timespec struct
 			// first 8 bytes: tv_sec: 1337 seconds
 			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
 			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 132: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 178: // gettid - hardcode to 0
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 134: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
-			writeRegister(toU64(10), toU64(0))
-			writeRegister(toU64(11), toU64(0))
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		//case 220: // clone - not supported
 		case 163: // getrlimit
-			res := loadRegister(toU64(10))
-			addr := loadRegister(toU64(11))
+			res := getRegister(toU64(10))
+			addr := getRegister(toU64(11))
 			switch res {
 			case 0x7: // RLIMIT_NOFILE
 				// first 8 bytes: soft limit. 1024 file handles max open
@@ -465,6 +468,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
 	}
+
+	if getExited() {
+		return nil
+	}
+	setStep(add64(getStep(), toU64(1)))
 
 	pc := getPC()
 	instr := loadMem(pc, toU64(4), false, 0, 0xff) // raw instruction
@@ -483,23 +491,23 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
 		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := loadMem(memIndex, size, signed, 1, 2)
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
 		size := shl64(funct3, toU64(1))
-		value := loadRegister(rs2)
-		rs1Value := loadRegister(rs1)
+		value := getRegister(rs2)
+		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		storeMem(memIndex, size, value, 1, 2)
 		setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
-		rs1Value := loadRegister(rs1)
-		rs2Value := loadRegister(rs2)
+		rs1Value := getRegister(rs1)
+		rs2Value := getRegister(rs2)
 		branchHit := toU64(0)
 		switch funct3 {
 		case 0: // 000 = BEQ
@@ -527,7 +535,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		setPC(pc)
 	case 0x13: // 001_0011: immediate arithmetic and logic
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3 {
@@ -553,10 +561,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 7: // 111 = ANDI
 			rdValue = and64(rs1Value, imm)
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		var rdValue U64
 		switch funct3 {
@@ -573,11 +581,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x33: // 011_0011: register arithmetic and logic
-		rs1Value := loadRegister(rs1)
-		rs2Value := loadRegister(rs2)
+		rs1Value := getRegister(rs1)
+		rs2Value := getRegister(rs2)
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV M extension
@@ -649,11 +657,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				rdValue = and64(rs1Value, rs2Value)
 			}
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
-		rs1Value := loadRegister(rs1)
-		rs2Value := loadRegister(rs2)
+		rs1Value := getRegister(rs1)
+		rs2Value := getRegister(rs2)
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV M extension
@@ -710,28 +718,28 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				}
 			}
 		}
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
 		rdValue := shl64(toU64(12), imm)
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
 		rdValue := add64(pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, toU64(4)))
 	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
-		rs1Value := loadRegister(rs1)
+		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
-		writeRegister(rd, rdValue)
+		setRegister(rd, rdValue)
 		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3 {
@@ -747,11 +755,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			imm := parseCSSR(instr)
 			value := rs1
 			if iszero64(and64(funct3, toU64(4))) {
-				value = loadRegister(rs1)
+				value = getRegister(rs1)
 			}
 			mode := and64(funct3, toU64(3))
 			rdValue := updateCSR(imm, value, mode)
-			writeRegister(rd, rdValue)
+			setRegister(rd, rdValue)
 			setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
@@ -770,26 +778,26 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if lt64(size, toU64(4)) != 0 {
 			revertWithCode(0xbada70, fmt.Errorf("bad AMO size: %d", size))
 		}
-		addr := loadRegister(rs1)
+		addr := getRegister(rs1)
 		// TODO check if addr is aligned
 
 		op := shr64(toU64(2), funct7)
 		switch op {
 		case 0x2: // 00010 = LR = Load Reserved
 			v := loadMem(addr, size, true, 1, 2)
-			writeRegister(rd, v)
+			setRegister(rd, v)
 			setLoadReservation(addr)
 		case 0x3: // 00011 = SC = Store Conditional
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != 0 {
-				rs2Value := loadRegister(rs2)
+				rs2Value := getRegister(rs2)
 				storeMem(addr, size, rs2Value, 1, 2)
 				rdValue = toU64(0)
 			}
-			writeRegister(rd, rdValue)
+			setRegister(rd, rdValue)
 			setLoadReservation(toU64(0))
 		default: // AMO: Atomic Memory Operation
-			rs2Value := loadRegister(rs2)
+			rs2Value := getRegister(rs2)
 			if eq64(size, toU64(4)) != 0 {
 				rs2Value = mask32Signed64(rs2Value)
 			}
@@ -827,7 +835,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
 			rdValue := v
-			writeRegister(rd, rdValue)
+			setRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))
 	case 0x0F: // 000_1111: fence
