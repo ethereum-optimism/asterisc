@@ -11,89 +11,11 @@ contract Step {
     }
 
     // Executes a single RISC-V instruction, starting from
-    function step(bytes32 s, bytes calldata soData) public returns (bytes32 stateRootOut) {
+    function step(bytes calldata stateData, bytes calldata proof) public returns (bytes32) {
         assembly {
-            function preimageOraclePos() -> out {
-                out := 0
-            }
-            // 0x00 and 0x20 are scratch.
-            function stateRootMemAddr() -> out {
-                out := 0x40
-            }
-            function soDataIndexMemAddr() -> out {
-                out := 0x60
-            }
-            mstore(stateRootMemAddr(), calldataload(4))
-            mstore(soDataIndexMemAddr(), 100) // 4 + 32 + 32 + 32 = selector, stateroot, offset, length
-
             function revertWithCode(code) {
                 mstore(0, code)
                 revert(0, 0x20)
-            }
-
-            function b32asBEWord(v) -> out {
-                out := v
-            }
-            function beWordAsB32(v) -> out {
-                out := v
-            }
-
-            // type casts, no-op in yul
-            function U64(v) -> out {
-                out := v
-            }
-            function U256(v) -> out {
-                out := v
-            }
-
-            function toU256(v) -> out {
-                out := v
-            }
-
-            // 1 11 0110 00000101
-            function bitlen(x) -> n {
-                if gt(x, sub(shl(128, 1), 1)) {
-                    x := shr(128, x)
-                    n := add(n, 128)
-                }
-                if gt(x, sub(shl(64, 1), 1)) {
-                    x := shr(64, x)
-                    n := add(n, 64)
-                }
-                if gt(x, sub(shl(32, 1), 1)) {
-                    x := shr(32, x)
-                    n := add(n, 32)
-                }
-                if gt(x, sub(shl(16, 1), 1)) {
-                    x := shr(16, x)
-                    n := add(n, 16)
-                }
-                if gt(x, sub(shl(8, 1), 1)) {
-                    x := shr(8, x)
-                    n := add(n, 8)
-                }
-                if gt(x, sub(shl(4, 1), 1)) {
-                    x := shr(4, x)
-                    n := add(n, 4)
-                }
-                if gt(x, sub(shl(2, 1), 1)) {
-                    x := shr(2, x)
-                    n := add(n, 2)
-                }
-                if gt(x, sub(shl(1, 1), 1)) {
-                    x := shr(1, x)
-                    n := add(n, 1)
-                }
-                if gt(x, 0) {
-                    n := add(n, 1)
-                }
-            }
-
-            function endianSwap(x) -> out {
-                for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
-                    out := or(shl(8, out), and(x, 0xff))
-                    x := shr(8, x)
-                }
             }
 
             //
@@ -138,11 +60,11 @@ contract Step {
             function signExtend64(v, bit) -> out {
                 switch and(v, shl(bit, 1))
                 case 0 {
-                    // fill with zeroes, by masking
+                // fill with zeroes, by masking
                     out := U64(and(U256(v), shr(sub(toU256(63), bit), U256(u64Mask()))))
                 }
                 default {
-                    // fill with ones, by or-ing
+                // fill with ones, by or-ing
                     out := U64(or(U256(v), shl(bit, shr(bit, U256(u64Mask())))))
                 }
             }
@@ -237,6 +159,240 @@ contract Step {
                 out := u256ToU64(sar(U256(x), signExtend64To256(y)))
             }
 
+            // type casts, no-op in yul
+            function b32asBEWord(v) -> out {
+                out := v
+            }
+            function beWordAsB32(v) -> out {
+                out := v
+            }
+            function U64(v) -> out {
+                out := v
+            }
+            function U256(v) -> out {
+                out := v
+            }
+            function toU256(v) -> out {
+                out := v
+            }
+
+            //
+            // Bit hacking util
+            //
+            function bitlen(x) -> n {
+                if gt(x, sub(shl(128, 1), 1)) {
+                    x := shr(128, x)
+                    n := add(n, 128)
+                }
+                if gt(x, sub(shl(64, 1), 1)) {
+                    x := shr(64, x)
+                    n := add(n, 64)
+                }
+                if gt(x, sub(shl(32, 1), 1)) {
+                    x := shr(32, x)
+                    n := add(n, 32)
+                }
+                if gt(x, sub(shl(16, 1), 1)) {
+                    x := shr(16, x)
+                    n := add(n, 16)
+                }
+                if gt(x, sub(shl(8, 1), 1)) {
+                    x := shr(8, x)
+                    n := add(n, 8)
+                }
+                if gt(x, sub(shl(4, 1), 1)) {
+                    x := shr(4, x)
+                    n := add(n, 4)
+                }
+                if gt(x, sub(shl(2, 1), 1)) {
+                    x := shr(2, x)
+                    n := add(n, 2)
+                }
+                if gt(x, sub(shl(1, 1), 1)) {
+                    x := shr(1, x)
+                    n := add(n, 1)
+                }
+                if gt(x, 0) {
+                    n := add(n, 1)
+                }
+            }
+
+            function endianSwap(x) -> out {
+                for { let i := 0 } lt(i, 32) { i := add(i, 1) } {
+                    out := or(shl(8, out), and(x, 0xff))
+                    x := shr(8, x)
+                }
+            }
+
+
+            //
+            // State layout
+            //
+            function stateSizeMemRoot()            -> out { out := 32 }
+            function stateSizePreimageKey()        -> out { out := 32 }
+            function stateSizePreimageOffset()     -> out { out := 8 }
+            function stateSizePC()                 -> out { out := 8 }
+            function stateSizeExitCode()           -> out { out := 1 }
+            function stateSizeExited()             -> out { out := 1 }
+            function stateSizeStep()               -> out { out := 8 }
+            function stateSizeHeap()               -> out { out := 8 }
+            function stateSizeLoadReservation()    -> out { out := 8 }
+            function stateSizeRegisters()          -> out { out := mul(8, 32) }
+
+            function stateOffsetMemRoot()          -> out { out := 0 }
+            function stateOffsetPreimageKey()      -> out { out := add(stateOffsetMemRoot, stateSizeMemRoot) }
+            function stateOffsetPreimageOffset()   -> out { out := add(stateOffsetPreimageKey, stateSizePreimageKey) }
+            function stateOffsetPC()               -> out { out := add(stateOffsetPreimageOffset, stateSizePreimageOffset) }
+            function stateOffsetExitCode()         -> out { out := add(stateOffsetPC, stateSizePC) }
+            function stateOffsetExited()           -> out { out := add(stateOffsetExitCode, stateSizeExitCode) }
+            function stateOffsetStep()             -> out { out := add(stateOffsetExited, stateSizeExited) }
+            function stateOffsetHeap()             -> out { out := add(stateOffsetStep, stateSizeStep) }
+            function stateOffsetLoadReservation()  -> out { out := add(stateOffsetHeap, stateSizeHeap) }
+            function stateOffsetRegisters()        -> out { out := add(stateOffsetLoadReservation, stateSizeLoadReservation) }
+            function stateSize()                   -> out { out := add(stateOffsetRegisters, stateSizeRegisters) }
+
+            //
+            // Initial EVM memory / calldata checks
+            //
+            if iszero(eq(state, 0x80)) {
+                // expected state mem offset check
+                revert(0, 0)
+            }
+            if iszero(eq(mload(0x40), 0x80)) {
+                // expected memory check: no allocated memory (start after scratch + free-mem-ptr + zero slot = 0x80)
+                revert(0, 0)
+            }
+            if iszero(eq(stateData.offset, 100)) {
+                // 32*3+4 = 100 expected state data offset
+                revert(0, 0)
+            }
+            if iszero(eq(calldataload(stateData.offset), stateSize())) {
+                // user-provided state size must match expected state size
+                revert(0, 0)
+            }
+            if iszero(eq(proof.offset, add(add(stateData.offset, 32, stateSize())))) {
+                // 100+32+stateSize = expected proof offset
+                revert(0, 0)
+            }
+
+            //
+            // State loading
+            //
+            function memStateOffset() -> out { out := 0x80 }
+            // copy the state calldata into memory, so we can mutate it
+            mstore(0x40, add(memStateOffset(), stateSize())) // alloc, update free mem pointer
+            calldatacopy(memStateOffset(), add(stateData.offset, 32), stateSize()) // same format in memory as in calldata
+
+            //
+            // State output
+            //
+            function computeStateHash() -> out {
+                out := keccak256(memStateOffset(), stateSize())
+            }
+
+            //
+            // State access
+            //
+            function readState(offset, length) -> out {
+                // TODO revert if more than 32 bytes
+                out := mload(add(memStateOffset(), offset)) // note: the state variables are all big-endian encoded
+                out := shr(shl(3, sub(32, length)), out) // shift-right to right-align data and reduce to desired length
+            }
+            function writeState(offset, length, data) -> out {
+                // TODO revert if more than 32 bytes
+                let memOffset := add(memStateOffset(), offset)
+                // left-aligned mask of length bytes
+                let mask := shl(shl(3, sub(32, length)), not(0))
+                let prev := mload(memOffset)
+                // align data to left
+                data := shl(shl(3, sub(32, length)), data)
+                // mask out data from previous word, and apply new data
+                let result := or(and(prev, not(mask)), data)
+                mstore(memOffset, result)
+            }
+
+            function getMemRoot() -> out {
+                out := readState(stateOffsetMemRoot(), stateSizeMemRoot())
+            }
+            function setMemRoot(v) {
+                writeState(stateOffsetMemRoot(), stateSizeMemRoot(), v)
+            }
+
+            function getPreimageKey() -> out {
+                out := readState(stateOffsetPreimageKey(), stateSizePreimageKey())
+            }
+            function setPreimageKey(k) {
+                writeState(stateOffsetPreimageKey(), stateSizePreimageKey(), k)
+            }
+
+            function getPreimageOffset() -> out {
+                out := readState(stateOffsetPreimageOffset(), stateSizePreimageOffset())
+            }
+            function setPreimageOffset(v) {
+                writeState(stateOffsetPreimageOffset(), stateSizePreimageOffset(), v)
+            }
+
+            function getPC() -> out {
+                out := readState(stateOffsetPC(), stateSizePC())
+            }
+            function setPC(v) {
+                writeState(stateOffsetPC(), stateSizePC(), v)
+            }
+
+            function getExited() -> out {
+                out := readState(stateOffsetExited(), stateSizeExited())
+            }
+            function setExited(v) {
+                writeState(stateOffsetExited(), stateSizeExited(), v)
+            }
+
+            function getExitCode() -> out {
+                out := readState(stateOffsetExitCode(), stateSizeExitCode())
+            }
+            function setExitCode(v) {
+                writeState(stateOffsetExitCode(), stateSizeExitCode(), v)
+            }
+
+            function getStep() -> out {
+                out := readState(stateOffsetStep(), stateSizeStep())
+            }
+            function setStep(v) {
+                writeState(stateOffsetStep(), stateSizeStep(), v)
+            }
+
+            function getHeap() -> out {
+                out := readState(stateOffsetHeap(), stateSizeHeap())
+            }
+            function setHeap(v) {
+                writeState(stateOffsetHeap(), stateSizeHeap(), v)
+            }
+
+            function getLoadReservation() -> out {
+                out := readState(stateOffsetLoadReservation(), stateSizeLoadReservation())
+            }
+            function setLoadReservation(addr) {
+                writeState(stateOffsetLoadReservation(), stateSizeLoadReservation(), addr)
+            }
+
+            function loadRegister(reg) -> out {
+                if gt64(reg, toU64(31)) {
+                    revertWithCode(0xbad4e9) // cannot load invalid register
+                }
+                let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
+                out := readState(offset, 8)
+            }
+
+            function writeRegister(reg, val) {
+                if iszero64(reg) { // reg 0 must stay 0
+                    // v is a HINT, but no hints are specified by standard spec, or used by us.
+                    leave
+                }
+                if gt64(reg, toU64(31)) {
+                    revertWithCode(0xbad4e9) // unknown register
+                }
+                let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
+                writeState(offset, 8, v)
+            }
 
             //
             // Parse - functions to parse RISC-V instructions - see parse.go
@@ -319,60 +475,8 @@ contract Step {
             }
 
             //
-            // State layout
+            // Memory functions
             //
-
-            function stateSizeMemRoot() -> out { out :=           32 }
-            function stateSizePreimageKey() -> out { out :=       32 }
-            function stateSizePreimageOffset() -> out { out :=    8 }
-            function stateSizePC() -> out { out :=                8 }
-            function stateSizeExitCode() -> out { out :=          1 }
-            function stateSizeExited() -> out { out :=            1 }
-            function stateSizeStep() -> out { out :=              8 }
-            function stateSizeHeap() -> out { out :=              8 }
-            function stateSizeLoadReservation() -> out { out :=   8 }
-            function stateSizeRegisters() -> out { out :=         mul(8, 32) }
-
-            function stateOffsetMemRoot() -> out { out :=          0 }
-            function stateOffsetPreimageKey() -> out { out :=      add(stateOffsetMemRoot, stateSizeMemRoot) }
-            function stateOffsetPreimageOffset() -> out { out :=   add(stateOffsetPreimageKey, stateSizePreimageKey) }
-            function stateOffsetPC() -> out { out :=               add(stateOffsetPreimageOffset, stateSizePreimageOffset) }
-            function stateOffsetExitCode() -> out { out :=         add(stateOffsetPC, stateSizePC) }
-            function stateOffsetExited() -> out { out :=           add(stateOffsetExitCode, stateSizeExitCode) }
-            function stateOffsetStep() -> out { out :=             add(stateOffsetExited, stateSizeExited) }
-            function stateOffsetHeap() -> out { out :=             add(stateOffsetStep, stateSizeStep) }
-            function stateOffsetLoadReservation() -> out { out :=  add(stateOffsetHeap, stateSizeHeap) }
-            function stateOffsetRegisters() -> out { out :=        add(stateOffsetLoadReservation, stateSizeLoadReservation) }
-            function stateSize() -> out { out :=                   add(stateOffsetRegisters, stateSizeRegisters) }
-
-            //
-            // State access
-            //
-            function memStateOffset() -> out { out := 123 } // TODO
-            function readState(offset, length) -> out {
-                // TODO revert if more than 32 bytes
-                out := mload(add(memStateOffset(), offset)) // note: the state variables are all big-endian encoded
-                out := shr(shl(3, sub(32, length)), out) // shift-right to right-align data and reduce to desired length
-            }
-            function writeState(offset, length, data) -> out {
-                // TODO revert if more than 32 bytes
-                let memOffset := add(memStateOffset(), offset)
-                // left-aligned mask of length bytes
-                let mask := shl(shl(3, sub(32, length)), not(0))
-                let prev := mload(memOffset)
-                // align data to left
-                data := shl(shl(3, sub(32, length)), data)
-                // mask out data from previous word, and apply new data
-                let result := or(and(prev, not(mask)), data)
-                mstore(memOffset, result)
-            }
-            function getMemRoot() -> out {
-                out := readState(stateOffsetMemRoot(), stateSizeMemRoot())
-            }
-            function setMemRoot(v) {
-                writeState(stateOffsetMemRoot(), stateSizeMemRoot(), v)
-            }
-
             function proofOffset(proofIndex) -> offset {
                 // proof size: 63 siblings, 1 leaf value, each 32 bytes
                 offset := mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
@@ -557,62 +661,15 @@ contract Step {
                 storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
             }
 
-            function loadRegister(reg) -> out {
-                if gt64(reg, toU64(31)) {
-                    revertWithCode(0xbad4e9) // cannot load invalid register
-                }
-                //fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
-                let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
-                out := readState(offset, 8)
+            //
+            // CSR (control and status registers) functions
+            //
+            function readCSR() -> out {
+                out := 0 // just return zero, CSR is not supported, but may be in the future.
             }
 
-            function writeRegister(reg, val) {
-                if iszero64(reg) { // reg 0 must stay 0
-                    // v is a HINT, but no hints are specified by standard spec, or used by us.
-                    leave
-                }
-                if gt64(reg, toU64(31)) {
-                    revertWithCode(0xbad4e9) // unknown register
-                }
-                let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
-                writeState(offset, 8, v)
-            }
-
-            function setLoadReservation(addr) {
-                writeState(stateOffsetLoadReservation(), stateSizeLoadReservation(), addr)
-            }
-
-            function getLoadReservation() -> out {
-                out := readState(stateOffsetLoadReservation(), stateSizeLoadReservation())
-            }
-
-            function getPC() -> out {
-                out := readState(stateOffsetPC(), stateSizePC())
-            }
-
-            function setPC(v) {
-                writeState(stateOffsetPC(), stateSizePC(), v)
-            }
-
-            function getHeap() -> out {
-                out := readState(stateOffsetHeap(), stateSizeHeap())
-            }
-            function setHeap(v) {
-                writeState(stateOffsetHeap(), stateSizeHeap(), v)
-            }
-
-            function getPreimageKey() -> out {
-                out := readState(stateOffsetPreimageKey(), stateSizePreimageKey())
-            }
-            function setPreimageKey(k) {
-                writeState(stateOffsetPreimageKey(), stateSizePreimageKey(), k)
-            }
-
-            function getPreimageOffset() -> out {
-                out := readState(stateOffsetPreimageOffset(), stateSizePreimageOffset())
-            }
-            function setPreimageOffset(v) {
-                writeState(stateOffsetPreimageOffset(), stateSizePreimageOffset(), v)
+            function writeCSR(v) -> out {
+                // no-op
             }
 
             function updateCSR(num, v, mode) -> out {
@@ -629,6 +686,9 @@ contract Step {
                 writeCSR(num, v)
             }
 
+            //
+            // Preimage oracle interactions
+            //
             function writePreimageKey(addr, count) -> out {
                 // adjust count down, so we only have to read a single 32 byte leaf of memory
                 let alignment := and64(addr, toU64(31))
@@ -709,6 +769,9 @@ contract Step {
                 out := count
             }
 
+            //
+            // Syscall handling
+            //
             function sysCall() {
                 let a7 := loadRegister(toU64(17))
                 switch a7
@@ -877,6 +940,14 @@ contract Step {
                 }
             }
 
+            //
+            // Instruction execution
+            //
+
+            if getExited() { // early exit if we can
+                mstore(0, computeStateHash())
+                return(0, 0x20)
+            }
             let _pc := getPC()
             let instr := loadMem(_pc, toU64(4), false, 0, 0xff) // raw instruction
 
@@ -1256,7 +1327,8 @@ contract Step {
                 revertWithCode(0xf001c0de) // unknown instruction opcode
             }
 
-            return(stateRootMemAddr(), 0x20)
+            mstore(0, computeStateHash())
+            return(0, 0x20)
         }
     }
 }
