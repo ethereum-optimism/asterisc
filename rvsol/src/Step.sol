@@ -10,8 +10,7 @@ contract Step {
         preimageOracle = _preimageOracle;
     }
 
-    // Executes a single RISC-V instruction, starting from the given state-root s,
-    // using state-oracle witness data soData, and outputs a new state-root.
+    // Executes a single RISC-V instruction, starting from
     function step(bytes32 s, bytes calldata soData) public returns (bytes32 stateRootOut) {
         assembly {
             function preimageOraclePos() -> out {
@@ -31,67 +30,6 @@ contract Step {
                 mstore(0, code)
                 revert(0, 0x20)
             }
-
-            function hash(a, b) -> h {
-                mstore(0, a)
-                mstore(0x20, b)
-                h := keccak256(0, 0x40)
-            }
-
-            function soGet(key) -> a, b {
-                let i := mload(soDataIndexMemAddr())
-                a := calldataload(i)
-                i := add(i, 0x20)
-                b := calldataload(i)
-                i := add(i, 0x20)
-                let h := hash(a, b)
-                // TODO: we can check i is after offset and within length, but it buys us nothing
-                if iszero(eq(h, key)) {
-                    revertWithCode(0x8badf00d)
-                }
-                mstore(soDataIndexMemAddr(), i)
-            }
-
-            function soRemember(a, b) -> h {
-                // Use the memory scratchpad for hashing input
-                h := hash(a, b)
-                // TODO: we can event-log the (a,b) so we can fill the state-oracle with rvsol like with rvgo
-            }
-
-            // tree:
-            // ```
-            //
-            //	         1
-            //	    2          3
-            //	 4    5     6     7
-            //	8 9 10 11 12 13 14 15
-            //
-            // ```
-            function pcGindex() -> out { out := 8 }
-            function memoryGindex() -> out { out := 9 }
-            function registersGindex() -> out { out := 10 }
-            function csrGindex() -> out { out := 11 }
-            function exitGindex() -> out { out := 12 }
-            function heapGindex() -> out { out := 13 }
-            function loadResGindex() -> out { out := 14 }
-            function preimageGindex() -> out { out := 15 }
-
-            // Writing destinations. Note: also update the switch-case entries (no constant support...)
-            function destRead() -> out { out := 0 }
-            function destWrite() -> out { out := 1 }
-            function destHeapIncr() -> out { out := 2 }
-            function destCSRRW() -> out { out := 3 }
-            function destCSRRS() -> out { out := 4 }
-            function destCSRRC() -> out { out := 5 }
-            function destADD() -> out { out   := 6 }
-            function destSWAP() -> out { out  := 7 }
-            function destXOR() -> out { out   := 8 }
-            function destOR() -> out { out    := 9 }
-            function destAND() -> out { out   := 10 }
-            function destMIN() -> out { out   := 11 }
-            function destMAX() -> out { out   := 12 }
-            function destMINU() -> out { out  := 13 }
-            function destMAXU() -> out { out  := 14 }
 
             function b32asBEWord(v) -> out {
                 out := v
@@ -380,260 +318,315 @@ contract Step {
                 out := shr64(toU64(20), instr)
             }
 
-            function read(stateStackGindex, stateGindex, stateStackDepth) -> stateValue, stateStackHash {
-                // READING MODE: if the stack gindex is lower than target, then traverse to target
-                for {} lt(stateStackGindex, stateGindex) {} {
-                    if eq(stateStackGindex, 1) {
-                        stateValue := mload(stateRootMemAddr())
-                    }
-                    stateStackGindex := shl(toU256(1), stateStackGindex)
-                    let a, b := soGet(stateValue)
-                    switch and(shr(toU256(stateStackDepth), stateGindex), toU256(1))
-                    case 1 {
-                        stateStackGindex := or(stateStackGindex, toU256(1))
-                        stateValue := b
-                        // keep track of where we have been, to use the trail to go back up the stack when writing
-                        stateStackHash := soRemember(stateStackHash, a)
-                    }
+            //
+            // State layout
+            //
+
+            function stateSizeMemRoot() -> out { out :=           32 }
+            function stateSizePreimageKey() -> out { out :=       32 }
+            function stateSizePreimageOffset() -> out { out :=    8 }
+            function stateSizePC() -> out { out :=                8 }
+            function stateSizeExitCode() -> out { out :=          1 }
+            function stateSizeExited() -> out { out :=            1 }
+            function stateSizeStep() -> out { out :=              8 }
+            function stateSizeHeap() -> out { out :=              8 }
+            function stateSizeLoadReservation() -> out { out :=   8 }
+            function stateSizeRegisters() -> out { out :=         mul(8, 32) }
+
+            function stateOffsetMemRoot() -> out { out :=          0 }
+            function stateOffsetPreimageKey() -> out { out :=      add(stateOffsetMemRoot, stateSizeMemRoot) }
+            function stateOffsetPreimageOffset() -> out { out :=   add(stateOffsetPreimageKey, stateSizePreimageKey) }
+            function stateOffsetPC() -> out { out :=               add(stateOffsetPreimageOffset, stateSizePreimageOffset) }
+            function stateOffsetExitCode() -> out { out :=         add(stateOffsetPC, stateSizePC) }
+            function stateOffsetExited() -> out { out :=           add(stateOffsetExitCode, stateSizeExitCode) }
+            function stateOffsetStep() -> out { out :=             add(stateOffsetExited, stateSizeExited) }
+            function stateOffsetHeap() -> out { out :=             add(stateOffsetStep, stateSizeStep) }
+            function stateOffsetLoadReservation() -> out { out :=  add(stateOffsetHeap, stateSizeHeap) }
+            function stateOffsetRegisters() -> out { out :=        add(stateOffsetLoadReservation, stateSizeLoadReservation) }
+            function stateSize() -> out { out :=                   add(stateOffsetRegisters, stateSizeRegisters) }
+
+            //
+            // State access
+            //
+            function memStateOffset() -> out { out := 123 } // TODO
+            function readState(offset, length) -> out {
+                // TODO revert if more than 32 bytes
+                out := mload(add(memStateOffset(), offset)) // note: the state variables are all big-endian encoded
+                out := shr(shl(3, sub(32, length)), out) // shift-right to right-align data and reduce to desired length
+            }
+            function writeState(offset, length, data) -> out {
+                // TODO revert if more than 32 bytes
+                let memOffset := add(memStateOffset(), offset)
+                // left-aligned mask of length bytes
+                let mask := shl(shl(3, sub(32, length)), not(0))
+                let prev := mload(memOffset)
+                // align data to left
+                data := shl(shl(3, sub(32, length)), data)
+                // mask out data from previous word, and apply new data
+                let result := or(and(prev, not(mask)), data)
+                mstore(memOffset, result)
+            }
+            function getMemRoot() -> out {
+                out := readState(stateOffsetMemRoot(), stateSizeMemRoot())
+            }
+            function setMemRoot(v) {
+                writeState(stateOffsetMemRoot(), stateSizeMemRoot(), v)
+            }
+
+            function proofOffset(proofIndex) -> offset {
+                // proof size: 63 siblings, 1 leaf value, each 32 bytes
+                offset := mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
+                offset := add64(offset, add(4, stateSize())) // TODO: need to account for offset/length parts of ABI
+            }
+
+            function hashPair(a, b) -> h {
+                mstore(0, a)
+                mstore(0x20, b)
+                h := keccak256(0, 0x40)
+            }
+
+            function getMemoryB32(addr, proofIndex) -> out {
+                if and64(addr, toU64(31)) { // quick addr alignment check
+                    revertWithCode(0xbad10ad0) // addr not aligned with 32 bytes
+                }
+                let offset := proofOffset(proofIndex)
+                let leaf := calldataload(offset)
+                offset := add64(offset, toU64(32))
+
+                let path := shr64(toU64(5), addr) // 32 bytes of memory per leaf
+                let node := leaf                  // starting from the leaf node, work back up by combining with siblings, to reconstruct the root
+                for { let i := 0 } lt(i, sub(64, 5)) { i := add(i, 1) } {
+                    let sibling := calldataload(offset)
+                    offset := add64(offset, toU64(32))
+                    switch and64(shr64(toU64(i), path), toU64(1))
                     case 0 {
-                        stateValue := a
-                        // keep track of where we have been, to use the trail to go back up the stack when writing
-                        stateStackHash := soRemember(stateStackHash, b)
+                        node := hashPair(node, sibling)
+                    } case 1 {
+                        node := hashPair(sibling, node)
                     }
-                    stateStackDepth := sub(stateStackDepth, 1)
+                }
+                let memRoot := getMemRoot()
+                if iszero(eq(b32asBEWord(node), b32asBEWord(memRoot))) { // verify the root matches
+                    revertWithCode(0x0badf00d) // bad memory proof
+                }
+                out := leaf
+            }
+
+            // warning: setMemoryB32 does not verify the proof,
+            // it assumes the same memory proof has been verified with getMemoryB32
+            function setMemoryB32(addr, v, proofIndex) {
+                if and64(addr, toU64(31)) {
+                    revertWithCode(0xbad10ad0) // addr not aligned with 32 bytes
+                }
+                let offset := proofOffset(proofIndex)
+                let leaf := v
+                offset := add64(offset, toU64(32))
+                let path := shr64(toU64(5), addr) // 32 bytes of memory per leaf
+                let node := leaf                  // starting from the leaf node, work back up by combining with siblings, to reconstruct the root
+                for { let i := 0 } lt(i, sub(64, 5)) { i := add(i, 1) } {
+                    let sibling := calldataload(offset)
+                    offset := add64(offset, toU64(32))
+
+                    switch and64(shr64(toU64(i), path), toU64(1))
+                    case 0 {
+                        node := hashPair(node, sibling)
+                    } case 1 {
+                        node := hashPair(sibling, node)
+                    }
+                }
+                setMemRoot(node) // store new memRoot
+            }
+
+            // load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
+            function loadMem(addr, size, signed, proofIndexL, proofIndexR) -> out {
+                if gt(size, 8) {
+                    revertWithCode(0xbad512e0) // cannot load more than 8 bytes
+                }
+                // load/verify left part
+                let leftAddr := and64(addr, not64(toU64(31)))
+                let left := b32asBEWord(getMemoryB32(leftAddr, proofIndexL))
+                let alignment := sub64(addr, leftAddr)
+
+                let right := 0
+                let rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
+                let leftShamt := sub64(sub64(toU64(32), alignment), size)
+                let rightShamt := toU64(0)
+                if iszero64(eq64(leftAddr, rightAddr)) {
+                    // if unaligned, use second proof for the right part
+                    if eq(proofIndexR, 0xff) {
+                        revertWithCode(0xbad22220) // unexpected need for right-side proof in loadMem
+                    }
+                    // load/verify right part
+                    right := b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
+                    // left content is aligned to right of 32 bytes
+                    leftShamt := toU64(0)
+                    rightShamt := sub64(sub64(toU64(64), alignment), size)
+                }
+
+                // left: prepare for byte-taking by right-aligning
+                left := shr(u64ToU256(shl64(toU64(3), leftShamt)), left)
+                // right: right-align for byte-taking by right-aligning
+                right := shr(u64ToU256(shl64(toU64(3), rightShamt)), right)
+                // loop:
+                for { let i := 0 } lt(i, size) { i := add(i, 1) } {
+                    // translate to reverse byte lookup, since we are reading little-endian memory, and need the highest byte first.
+                    // effAddr := (addr + size - 1 - i) &^ 31
+                    let effAddr := and64(sub64(sub64(add64(addr, size), toU64(1)), toU64(i)), not64(toU64(31)))
+                    // take a byte from either left or right, depending on the effective address
+                    let b := toU256(0)
+                    if eq64(effAddr, leftAddr) {
+                        b := and(left, toU256(0xff))
+                        left := shr(toU256(8), left)
+                    }
+                    if eq64(effAddr, rightAddr) {
+                        b := and(right, toU256(0xff))
+                        right := shr(toU256(8), right)
+                    }
+                    // append it to the output
+                    out := or64(shl64(toU64(8), out), u256ToU64(b))
+                }
+
+                if signed {
+                    let signBitShift := sub64(shl64(toU64(3), size), toU64(1))
+                    out := signExtend64(out, signBitShift)
                 }
             }
 
-            function write(stateStackGindex, stateGindex, stateValue, stateStackHash) {
-                // WRITING MODE: if the stack gindex is higher than the target, then traverse back to root and update along the way
-                for {} gt(stateStackGindex, stateGindex) {} {
-                    let prevStackHash, prevSibling := soGet(stateStackHash)
-                    stateStackHash := prevStackHash
-                    switch eq(and(stateStackGindex, toU256(1)), toU256(1))
+            function storeMemUnaligned(addr, size, value, proofIndexL, proofIndexR) {
+                if gt(size, 32) {
+                    revertWithCode(0xbad512e1) // cannot store more than 32 bytes
+                }
+
+                let leftAddr := and64(addr, not64(toU64(31)))
+                let rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
+                let alignment := sub64(addr, leftAddr)
+                let leftPatch := toU256(0)
+                let rightPatch := toU256(0)
+                let leftMask := toU256(0)
+                let rightMask := toU256(0)
+                let shift8 := toU256(8)
+                let min := alignment
+                let max := add64(alignment, size)
+                for { let i := 0 } lt(i, 64) { i := add(i, 1) } {
+                    let index := toU64(i)
+                    let leftSide := lt64(index, toU64(32))
+                    switch leftSide
                     case 1 {
-                        stateValue := soRemember(prevSibling, stateValue)
+                        leftPatch := shl(shift8, leftPatch)
+                        leftMask := shl(shift8, leftMask)
+                    } case 0 {
+                        rightPatch := shl(shift8, rightPatch)
+                        rightMask := shl(shift8, rightMask)
                     }
-                    case 0 {
-                        stateValue := soRemember(stateValue, prevSibling)
-                    }
-                    stateStackGindex := shr(toU256(1), stateStackGindex)
-                    if eq(stateStackGindex, toU256(1)) {
-                        mstore(stateRootMemAddr(), stateValue)
-                    }
-                }
-            }
-
-            function mutate(gindex1, gindex2, offset, size, dest, value) -> out {
-                // if we have not reached the gindex yet, then we need to start traversal to it
-                let rootGindex := toU256(1)
-                let stateStackDepth := sub(bitlen(gindex1), 2)
-                let targetGindex := gindex1
-
-                let stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
-
-                switch dest
-                // TODO: RDCYCLE, RDCYCLEH, RDTIME, RDTIMEH, RDINSTRET, RDINSTRETH
-                case 3 { // destCSRRW: atomic Read/Write bits in CSR
-                    out := endianSwap(stateValue)
-                    dest := destWrite()
-                }
-                case 4 { // destCSRRS: atomic Read and Set bits in CSR
-                    out := endianSwap(stateValue)
-                    value := or64(out, value) // set bits, v=0 will be no-op
-                    dest := destWrite()
-                }
-                case 5 { // destCSRRC: atomic Read and Clear Bits in CSR
-                    out := endianSwap(stateValue)
-                    value := and64(out, not64(value)) // clear bits, v=0 will be no-op
-                    dest := destWrite()
-                }
-                case 2 { // destHeapIncr
-                    // we want the heap value before we increase it
-                    out := endianSwap(stateValue)
-                    value := add64(out, value)
-                    dest := destWrite()
-                }
-
-                let firstChunkBytes := sub64(toU64(32), toU64(offset))
-                if gt64(firstChunkBytes, size) {
-                    firstChunkBytes := size
-                }
-
-                let base := b32asBEWord(stateValue)
-                // we reached the value, now load/write it
-                switch dest
-                case 1 { // destWrite
-                    for { let i := 0 } lt(i, firstChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
-                        let valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
-                        let maskByte := shl(shamt, toU256(0xff))
-                        value := shr64(toU64(8), value)
-                        base := or(and(base, not(maskByte)), valByte)
-                    }
-                    write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
-                }
-                case 0 { // destRead
-                    for { let i := 0 } lt(i, firstChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(toU256(3), sub(sub(toU256(31), toU256(i)), toU256(offset)))
-                        let valByte := U64(and(shr(shamt, base), toU256(0xff)))
-                        out := or64(out, shl64(shl64(toU64(3), toU64(i)), valByte))
+                    if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) { // if alignment <= i < alignment+size
+                        let b := and(shr(u64ToU256(shr64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
+                        switch leftSide
+                        case 1 {
+                            leftPatch := or(leftPatch, b)
+                            leftMask := or(leftMask, toU256(0xff))
+                        } case 0 {
+                            rightPatch := or(rightPatch, b)
+                            rightMask := or(rightMask, toU256(0xff))
+                        }
                     }
                 }
 
-                if iszero(gindex2) {
+                // load the left base
+                let left := b32asBEWord(getMemoryB32(leftAddr, proofIndexL))
+                // apply the left patch
+                left := or(and(left, not(leftMask)), leftPatch)
+                // write the left
+                setMemoryB32(leftAddr, beWordAsB32(left), proofIndexL)
+
+                // if aligned: nothing more to do here
+                if eq64(leftAddr, rightAddr) {
                     leave
                 }
-
-                stateStackDepth := sub(bitlen(gindex2), 2)
-                targetGindex := gindex2
-
-                stateValue, stateStackHash := read(rootGindex, targetGindex, stateStackDepth)
-
-                let secondChunkBytes := sub64(size, firstChunkBytes)
-
-                base := b32asBEWord(stateValue)
-                // we reached the value, now load/write it
-                switch dest
-                case 1 { // destWrite
-                    // note: StateValue holds the old 32 bytes, some of which may stay the same
-                    for { let i := 0 } lt(i, secondChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(toU256(3), toU256(sub(31, i)))
-                        let valByte := shl(shamt, and(u64ToU256(value), toU256(0xff)))
-                        let maskByte := shl(shamt, toU256(0xff))
-                        value := shr64(toU64(8), value)
-                        base := or(and(base, not(maskByte)), valByte)
-                    }
-                    write(targetGindex, rootGindex, beWordAsB32(base), stateStackHash)
+                if eq(proofIndexR, 0xff) {
+                    revertWithCode(0xbad22221) // unexpected need for right-side proof in storeMem
                 }
-                case 0 { // destRead
-                    for { let i := 0 } lt(i, secondChunkBytes) { i := add(i, 1) } {
-                        let shamt := shl(toU256(3), sub(toU256(31), toU256(i)))
-                        let valByte := U64(and(shr(shamt, base), toU256(0xff)))
-                        out := or64(out, shl64(shl64(toU64(3), add64(toU64(i), firstChunkBytes)), valByte))
-                    }
+                // load the right base (with updated mem root)
+                let right := b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
+                // apply the right patch
+                right := or(and(right, not(rightMask)), rightPatch)
+                // write the right (with updated mem root)
+                setMemoryB32(rightAddr, beWordAsB32(right), proofIndexR)
+            }
+
+            function storeMem(addr, size, value, proofIndexL, proofIndexR) {
+                storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
+            }
+
+            function loadRegister(reg) -> out {
+                if gt64(reg, toU64(31)) {
+                    revertWithCode(0xbad4e9) // cannot load invalid register
                 }
+                //fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
+                let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
+                out := readState(offset, 8)
             }
 
-            function makeMemGindex(byteIndex) -> out {
-                // memory is packed in 32 byte leaf values. = 5 bits, thus 64-5=59 bit path
-                out := or(shl(toU256(59), memoryGindex()), shr(toU256(5), U256(byteIndex)))
-            }
-
-            function makeRegisterGindex(register) -> out {
-                if gt(register, 31) { // there are only 32 valid registers
-                    revertWithCode(0xbadacce550)
-                }
-                out := or(shl(toU256(5), registersGindex()), U256(register))
-            }
-
-            function makeCSRGindex(num) -> out {
-                if gt(num, 4095) { // there are only 4096 valid CSR registers
-                    revertWithCode(0xbadacce551)
-                }
-                out := or(shl(toU256(12), csrGindex()), U256(num))
-            }
-
-            function memToStateOp(memIndex, size) -> offset, gindex1, gindex2 {
-                gindex1 := makeMemGindex(memIndex)
-                offset := and64(memIndex, toU64(31))
-                gindex2 := 0
-                if iszero(lt(add(toU256(offset), U256(size)), toU256(32))) { // if offset+size >= 32, then it spans into the next memory chunk
-                    // note: intentional overflow, circular 64 bit memory is part of riscv5 spec (chapter 1.4)
-                    gindex2 := makeMemGindex(add64(memIndex, sub64(size, toU64(1))))
-                }
-            }
-
-            function loadMem(addr, size, signed) -> out {
-                let offset, gindex1, gindex2 := memToStateOp(addr, size)
-                out := mutate(gindex1, gindex2, offset, size, destRead(), 0)
-                if signed {
-                    let topBitIndex := sub64(shl64(toU64(3), size), toU64(1))
-                    out := signExtend64(out, topBitIndex)
-                }
-            }
-
-            function storeMem(addr, size, value) {
-                let offset, gindex1, gindex2 := memToStateOp(addr, size)
-                pop(mutate(gindex1, gindex2, offset, size, destWrite(), value))
-            }
-
-            function loadRegister(num) -> out {
-                out := mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destRead(), 0)
-            }
-
-            function writeRegister(num, val) {
-                if iszero64(num) { // reg 0 must stay 0
+            function writeRegister(reg, val) {
+                if iszero64(reg) { // reg 0 must stay 0
                     // v is a HINT, but no hints are specified by standard spec, or used by us.
                     leave
                 }
-                pop(mutate(makeRegisterGindex(num), toU256(0), 0, toU64(8), destWrite(), val))
+                if gt64(reg, toU64(31)) {
+                    revertWithCode(0xbad4e9) // unknown register
+                }
+                let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
+                writeState(offset, 8, v)
             }
 
             function setLoadReservation(addr) {
-                pop(mutate(loadResGindex(), toU256(0), 0, toU64(8), destWrite(), addr))
+                writeState(stateOffsetLoadReservation(), stateSizeLoadReservation(), addr)
             }
 
             function getLoadReservation() -> out {
-                out := mutate(loadResGindex(), toU256(0), 0, toU64(8), destRead(), 0)
+                out := readState(stateOffsetLoadReservation(), stateSizeLoadReservation())
             }
 
             function getPC() -> out {
-                out := mutate(pcGindex(), toU256(0), 0, toU64(8), destRead(), 0)
+                out := readState(stateOffsetPC(), stateSizePC())
             }
 
             function setPC(v) {
-                pop(mutate(pcGindex(), toU256(0), 0, toU64(8), destWrite(), v))
+                writeState(stateOffsetPC(), stateSizePC(), v)
             }
 
-            function opMem(op, addr, size, value) -> out {
-                let v := loadMem(addr, size, true)
-                out := v
-                switch op
-                case 6 { // destADD
-                    v := add64(v, value)
-                } case 7 { // destSWAP
-                    v := value
-                } case 8 { // destXOR
-                    v := xor64(v, value)
-                } case 9 { // destOR
-                    v := or64(v, value)
-                } case 10 { // destAND
-                    v := and64(v, value)
-                } case 11 { // destMIN
-                    if slt64(value, v) {
-                        v := value
-                    }
-                } case 12 { // destMAX
-                    if sgt64(value, v) {
-                        v := value
-                    }
-                } case 13 { // destMINU
-                    if lt64(value, v) {
-                        v := value
-                    }
-                } case 14 { // destMAXU
-                    if gt64(value, v) {
-                        v := value
-                    }
-                } default {
-                    revertWithCode(0xbadc0de1) // unrecognized mem op
-                }
-                storeMem(addr, size, v)
+            function getHeap() -> out {
+                out := readState(stateOffsetHeap(), stateSizeHeap())
+            }
+            function setHeap(v) {
+                writeState(stateOffsetHeap(), stateSizeHeap(), v)
+            }
+
+            function getPreimageKey() -> out {
+                out := readState(stateOffsetPreimageKey(), stateSizePreimageKey())
+            }
+            function setPreimageKey(k) {
+                writeState(stateOffsetPreimageKey(), stateSizePreimageKey(), k)
+            }
+
+            function getPreimageOffset() -> out {
+                out := readState(stateOffsetPreimageOffset(), stateSizePreimageOffset())
+            }
+            function setPreimageOffset(v) {
+                writeState(stateOffsetPreimageOffset(), stateSizePreimageOffset(), v)
             }
 
             function updateCSR(num, v, mode) -> out {
-                let dest := 0
+                out := readCSR(num)
                 switch mode
-                case 1 {
-                    dest := destCSRRW() // ?01 = CSRRW(I)
-                } case 2 {
-                    dest := destCSRRS() // ?10 = CSRRS(I)
-                } case 3 {
-                    dest := destCSRRC() // ?11 = CSRRC(I)
+                case 1 { // ?01 = CSRRW(I)
+                } case 2 { // ?10 = CSRRS(I)
+                    v := or64(out, v)
+                } case 3 { // ?11 = CSRRC(I)
+                    v := and64(out, not64(v))
                 } default {
-                    revertWithCode(0xbadc0de0)
+                    revertWithCode(0xbadc0de0) // unkwown CSR mode
                 }
-                out := mutate(makeCSRGindex(num), toU256(0), 0, toU64(8), dest, v)
+                writeCSR(num, v)
             }
 
             function writePreimageKey(addr, count) -> out {
@@ -644,15 +637,15 @@ contract Step {
                     count := maxData
                 }
 
-                let memGindex := makeMemGindex(addr)
-                let node, stateStackHash := read(toU256(1), memGindex, 61) // top tree + mem tree - root bit - inspect bit = 4 + (64-5) - 1 - 1 = 61
-                // mask the part of the data we are shifting in
-                let bits := shl(toU256(3), u64ToU256(count))
-                let mask := sub(shl(bits, toU256(1)), toU256(1))
-                let dat := and(b32asBEWord(node), mask)
+                let dat := b32asBEWord(getMemoryB32(sub64(addr, alignment), 1))
+                // shift out leading bits
+                dat := shl(u64ToU256(shl64(toU64(3), alignment)), dat)
+                // shift to right end, remove trailing bits
+                dat := shr(u64ToU256(shl64(toU64(3), sub64(toU64(32), count))), dat)
 
-                node, stateStackHash := read(toU256(1), preimageGindex(), 2)
-                let preImageKey, __ := soGet(node)
+                let bits := shl(toU256(3), u64ToU256(count))
+
+                let preImageKey := getPreimageKey()
 
                 // Append to key content by bit-shifting
                 let key := b32asBEWord(preImageKey)
@@ -660,8 +653,8 @@ contract Step {
                 key := or(key, dat)
 
                 // We reset the pre-image value offset back to 0 (the right part of the merkle pair)
-                let newPreImageRoot := soRemember(beWordAsB32(key), 0)
-                write(preimageGindex(), toU256(1), newPreImageRoot, stateStackHash)
+                setPreimageKey(beWordAsB32(key))
+                setPreimageOffset(toU64(0))
                 out := count
             }
 
@@ -681,10 +674,8 @@ contract Step {
             }
 
             function readPreimageValue(addr, count) -> out {
-                let node, stateStackHash := read(toU256(1), preimageGindex(), 2)
-                let preImageKey, preImageValueOffset := soGet(node)
-
-                let offset := u256ToU64(b32asBEWord(preImageValueOffset))
+                let preImageKey := getPreimageKey()
+                let offset := getPreimageOffset()
 
                 // make call to pre-image oracle contract
                 let pdatB32, pdatlen := readPreimagePart(preImageKey, offset)
@@ -692,10 +683,6 @@ contract Step {
                     out := toU64(0)
                     leave
                 }
-                mstore(1009, pdatB32)
-                mstore(1010, pdatlen)
-
-                // align with memory
                 let alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
                 let maxData := sub64(toU64(32), alignment) // higher alignment leaves less room for data this step
                 if gt64(count, maxData) {
@@ -713,16 +700,12 @@ contract Step {
 
                 // update pre-image reader with updated offset
                 let newOffset := add64(offset, count)
-                let newPreImageRoot := soRemember(preImageKey, beWordAsB32(u64ToU256(newOffset)))
-                write(preimageGindex(), toU256(1), newPreImageRoot, stateStackHash)
+                setPreimageOffset(newOffset)
 
-                // put data into memory
-                let memGindex := makeMemGindex(addr)
-                node, stateStackHash := read(toU256(1), memGindex, 61)
+                let node := getMemoryB32(sub64(addr, alignment), 1)
                 let dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
                 dat := or(dat, and(pdat, mask))           // fill with bytes from pdat
-
-                write(memGindex, toU256(1), beWordAsB32(dat), stateStackHash)
+                setMemoryB32(sub64(addr, alignment), beWordAsB32(dat), 1)
                 out := count
             }
 
@@ -731,11 +714,13 @@ contract Step {
                 switch a7
                 case 93 { // exit the calling thread. No multi-thread support yet, so just exit.
                     let a0 := loadRegister(toU64(10))
-                    pop(mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0))
+                    setExitCode(and(a0, 0xff))
+                    setExited()
                     // program stops here, no need to change registers.
                 } case 94 { // exit-group
                     let a0 := loadRegister(toU64(10))
-                    pop(mutate(exitGindex(), toU256(0), 0, toU64(8), destWrite(), a0))
+                    setExitCode(and(a0, 0xff))
+                    setExited()
                 } case 214 { // brk
                     // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
@@ -762,8 +747,9 @@ contract Step {
                         if align {
                             length := add64(length, sub64(shortToU64(4096), align))
                         }
-                        let heap := mutate(heapGindex(), toU256(0), 0, toU64(8), destHeapIncr(), length) // increment heap with length
-                        writeRegister(toU64(10), heap)
+                        let prevHeap := getHeap()
+                        writeRegister(toU64(10), prevHeap)
+                        setHeap(add64(prevHeap, length)) // increment heap with length
                     }
                     default {
                         // allow hinted memory address (leave it in A0 as return argument)
@@ -779,7 +765,11 @@ contract Step {
                     case 0 { // stdin
                         n := toU64(0) // never read anything from stdin
                         errCode := toU64(0)
-                    } case 3 { // pre-image oracle
+                    } case 3 { // hint-read
+                        // say we read it all, to continue execution after reading the hint-write ack response
+                        n := count
+                        errCode := toU64(0)
+                    } case 5 { // preimage read
                         n := readPreimageValue(addr, count)
                         errCode := toU64(0)
                     } default {
@@ -796,23 +786,18 @@ contract Step {
                     let errCode := 0
                     switch fd
                     case 1 { // stdout
-                        //_, err := io.Copy(stdOut, s.GetMemRange(addr, count)) // TODO stdout
-                        //if err != nil {
-                        //	panic(fmt.Errorf("stdout writing err: %w", err))
-                        //}
                         n := count // write completes fully in single instruction step
                         errCode := toU64(0)
                     } case 2 { // stderr
-                        //_, err := io.Copy(stdErr, s.GetMemRange(addr, count)) // TODO stderr
-                        //if err != nil {
-                        //	panic(fmt.Errorf("stderr writing err: %w", err))
-                        //}
                         n := count // write completes fully in single instruction step
                         errCode := toU64(0)
-                    } case 3 { // pre-image oracle
+                    } case 4 { // hint-write
+                        n := count
+                        errCode := toU64(0)
+                    } case 6 { // pre-image key-write
                         n := writePreimageKey(addr, count)
                         errCode := toU64(0) // no error
-                    } default { // any other file, including (4) pre-image hinter
+                    } default { // any other file, including (3) hint read (5) preimage read
                         n := u64Mask()         //  -1 (writing error)
                         errCode := toU64(0x4d) // EBADF
                     }
@@ -832,8 +817,14 @@ contract Step {
                             out := toU64(1) // O_WRONLY
                         } case 2 { // stderr
                             out := toU64(1) // O_WRONLY
-                        } case 3 { // pre-image oracle
-                            out := toU64(2) // O_RDWR
+                        } case 3 { // hint-read
+                            out := toU64(0) // O_RDONLY
+                        } case 4 { // hint-write
+                            out := toU64(1) // O_WRONLY
+                        } case 5 { // pre-image read
+                            out := toU64(0) // O_RDONLY
+                        } case 6 { // pre-image write
+                            out := toU64(1) // O_WRONLY
                         } default {
                             out := u64Mask()
                             errCode := toU64(0x4d) // EBADF
@@ -851,9 +842,10 @@ contract Step {
                     writeRegister(toU64(10), toU64(0))
                     writeRegister(toU64(11), toU64(0))
                 } case 113 { // clock_gettime
-                    let addr := loadRegister(toU64(11))                  // addr of timespec struct
-                    storeMem(addr, toU64(8), shortToU64(1337))           // seconds
-                    storeMem(add64(addr, toU64(8)), toU64(8), toU64(42)) // nanoseconds: must be nonzero to pass Go runtimeInitTime check
+                    let addr := loadRegister(toU64(11)) // addr of timespec struct
+                    // first 8 bytes: tv_sec: 1337 seconds
+                    // second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
+                    storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
                     writeRegister(toU64(10), toU64(0))
                     writeRegister(toU64(11), toU64(0))
                 } case 135 { // rt_sigprocmask - ignore any sigset changes
@@ -874,8 +866,9 @@ contract Step {
                     let addr := loadRegister(toU64(11))
                     switch res
                     case 0x7 {  // RLIMIT_NOFILE
-                        storeMem(addr, toU64(8), shortToU64(1024))                  // soft limit. 1024 file handles max open
-                        storeMem(add64(addr, toU64(8)), toU64(8), shortToU64(1024)) // hard limit
+                        // first 8 bytes: soft limit. 1024 file handles max open
+                        // second 8 bytes: hard limit
+                        storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2)
                     } default {
                         revertWithCode(0xf0012) // unrecognized resource limit lookup
                     }
@@ -885,7 +878,7 @@ contract Step {
             }
 
             let _pc := getPC()
-            let instr := loadMem(_pc, toU64(4), false)
+            let instr := loadMem(_pc, toU64(4), false, 0, 0xff) // raw instruction
 
             // these fields are ignored if not applicable to the instruction type / opcode
             let opcode := parseOpcode(instr)
@@ -903,7 +896,7 @@ contract Step {
                 let size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
                 let rs1Value := loadRegister(rs1)
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-                let rdValue := loadMem(memIndex, size, signed)
+                let rdValue := loadMem(memIndex, size, signed, 1, 2)
                 writeRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             } case 0x23 { // 010_0011: memory storing
@@ -913,7 +906,7 @@ contract Step {
                 let value := loadRegister(rs2)
                 let rs1Value := loadRegister(rs1)
                 let memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-                storeMem(memIndex, size, value)
+                storeMem(memIndex, size, value, 1, 2)
                 setPC(add64(_pc, toU64(4)))
             } case 0x63 { // 110_0011: branching
                 let rs1Value := loadRegister(rs1)
@@ -1074,7 +1067,7 @@ contract Step {
                 let rs2Value := loadRegister(rs2)
                 let rdValue := 0
                 switch funct7
-                case 1 { // RV64M extension
+                case 1 { // RV M extension
                     switch funct3
                     case 0 { // 000 = MULW
                         rdValue := mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
@@ -1189,6 +1182,7 @@ contract Step {
                     revertWithCode(0xbada70) // bad AMO size
                 }
                 let addr := loadRegister(rs1)
+                // TODO check if addr is aligned
 
                 let op := shr64(toU64(2), funct7)
                 switch op
@@ -1210,33 +1204,40 @@ contract Step {
                     if eq64(size, toU64(4)) {
                         rs2Value := mask32Signed64(rs2Value)
                     }
-                    // Specifying the operation allows us to implement it closer to the memory for smaller witness data.
-                    // And that too can be optimized: only one 32 bytes leaf is affected,
-                    // since AMOs are always 4 or 8 byte aligned (Zam extension not supported here).
-                    let dest := 0
+                    let value := rs2Value
+                    let v := loadMem(addr, size, true, 1, 2)
                     switch op
                     case 0x0 { // 00000 = AMOADD = add
-                        dest := destADD()
+                        v := add64(v, value)
                     } case 0x1 { // 00001 = AMOSWAP
-                        dest := destSWAP()
+                        v := value
                     } case 0x4 { // 00100 = AMOXOR = xor
-                        dest := destXOR()
+                        v := xor64(v, value)
                     } case 0x8 { // 01000 = AMOOR = or
-                        dest := destOR()
+                        v := or64(v, value)
                     } case 0xc { // 01100 = AMOAND = and
-                        dest := destAND()
+                        v := and64(v, value)
                     } case 0x10 { // 10000 = AMOMIN = min signed
-                        dest := destMIN()
+                        if slt64(value, v) {
+                            v := value
+                        }
                     } case 0x14 { // 10100 = AMOMAX = max signed
-                        dest := destMAX()
+                        if sgt64(value, v) {
+                            v := value
+                        }
                     } case 0x18 { // 11000 = AMOMINU = min unsigned
-                        dest := destMINU()
+                        if lt64(value, v) {
+                            v := value
+                        }
                     } case 0x1c { // 11100 = AMOMAXU = max unsigned
-                        dest := destMAXU()
+                        if gt64(value, v) {
+                            v := value
+                        }
                     } default {
                         revertWithCode(0xf001a70) // unknown atomic operation
                     }
-                    let rdValue := opMem(dest, addr, size, rs2Value)
+                    storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
+                    let rdValue := v
                     writeRegister(rd, rdValue)
                 }
                 setPC(add64(_pc, toU64(4)))
@@ -1252,7 +1253,7 @@ contract Step {
 	        } case 0x53 { // FADD etc. no-op is enough to pass Go runtime check
 		        setPC(add64(_pc, toU64(4))) // no-op this.
             } default {
-                revertWithCode(0xf001c0de)
+                revertWithCode(0xf001c0de) // unknown instruction opcode
             }
 
             return(stateRootMemAddr(), 0x20)

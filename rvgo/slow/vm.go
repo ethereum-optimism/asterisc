@@ -113,7 +113,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	proofOffset := func(proofIndex uint8) (offset U64) {
 		// proof size: 63 siblings, 1 leaf value, each 32 bytes
 		offset = mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
-		offset = add64(offset, shortToU64(4+stateSize))
+		offset = add64(offset, shortToU64(4+stateSize)) // TODO: need to account for offset/length parts of ABI
 		return
 	}
 
@@ -177,7 +177,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
 	loadMem := func(addr U64, size U64, signed bool, proofIndexL uint8, proofIndexR uint8) (out U64) {
 		if size.val() > 8 {
-			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
+			revertWithCode(0xbad512e0, fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
 		// load/verify left part
 		leftAddr := and64(addr, not64(toU64(31)))
@@ -191,7 +191,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		if iszero64(eq64(leftAddr, rightAddr)) {
 			// if unaligned, use second proof for the right part
 			if proofIndexR == 0xff {
-				panic("unexpected need for right-side proof in loadMem")
+				revertWithCode(0xbad22220, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
 			}
 			// load/verify right part
 			right = b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
@@ -232,7 +232,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 
 	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
 		if size.val() > 32 {
-			panic(fmt.Errorf("cannot store more than 32 bytes: %d", size))
+			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
 		}
 
 		leftAddr := and64(addr, not64(toU64(31)))
@@ -247,20 +247,22 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		max := add64(alignment, size)
 		for i := uint8(0); i < 64; i++ {
 			index := toU64(i)
-			leftSide := lt64(index, toU64(32)) != (U64{})
-			if leftSide {
+			leftSide := lt64(index, toU64(32))
+			switch leftSide.val() {
+			case 1:
 				leftPatch = shl(shift8, leftPatch)
 				leftMask = shl(shift8, leftMask)
-			} else {
+			case 0:
 				rightPatch = shl(shift8, rightPatch)
 				rightMask = shl(shift8, rightMask)
 			}
 			if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) != (U64{}) { // if alignment <= i < alignment+size
 				b := and(shr(u64ToU256(shr64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
-				if leftSide {
+				switch leftSide.val() {
+				case 1:
 					leftPatch = or(leftPatch, b)
 					leftMask = or(leftMask, toU256(0xff))
-				} else {
+				case 0:
 					rightPatch = or(rightPatch, b)
 					rightMask = or(rightMask, toU256(0xff))
 				}
@@ -279,7 +281,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			return
 		}
 		if proofIndexR == 0xff {
-			panic("unexpected need for right-side proof in storeMem")
+			revertWithCode(0xbad22221, fmt.Errorf("unexpected need for right-side proof %d in storeMem", proofIndexR))
 		}
 		// load the right base (with updated mem root)
 		right := b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
@@ -402,7 +404,8 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	readPreimageValue := func(addr U64, count U64) U64 {
-		preImageKey, offset := getPreimageKey(), getPreimageOffset()
+		preImageKey := getPreimageKey()
+		offset := getPreimageOffset()
 
 		pdatB32, pdatlen, err := po.ReadPreImagePart(preImageKey, offset.val()) // pdat is left-aligned
 		if err != nil {
@@ -497,7 +500,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				// say we read it all, to continue execution after reading the hint-write ack response
 				n = count
 				errCode = toU64(0)
-			case fdPreimageRead:
+			case fdPreimageRead: // preimage read
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
