@@ -175,7 +175,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		s.Memory.GetUnaligned(addr, out[:size])
 		v := binary.LittleEndian.Uint64(out[:])
 		bitSize := size << 3
-		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
+		if signed && v&(1<<(bitSize-1)) != 0 { // if the last bit is set, then extend it to the full 64 bits
 			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
 		} // otherwise just leave it zeroed
 		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
@@ -222,13 +222,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		// if not aligned
 		if proofIndexR == 0xff {
-			revertWithCode(0xbad2222f, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
+			revertWithCode(0xbad2222f, fmt.Errorf("unexpected need for right-side proof %d in storeMem", proofIndexR))
 		}
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
 		s.Memory.SetUnaligned(addr, bytez[:leftSize])
 		inst.trackMemAccess(rightAddr, proofIndexR)
-		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
+		s.Memory.SetUnaligned(rightAddr, bytez[leftSize:size])
 	}
 
 	//
@@ -841,6 +841,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != 0 {
 				rs2Value := getRegister(rs2)
+				// TODO may need to verify proof still
 				storeMem(addr, size, rs2Value, 1, 2)
 				rdValue = toU64(0)
 			}
@@ -853,6 +854,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			value := rs2Value
 			v := loadMem(addr, size, true, 1, 2)
+			rdValue := v
 			switch op {
 			case 0x0: // 00000 = AMOADD = add
 				v = add64(v, value)
@@ -884,7 +886,6 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
 			}
 			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
-			rdValue := v
 			setRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))
