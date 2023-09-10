@@ -254,10 +254,6 @@ contract Step {
             //
             // Initial EVM memory / calldata checks
             //
-            if iszero(eq(state, 0x80)) {
-                // expected state mem offset check
-                revert(0, 0)
-            }
             if iszero(eq(mload(0x40), 0x80)) {
                 // expected memory check: no allocated memory (start after scratch + free-mem-ptr + zero slot = 0x80)
                 revert(0, 0)
@@ -270,10 +266,14 @@ contract Step {
                 // user-provided state size must match expected state size
                 revert(0, 0)
             }
-            if iszero(eq(proof.offset, add(add(stateData.offset, 32, stateSize())))) {
-                // 100+32+stateSize = expected proof offset
+            function paddedLen(v) -> out { // padded to multiple of 32 bytes
+                out := mod(sub(32, mod(v, 32)), 32)
+            }
+            if iszero(eq(proof.offset, add(add(stateData.offset, paddedLen(stateSize())), 32))) {
+                // 100+stateSize+padding+32 = expected proof offset
                 revert(0, 0)
             }
+            // TODO: validate abi offset values?
 
             //
             // State loading
@@ -477,7 +477,7 @@ contract Step {
             function proofOffset(proofIndex) -> offset {
                 // proof size: 63 siblings, 1 leaf value, each 32 bytes
                 offset := mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
-                offset := add64(offset, add(4, stateSize())) // TODO: need to account for offset/length parts of ABI
+                offset := add64(offset, proof.offset)
             }
 
             function hashPair(a, b) -> h {

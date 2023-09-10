@@ -2,6 +2,8 @@ package fast
 
 import (
 	"debug/elf"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/protolambda/asterisc/rvgo/slow"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +59,6 @@ func runFastTestSuite(t *testing.T, path string) {
 	}
 }
 
-/*
 func runSlowTestSuite(t *testing.T, path string) {
 	testSuiteELF, err := elf.Open(path)
 	require.NoError(t, err)
@@ -66,43 +67,26 @@ func runSlowTestSuite(t *testing.T, path string) {
 	vmState, err := fast.LoadELF(testSuiteELF)
 	require.NoError(t, err, "must load test suite ELF binary")
 
-	so := oracle.NewStateOracle()
-	pre := vmState.Merkleize(so)
-
+	instState := fast.NewInstrumentedState(vmState, nil, nil, nil)
 	maxAccessListLen := 0
 
 	for i := 0; i < 10_000; i++ {
-		so.BuildAccessList(true)
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
-		post, err := slow.Step(pre, so, nil)
+		wit, err := instState.Step(true)
 		require.NoError(t, err)
 
-		al := so.AccessList()
-		alo := &oracle.AccessListOracle{AccessList: al}
+		// Now run the same in slow mode
+		calldata := wit.EncodeStepInput()
+		post, err := slow.Step(calldata, nil)
+		require.NoErrorf(t, err, "slow VM err at step %d, PC %d: %v", i, vmState.PC, err)
 
-		// Now run the same in fast mode
-		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
-			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
-		}
+		fastPostState := vmState.EncodeWitness()
 
-		fastRoot := vmState.Merkleize(so)
+		fastRoot := crypto.Keccak256Hash(fastPostState)
 		if post != fastRoot {
-			so.Diff(post, fastRoot, 1)
 			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
 		}
-
-		post2, err := slow.Step(pre, alo, nil)
-		require.NoError(t, err)
-		if post2 != fastRoot {
-			so.Diff(post2, fastRoot, 1)
-			t.Fatalf("access-list slow state %x must match fast state %x", post2, fastRoot)
-		}
-		if len(al) > maxAccessListLen {
-			maxAccessListLen = len(al)
-		}
-
-		pre = post
 
 		if vmState.Exited {
 			break
@@ -117,6 +101,8 @@ func runSlowTestSuite(t *testing.T, path string) {
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }
+
+/*
 
 // TODO iterate all test suites
 // TODO maybe load ELF sections for debugging
@@ -290,7 +276,6 @@ func TestFastStep(t *testing.T) {
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 
-/*
 func TestSlowStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
 	runTestCategory := func(name string) {
@@ -304,6 +289,7 @@ func TestSlowStep(t *testing.T) {
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 
+/*
 func TestEVMStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
 	runTestCategory := func(name string) {

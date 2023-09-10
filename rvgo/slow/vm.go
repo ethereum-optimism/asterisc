@@ -59,6 +59,7 @@ const (
 	stateOffsetLoadReservation = stateOffsetHeap + stateSizeHeap
 	stateOffsetRegisters       = stateOffsetLoadReservation + stateSizeLoadReservation
 	stateSize                  = stateOffsetRegisters + stateSizeRegisters
+	paddedStateSize            = stateSize + ((32 - (stateSize % 32)) % 32)
 )
 
 func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr error) {
@@ -99,11 +100,22 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	// TODO check length
 	// TODO check calldata stateData size
 
+	// TODO: validate abi offset values?
+
+	stateContentOffset := uint8(4 + 32 + 32 + 32)
+	if iszero(eq(b32asBEWord(calldataload(toU64(4+32*2))), shortToU256(stateSize))) {
+		// user-provided state size must match expected state size
+		panic("invalid state size input")
+	}
+
+	proofContentOffset := shortToU64(uint16(stateContentOffset) + paddedStateSize + 32)
+
 	//
 	// State loading
 	//
 	// TODO
-	stateData := calldata[:stateSize]
+	stateData := make([]byte, stateSize)
+	copy(stateData, calldata[stateContentOffset:])
 
 	//
 	// State output
@@ -208,7 +220,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	proofOffset := func(proofIndex uint8) (offset U64) {
 		// proof size: 63 siblings, 1 leaf value, each 32 bytes
 		offset = mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
-		offset = add64(offset, shortToU64(4+stateSize)) // TODO: need to account for offset/length parts of ABI
+		offset = add64(offset, proofContentOffset)
 		return
 	}
 

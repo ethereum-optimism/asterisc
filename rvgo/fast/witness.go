@@ -26,13 +26,18 @@ func uint64ToBytes32(v uint64) []byte {
 }
 
 func (wit *StepWitness) EncodeStepInput() []byte {
+	abiStatePadding := (32 - (uint64(len(wit.State)) % 32)) % 32
+
 	var input []byte
 	input = append(input, StepBytes4...)
-	input = append(input, uint64ToBytes32(32*2)...)                           // state data offset in bytes
-	input = append(input, uint64ToBytes32(32*2+32+uint64(len(wit.State)))...) // proof data offset in bytes
+	input = append(input, uint64ToBytes32(32*2)...)                                           // state data offset in bytes
+	input = append(input, uint64ToBytes32(32*2+32+uint64(len(wit.State))+abiStatePadding)...) // proof data offset in bytes
+	// TODO pad state data to multiple of 32 bytes
+	// TODO also pad proof data
 
 	input = append(input, uint64ToBytes32(uint64(len(wit.State)))...) // state data length in bytes
 	input = append(input, wit.State[:]...)
+	input = append(input, make([]byte, abiStatePadding)...)
 	input = append(input, uint64ToBytes32(uint64(len(wit.MemProof)))...) // proof data length in bytes
 	input = append(input, wit.MemProof[:]...)
 	return input
