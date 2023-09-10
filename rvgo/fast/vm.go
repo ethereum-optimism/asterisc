@@ -19,18 +19,6 @@ const (
 // riscvStep runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
 func (inst *InstrumentedState) riscvStep() (outErr error) {
-	s := inst.state
-
-	getExited := func() (exited bool) {
-		return s.Exited
-	}
-	setExited := func() {
-		s.Exited = true
-	}
-	setExitCode := func(v uint8) {
-		s.ExitCode = v
-	}
-
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
@@ -46,91 +34,86 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		panic(err)
 	}
 
-	loadMem := func(addr uint64, size uint64, signed bool, proofIndexL uint8, proofIndexR uint8) uint64 {
-		if size > 8 {
-			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
-		}
-		inst.trackMemAccess(addr&^31, proofIndexL)
-		if (addr+size-1)&31 != addr&31 {
-			if proofIndexR == 0xff {
-				panic("unexpected need for right-side proof in loadMem")
-			}
-			inst.trackMemAccess((addr+size-1)&^31, proofIndexR)
-		}
-		var out [8]byte
-		s.Memory.GetUnaligned(addr, out[:size])
-		v := binary.LittleEndian.Uint64(out[:])
-		bitSize := size << 3
-		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
-			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
-		} // otherwise just leave it zeroed
-		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
-		return v
-	}
-	storeMem := func(addr uint64, size uint64, value uint64, proofIndexL uint8, proofIndexR uint8) {
-		if size > 8 {
-			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
-		}
-		var bytez [8]byte
-		binary.LittleEndian.PutUint64(bytez[:], value)
-		leftAddr := addr &^ 31
-		inst.trackMemAccess(leftAddr, proofIndexL)
-		if (addr+size-1)&31 == addr&31 { // if aligned
-			if proofIndexR == 0xff {
-				panic("unexpected need for right-side proof in storeMem")
-			}
-			s.Memory.SetUnaligned(addr, bytez[:size])
-			return
-		}
-		// if not aligned
-		rightAddr := leftAddr + 32
-		leftSize := rightAddr - addr
-		s.Memory.SetUnaligned(addr, bytez[:leftSize])
-		inst.trackMemAccess(rightAddr, proofIndexR)
-		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
-	}
-	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
-		if size > 32 {
-			panic(fmt.Errorf("cannot store more than 8 bytes: %d", size))
-		}
-		var bytez [32]byte
-		binary.LittleEndian.PutUint64(bytez[:8], value[0])
-		binary.LittleEndian.PutUint64(bytez[8:16], value[1])
-		binary.LittleEndian.PutUint64(bytez[16:24], value[2])
-		binary.LittleEndian.PutUint64(bytez[24:], value[3])
+	//
+	// Yul64 - functions to do 64 bit math - see yul64.go
+	//
 
-		leftAddr := addr &^ 31
-		inst.trackMemAccess(leftAddr, proofIndexL)
-		if (addr+size-1)&31 == addr&31 { // if aligned
-			if proofIndexR == 0xff {
-				panic("unexpected need for right-side proof in storeMem")
-			}
-			s.Memory.SetUnaligned(addr, bytez[:size])
-			return
-		}
-		// if not aligned
-		rightAddr := leftAddr + 32
-		leftSize := rightAddr - addr
-		s.Memory.SetUnaligned(addr, bytez[:leftSize])
-		inst.trackMemAccess(rightAddr, proofIndexR)
-		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
+	//
+	// Bit hacking util
+	//
+
+	//
+	// State layout
+	// N/A
+
+	//
+	// State loading
+	//
+	s := inst.state
+
+	//
+	// State output
+	// N/A
+
+	//
+	// State access
+	//
+
+	// getMemRoot
+	// setMemRoot
+
+	getPreimageKey := func() [32]byte {
+		return s.PreimageKey
+	}
+	setPreimageKey := func(k [32]byte) {
+		s.PreimageKey = k
 	}
 
-	getMemoryB32 := func(addr uint64, proofIndex uint8) (out [32]byte) {
-		if addr&31 != 0 {
-			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
-		}
-		inst.trackMemAccess(addr, proofIndex)
-		s.Memory.GetUnaligned(addr, out[:])
-		return
+	getPreimageOffset := func() U64 {
+		return s.PreimageOffset
+	}
+	setPreimageOffset := func(v U64) {
+		s.PreimageOffset = v
 	}
 
-	setMemoryB32 := func(addr uint64, v [32]byte, proofIndex uint8) {
-		if addr&31 != 0 {
-			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
-		}
-		inst.trackMemAccess(addr, proofIndex)
-		s.Memory.SetUnaligned(addr, v[:])
+	getPC := func() U64 {
+		return s.PC
+	}
+	setPC := func(pc U64) {
+		s.PC = pc
+	}
+
+	getExited := func() (exited bool) {
+		return s.Exited
+	}
+	setExited := func() {
+		s.Exited = true
+	}
+
+	// no getExitCode necessary
+	setExitCode := func(v uint8) {
+		s.ExitCode = v
+	}
+
+	getStep := func() U64 {
+		return s.Step
+	}
+	setStep := func(v U64) {
+		s.Step = v
+	}
+
+	getHeap := func() U64 {
+		return s.Heap
+	}
+	setHeap := func(v U64) {
+		s.Heap = v
+	}
+
+	getLoadReservation := func() U64 {
+		return s.LoadReservation
+	}
+	setLoadReservation := func(addr U64) {
+		s.LoadReservation = addr
 	}
 
 	getRegister := func(reg U64) U64 {
@@ -152,55 +135,112 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		s.Registers[reg] = v
 	}
 
-	getLoadReservation := func() U64 {
-		return s.LoadReservation
-	}
-	setLoadReservation := func(addr U64) {
-		s.LoadReservation = addr
+	//
+	// Parse - functions to parse RISC-V instructions - see parse.go
+	//
+
+	//
+	// Memory functions
+	//
+
+	getMemoryB32 := func(addr uint64, proofIndex uint8) (out [32]byte) {
+		if addr&31 != 0 {
+			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+		}
+		inst.trackMemAccess(addr, proofIndex)
+		s.Memory.GetUnaligned(addr, out[:])
+		return
 	}
 
-	writeCSR := func(num U64, v U64) {
-		// TODO: do we need CSR?
+	setMemoryB32 := func(addr uint64, v [32]byte, proofIndex uint8) {
+		if addr&31 != 0 {
+			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+		}
+		inst.trackMemAccess(addr, proofIndex)
+		s.Memory.SetUnaligned(addr, v[:])
 	}
 
+	loadMem := func(addr uint64, size uint64, signed bool, proofIndexL uint8, proofIndexR uint8) uint64 {
+		if size > 8 {
+			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
+		}
+		inst.trackMemAccess(addr&^31, proofIndexL)
+		if (addr+size-1)&^31 != addr&^31 {
+			if proofIndexR == 0xff {
+				revertWithCode(0xbad22220, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
+			}
+			inst.trackMemAccess((addr+size-1)&^31, proofIndexR)
+		}
+		var out [8]byte
+		s.Memory.GetUnaligned(addr, out[:size])
+		v := binary.LittleEndian.Uint64(out[:])
+		bitSize := size << 3
+		if signed && v&((1<<bitSize)>>1) != 0 { // if the last bit is set, then extend it to the full 64 bits
+			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
+		} // otherwise just leave it zeroed
+		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
+		return v
+	}
+	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
+		if size > 32 {
+			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
+		}
+		var bytez [32]byte
+		binary.LittleEndian.PutUint64(bytez[:8], value[0])
+		binary.LittleEndian.PutUint64(bytez[8:16], value[1])
+		binary.LittleEndian.PutUint64(bytez[16:24], value[2])
+		binary.LittleEndian.PutUint64(bytez[24:], value[3])
+
+		leftAddr := addr &^ 31
+		inst.trackMemAccess(leftAddr, proofIndexL)
+		if (addr+size-1)&3^1 == addr&^31 { // if aligned
+			s.Memory.SetUnaligned(addr, bytez[:size])
+			return
+		}
+		if proofIndexR == 0xff {
+			revertWithCode(0xbad22221, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
+		}
+		// if not aligned
+		rightAddr := leftAddr + 32
+		leftSize := rightAddr - addr
+		s.Memory.SetUnaligned(addr, bytez[:leftSize])
+		inst.trackMemAccess(rightAddr, proofIndexR)
+		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
+	}
+
+	storeMem := func(addr uint64, size uint64, value uint64, proofIndexL uint8, proofIndexR uint8) {
+		if size > 8 {
+			revertWithCode(0xbad512e8, fmt.Errorf("cannot store more than 8 bytes: %d", size))
+		}
+		var bytez [8]byte
+		binary.LittleEndian.PutUint64(bytez[:], value)
+		leftAddr := addr &^ 31
+		inst.trackMemAccess(leftAddr, proofIndexL)
+		if (addr+size-1)&^31 == addr&^31 { // if aligned
+			s.Memory.SetUnaligned(addr, bytez[:size])
+			return
+		}
+		// if not aligned
+		if proofIndexR == 0xff {
+			revertWithCode(0xbad2222f, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
+		}
+		rightAddr := leftAddr + 32
+		leftSize := rightAddr - addr
+		s.Memory.SetUnaligned(addr, bytez[:leftSize])
+		inst.trackMemAccess(rightAddr, proofIndexR)
+		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
+	}
+
+	//
+	// CSR (control and status registers) functions
+	//
 	readCSR := func(num U64) U64 {
 		// TODO: do we need CSR?
 		return toU64(0)
 	}
 
-	getPC := func() U64 {
-		return s.PC
-	}
-	setPC := func(pc U64) {
-		s.PC = pc
-	}
-
-	getStep := func() U64 {
-		return s.Step
-	}
-	setStep := func(v U64) {
-		s.Step = v
-	}
-
-	getHeap := func() U64 {
-		return s.Heap
-	}
-	setHeap := func(v U64) {
-		s.Heap = v
-	}
-
-	getPreimageKey := func() [32]byte {
-		return s.PreimageKey
-	}
-	setPreimageKey := func(k [32]byte) {
-		s.PreimageKey = k
-	}
-
-	getPreimageOffset := func() U64 {
-		return s.PreimageOffset
-	}
-	setPreimageOffset := func(v U64) {
-		s.PreimageOffset = v
+	writeCSR := func(num U64, v U64) {
+		// TODO: do we need CSR?
 	}
 
 	updateCSR := func(num U64, v U64, mode U64) (out U64) {
@@ -218,6 +258,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		return
 	}
 
+	//
+	// Preimage oracle interactions
+	//
 	writePreimageKey := func(addr U64, count U64) U64 {
 		// adjust count down, so we only have to read a single 32 byte leaf of memory
 		alignment := and64(addr, toU64(31))
@@ -283,6 +326,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		return count
 	}
 
+	//
+	// Syscall handling
+	//
 	sysCall := func() {
 		a7 := getRegister(toU64(17))
 		switch a7 {
@@ -343,7 +389,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				// say we read it all, to continue execution after reading the hint-write ack response
 				n = count
 				errCode = toU64(0)
-			case fdPreimageRead:
+			case fdPreimageRead: // preimage read
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
@@ -468,6 +514,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
 	}
+
+	//
+	// Instruction execution
+	//
 
 	if getExited() {
 		return nil

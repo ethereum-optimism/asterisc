@@ -376,7 +376,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			return
 		}
 		if proofIndexR == 0xff {
-			revertWithCode(0xbad22221, fmt.Errorf("unexpected need for right-side proof %d in storeMem", proofIndexR))
+			revertWithCode(0xbad22221, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
 		}
 		// load the right base (with updated mem root)
 		right := b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
