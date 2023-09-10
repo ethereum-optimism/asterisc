@@ -575,11 +575,11 @@ contract Step {
                     let effAddr := and64(sub64(sub64(add64(addr, size), toU64(1)), toU64(i)), not64(toU64(31)))
                     // take a byte from either left or right, depending on the effective address
                     let b := toU256(0)
-                    if eq64(effAddr, leftAddr) {
+                    switch eq64(effAddr, leftAddr)
+                    case 1 {
                         b := and(left, toU256(0xff))
                         left := shr(toU256(8), left)
-                    }
-                    if eq64(effAddr, rightAddr) {
+                    } case 0 {
                         b := and(right, toU256(0xff))
                         right := shr(toU256(8), right)
                     }

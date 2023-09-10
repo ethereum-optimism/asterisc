@@ -17,21 +17,19 @@ const (
 	fdPreimageWrite = 6
 )
 
-func decodeU64(v []byte) (out U64) {
-	if len(v) > 8 {
+func decodeU64BE(v []byte) (out U64) {
+	if len(v) != 8 {
 		panic("bad u64 decode")
 	}
-	var x [8]byte // pad to 8 bytes
-	copy(x[:], v)
-	(*U256)(&out).SetUint64(binary.LittleEndian.Uint64(x[:]) & ((1 << (len(v) * 8)) - 1)) // mask out the lower bytes to get the size of uint we want
+	(*U256)(&out).SetUint64(binary.BigEndian.Uint64(v)) // mask out the lower bytes to get the size of uint we want
 	return
 }
 
-func encodeU64(v U64, dest []byte) {
+func encodeU64BE(v U64, dest []byte) {
 	if len(dest) != 8 {
 		panic("bad u64 encode")
 	}
-	binary.LittleEndian.PutUint64(dest, v.val())
+	binary.BigEndian.PutUint64(dest, v.val())
 }
 
 const (
@@ -143,17 +141,17 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	getPreimageOffset := func() U64 {
-		return decodeU64(stateData[stateOffsetPreimageOffset : stateOffsetPreimageOffset+8])
+		return decodeU64BE(stateData[stateOffsetPreimageOffset : stateOffsetPreimageOffset+8])
 	}
 	setPreimageOffset := func(v U64) {
-		encodeU64(v, stateData[stateOffsetPreimageOffset:stateOffsetPreimageOffset+8])
+		encodeU64BE(v, stateData[stateOffsetPreimageOffset:stateOffsetPreimageOffset+8])
 	}
 
 	getPC := func() U64 {
-		return decodeU64(stateData[stateOffsetPC : stateOffsetPC+8])
+		return decodeU64BE(stateData[stateOffsetPC : stateOffsetPC+8])
 	}
 	setPC := func(pc U64) {
-		encodeU64(pc, stateData[stateOffsetPC:stateOffsetPC+8])
+		encodeU64BE(pc, stateData[stateOffsetPC:stateOffsetPC+8])
 	}
 
 	getExited := func() (exited bool) {
@@ -169,24 +167,24 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	getStep := func() U64 {
-		return decodeU64(stateData[stateOffsetStep : stateOffsetStep+8])
+		return decodeU64BE(stateData[stateOffsetStep : stateOffsetStep+8])
 	}
 	setStep := func(v U64) {
-		encodeU64(v, stateData[stateOffsetStep:stateOffsetStep+8])
+		encodeU64BE(v, stateData[stateOffsetStep:stateOffsetStep+8])
 	}
 
 	getHeap := func() U64 {
-		return decodeU64(stateData[stateOffsetHeap : stateOffsetHeap+8])
+		return decodeU64BE(stateData[stateOffsetHeap : stateOffsetHeap+8])
 	}
 	setHeap := func(v U64) {
-		encodeU64(v, stateData[stateOffsetHeap:stateOffsetHeap+8])
+		encodeU64BE(v, stateData[stateOffsetHeap:stateOffsetHeap+8])
 	}
 
 	getLoadReservation := func() U64 {
-		return decodeU64(stateData[stateOffsetLoadReservation : stateOffsetLoadReservation+8])
+		return decodeU64BE(stateData[stateOffsetLoadReservation : stateOffsetLoadReservation+8])
 	}
 	setLoadReservation := func(addr U64) {
-		encodeU64(addr, stateData[stateOffsetLoadReservation:stateOffsetLoadReservation+8])
+		encodeU64BE(addr, stateData[stateOffsetLoadReservation:stateOffsetLoadReservation+8])
 	}
 
 	getRegister := func(reg U64) U64 {
@@ -195,7 +193,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		}
 		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
-		return decodeU64(stateData[offset.val() : offset.val()+8])
+		return decodeU64BE(stateData[offset.val() : offset.val()+8])
 	}
 	setRegister := func(reg U64, v U64) {
 		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
@@ -207,7 +205,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			revertWithCode(0xbad4e9, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
 		}
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
-		encodeU64(v, stateData[offset.val():offset.val()+8])
+		encodeU64BE(v, stateData[offset.val():offset.val()+8])
 	}
 
 	//
@@ -318,11 +316,11 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			effAddr := and64(sub64(sub64(add64(addr, size), toU64(1)), toU64(i)), not64(toU64(31)))
 			// take a byte from either left or right, depending on the effective address
 			b := toU256(0)
-			if eq64(effAddr, leftAddr) != (U64{}) {
+			switch eq64(effAddr, leftAddr).val() {
+			case 1:
 				b = and(left, toU256(0xff))
 				left = shr(toU256(8), left)
-			}
-			if eq64(effAddr, rightAddr) != (U64{}) {
+			case 0:
 				b = and(right, toU256(0xff))
 				right = shr(toU256(8), right)
 			}

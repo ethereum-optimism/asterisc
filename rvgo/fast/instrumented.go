@@ -93,6 +93,7 @@ func (m *InstrumentedState) trackMemAccess(effAddr uint64, proofIndex uint8) {
 	}
 	if m.memProofEnabled && m.lastMemAccess != effAddr {
 		if m.lastMemAccess != ^uint64(0) {
+			// TODO: need to support access to multiple memory locations, with proofIndex
 			panic(fmt.Errorf("unexpected different mem access at %08x, already have access at %08x buffered", effAddr, m.lastMemAccess))
 		}
 		m.lastMemAccess = effAddr

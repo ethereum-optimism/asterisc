@@ -79,7 +79,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 		// Now run the same in slow mode
 		calldata := wit.EncodeStepInput()
 		post, err := slow.Step(calldata, nil)
-		require.NoErrorf(t, err, "slow VM err at step %d, PC %d: %v", i, vmState.PC, err)
+		require.NoErrorf(t, err, "slow VM err at step %d, PC %08x: %v", i, vmState.PC, err)
 
 		fastPostState := vmState.EncodeWitness()
 
