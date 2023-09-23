@@ -25,11 +25,10 @@ func decodeU64BE(v []byte) (out U64) {
 	return
 }
 
-func encodeU64BE(v U64, dest []byte) {
-	if len(dest) != 8 {
-		panic("bad u64 encode")
-	}
-	binary.BigEndian.PutUint64(dest, v.val())
+func encodeU64BE(v U64) []byte {
+	var dest [8]byte
+	binary.BigEndian.PutUint64(dest[:], v.val())
+	return dest[:]
 }
 
 const (
@@ -125,33 +124,41 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	//
 	// State access
 	//
-	getMemRoot := func() (out [32]byte) {
-		copy(out[:], stateData[stateOffsetMemRoot:stateOffsetMemRoot+32])
-		return
+	readState := func(offset uint64, length uint64) []byte {
+		return stateData[offset : offset+length]
+	}
+	writeState := func(offset uint64, length uint64, data []byte) {
+		if uint64(len(data)) != length {
+			panic("unexpected input length")
+		}
+		copy(stateData[offset:offset+length], data)
+	}
+	getMemRoot := func() [32]byte {
+		return *(*[32]byte)(readState(stateOffsetMemRoot, stateSizeMemRoot))
 	}
 	setMemRoot := func(v [32]byte) {
-		copy(stateData[stateOffsetMemRoot:stateOffsetMemRoot+32], v[:])
+		writeState(stateOffsetMemRoot, stateSizeMemRoot, v[:])
 	}
 
 	getPreimageKey := func() [32]byte {
-		return *(*[32]byte)(stateData[stateOffsetPreimageKey : stateOffsetPreimageKey+32])
+		return *(*[32]byte)(readState(stateOffsetPreimageKey, stateSizePreimageKey))
 	}
 	setPreimageKey := func(k [32]byte) {
-		copy(stateData[stateOffsetPreimageKey:stateOffsetPreimageKey+32], k[:])
+		writeState(stateOffsetPreimageKey, stateSizePreimageKey, k[:])
 	}
 
 	getPreimageOffset := func() U64 {
-		return decodeU64BE(stateData[stateOffsetPreimageOffset : stateOffsetPreimageOffset+8])
+		return decodeU64BE(readState(stateOffsetPreimageOffset, stateSizePreimageOffset))
 	}
 	setPreimageOffset := func(v U64) {
-		encodeU64BE(v, stateData[stateOffsetPreimageOffset:stateOffsetPreimageOffset+8])
+		writeState(stateOffsetPreimageOffset, stateSizePreimageOffset, encodeU64BE(v))
 	}
 
 	getPC := func() U64 {
-		return decodeU64BE(stateData[stateOffsetPC : stateOffsetPC+8])
+		return decodeU64BE(readState(stateOffsetPC, stateSizePC))
 	}
 	setPC := func(pc U64) {
-		encodeU64BE(pc, stateData[stateOffsetPC:stateOffsetPC+8])
+		writeState(stateOffsetPC, stateSizePC, encodeU64BE(pc))
 	}
 
 	getExited := func() (exited bool) {
@@ -167,24 +174,24 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	getStep := func() U64 {
-		return decodeU64BE(stateData[stateOffsetStep : stateOffsetStep+8])
+		return decodeU64BE(readState(stateOffsetStep, stateSizeStep))
 	}
 	setStep := func(v U64) {
-		encodeU64BE(v, stateData[stateOffsetStep:stateOffsetStep+8])
+		writeState(stateOffsetStep, stateSizeStep, encodeU64BE(v))
 	}
 
 	getHeap := func() U64 {
-		return decodeU64BE(stateData[stateOffsetHeap : stateOffsetHeap+8])
+		return decodeU64BE(readState(stateOffsetHeap, stateSizeHeap))
 	}
 	setHeap := func(v U64) {
-		encodeU64BE(v, stateData[stateOffsetHeap:stateOffsetHeap+8])
+		writeState(stateOffsetHeap, stateSizeHeap, encodeU64BE(v))
 	}
 
 	getLoadReservation := func() U64 {
-		return decodeU64BE(stateData[stateOffsetLoadReservation : stateOffsetLoadReservation+8])
+		return decodeU64BE(readState(stateOffsetLoadReservation, stateSizeLoadReservation))
 	}
 	setLoadReservation := func(addr U64) {
-		encodeU64BE(addr, stateData[stateOffsetLoadReservation:stateOffsetLoadReservation+8])
+		writeState(stateOffsetLoadReservation, stateSizeLoadReservation, encodeU64BE(addr))
 	}
 
 	getRegister := func(reg U64) U64 {
@@ -193,7 +200,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		}
 		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
-		return decodeU64BE(stateData[offset.val() : offset.val()+8])
+		return decodeU64BE(readState(offset.val(), 8))
 	}
 	setRegister := func(reg U64, v U64) {
 		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
@@ -205,7 +212,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			revertWithCode(0xbad4e9, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
 		}
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
-		encodeU64BE(v, stateData[offset.val():offset.val()+8])
+		writeState(offset.val(), 8, encodeU64BE(v))
 	}
 
 	//
