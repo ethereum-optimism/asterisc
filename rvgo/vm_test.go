@@ -68,7 +68,6 @@ func runSlowTestSuite(t *testing.T, path string) {
 	require.NoError(t, err, "must load test suite ELF binary")
 
 	instState := fast.NewInstrumentedState(vmState, nil, nil, nil)
-	maxAccessListLen := 0
 
 	for i := 0; i < 10_000; i++ {
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
@@ -92,8 +91,6 @@ func runSlowTestSuite(t *testing.T, path string) {
 			break
 		}
 	}
-
-	t.Logf("max access-list length: %d", maxAccessListLen)
 
 	require.True(t, vmState.Exited, "ran out of steps")
 	if vmState.ExitCode != 0 {
