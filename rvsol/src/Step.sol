@@ -298,7 +298,7 @@ contract Step {
                 out := mload(add(memStateOffset(), offset)) // note: the state variables are all big-endian encoded
                 out := shr(shl(3, sub(32, length)), out) // shift-right to right-align data and reduce to desired length
             }
-            function writeState(offset, length, data) -> out {
+            function writeState(offset, length, data) {
                 // TODO revert if more than 32 bytes
                 let memOffset := add(memStateOffset(), offset)
                 // left-aligned mask of length bytes
@@ -475,8 +475,8 @@ contract Step {
             // Memory functions
             //
             function proofOffset(proofIndex) -> offset {
-                // proof size: 63 siblings, 1 leaf value, each 32 bytes
-                offset := mul64(mul64(toU64(proofIndex), toU64(64)), toU64(32))
+                // proof size: 64-5+1=60 (a 64-bit mem-address branch to 32 byte leaf, incl leaf itself), all 32 bytes
+                offset := mul64(mul64(toU64(proofIndex), toU64(60)), toU64(32))
                 offset := add64(offset, proof.offset)
             }
 
@@ -620,7 +620,7 @@ contract Step {
                         rightMask := shl(shift8, rightMask)
                     }
                     if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) { // if alignment <= i < alignment+size
-                        let b := and(shr(u64ToU256(shr64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
+                        let b := and(shr(u64ToU256(shl64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
                         switch leftSide
                         case 1 {
                             leftPatch := or(leftPatch, b)
@@ -736,7 +736,7 @@ contract Step {
 
                 // make call to pre-image oracle contract
                 let pdatB32, pdatlen := readPreimagePart(preImageKey, offset)
-                if iszero64(toU64(pdatlen)) { // EOF
+                if iszero64(pdatlen) { // EOF
                     out := toU64(0)
                     leave
                 }
@@ -745,8 +745,8 @@ contract Step {
                 if gt64(count, maxData) {
                     count := maxData
                 }
-                if gt64(count, toU64(pdatlen)) { // cannot read more than pdatlen
-                    count := toU64(pdatlen)
+                if gt64(count, pdatlen) { // cannot read more than pdatlen
+                    count := pdatlen
                 }
 
                 let bits := shl64(toU64(3), sub64(toU64(32), count))             // 32-count, in bits
@@ -1276,6 +1276,7 @@ contract Step {
                     }
                     let value := rs2Value
                     let v := loadMem(addr, size, true, 1, 2)
+                    let rdValue := v
                     switch op
                     case 0x0 { // 00000 = AMOADD = add
                         v := add64(v, value)
@@ -1307,7 +1308,6 @@ contract Step {
                         revertWithCode(0xf001a70) // unknown atomic operation
                     }
                     storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
-                    let rdValue := v
                     setRegister(rd, rdValue)
                 }
                 setPC(add64(_pc, toU64(4)))
