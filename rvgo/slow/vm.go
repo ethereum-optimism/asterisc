@@ -342,33 +342,22 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		return
 	}
 
-	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
-		if size.val() > 32 {
-			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
-		}
-
-		leftAddr := and64(addr, not64(toU64(31)))
-		rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
-		alignment := sub64(addr, leftAddr)
-		leftPatch := toU256(0)
-		rightPatch := toU256(0)
-		leftMask := toU256(0)
-		rightMask := toU256(0)
-		shift8 := toU256(8)
-		min := alignment
-		max := add64(alignment, size)
+	// Splits the value into a left and a right part, each with a mask (identify data) and a patch (diff content).
+	leftAndRight := func(alignment U64, size U64, value U256) (leftMask, rightMask, leftPatch, rightPatch U256) {
+		start := alignment
+		end := add64(alignment, size)
 		for i := uint8(0); i < 64; i++ {
 			index := toU64(i)
 			leftSide := lt64(index, toU64(32))
 			switch leftSide.val() {
 			case 1:
-				leftPatch = shl(shift8, leftPatch)
-				leftMask = shl(shift8, leftMask)
+				leftPatch = shl(toU256(8), leftPatch)
+				leftMask = shl(toU256(8), leftMask)
 			case 0:
-				rightPatch = shl(shift8, rightPatch)
-				rightMask = shl(shift8, rightMask)
+				rightPatch = shl(toU256(8), rightPatch)
+				rightMask = shl(toU256(8), rightMask)
 			}
-			if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) != (U64{}) { // if alignment <= i < alignment+size
+			if and64(eq64(lt64(index, start), toU64(0)), lt64(index, end)) != (U64{}) { // if alignment <= i < alignment+size
 				b := and(shr(u64ToU256(shl64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
 				switch leftSide.val() {
 				case 1:
@@ -380,6 +369,18 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 				}
 			}
 		}
+		return
+	}
+
+	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
+		if size.val() > 32 {
+			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
+		}
+
+		leftAddr := and64(addr, not64(toU64(31)))
+		rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
+		alignment := sub64(addr, leftAddr)
+		leftMask, rightMask, leftPatch, rightPatch := leftAndRight(alignment, size, value)
 
 		// load the left base
 		left := b32asBEWord(getMemoryB32(leftAddr, proofIndexL))

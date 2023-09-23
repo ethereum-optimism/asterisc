@@ -6,7 +6,7 @@ contract Step {
 
     address public preimageOracle;
 
-    constructor(address _preimageOracle) public {
+    constructor(address _preimageOracle) {
         preimageOracle = _preimageOracle;
     }
 
@@ -16,6 +16,10 @@ contract Step {
             function revertWithCode(code) {
                 mstore(0, code)
                 revert(0, 0x20)
+            }
+
+            function preimageOraclePos() -> out { // slot of preimageOraclePos field
+                out := 0
             }
 
             //
@@ -34,6 +38,14 @@ contract Step {
             }
 
             function shortToU64(v) -> out {
+                out := v
+            }
+
+            function shortToU256(v) -> out {
+                out := v
+            }
+
+            function longToU256(v) -> out {
                 out := v
             }
 
@@ -240,16 +252,16 @@ contract Step {
             function stateSizeRegisters()          -> out { out := mul(8, 32) }
 
             function stateOffsetMemRoot()          -> out { out := 0 }
-            function stateOffsetPreimageKey()      -> out { out := add(stateOffsetMemRoot, stateSizeMemRoot) }
-            function stateOffsetPreimageOffset()   -> out { out := add(stateOffsetPreimageKey, stateSizePreimageKey) }
-            function stateOffsetPC()               -> out { out := add(stateOffsetPreimageOffset, stateSizePreimageOffset) }
-            function stateOffsetExitCode()         -> out { out := add(stateOffsetPC, stateSizePC) }
-            function stateOffsetExited()           -> out { out := add(stateOffsetExitCode, stateSizeExitCode) }
-            function stateOffsetStep()             -> out { out := add(stateOffsetExited, stateSizeExited) }
-            function stateOffsetHeap()             -> out { out := add(stateOffsetStep, stateSizeStep) }
-            function stateOffsetLoadReservation()  -> out { out := add(stateOffsetHeap, stateSizeHeap) }
-            function stateOffsetRegisters()        -> out { out := add(stateOffsetLoadReservation, stateSizeLoadReservation) }
-            function stateSize()                   -> out { out := add(stateOffsetRegisters, stateSizeRegisters) }
+            function stateOffsetPreimageKey()      -> out { out := add(stateOffsetMemRoot(), stateSizeMemRoot()) }
+            function stateOffsetPreimageOffset()   -> out { out := add(stateOffsetPreimageKey(), stateSizePreimageKey()) }
+            function stateOffsetPC()               -> out { out := add(stateOffsetPreimageOffset(), stateSizePreimageOffset()) }
+            function stateOffsetExitCode()         -> out { out := add(stateOffsetPC(), stateSizePC()) }
+            function stateOffsetExited()           -> out { out := add(stateOffsetExitCode(), stateSizeExitCode()) }
+            function stateOffsetStep()             -> out { out := add(stateOffsetExited(), stateSizeExited()) }
+            function stateOffsetHeap()             -> out { out := add(stateOffsetStep(), stateSizeStep()) }
+            function stateOffsetLoadReservation()  -> out { out := add(stateOffsetHeap(), stateSizeHeap()) }
+            function stateOffsetRegisters()        -> out { out := add(stateOffsetLoadReservation(), stateSizeLoadReservation()) }
+            function stateSize()                   -> out { out := add(stateOffsetRegisters(), stateSizeRegisters()) }
 
             //
             // Initial EVM memory / calldata checks
@@ -271,6 +283,12 @@ contract Step {
             }
             if iszero(eq(proof.offset, add(add(stateData.offset, paddedLen(stateSize())), 32))) {
                 // 100+stateSize+padding+32 = expected proof offset
+                revert(0, 0)
+            }
+            function proofContentOffset() -> out { // since we can't reference proof.offset in functions, blame Yul
+                out := 516
+            }
+            if iszero(eq(proof.offset, proofContentOffset())) {
                 revert(0, 0)
             }
             // TODO: validate abi offset values?
@@ -342,8 +360,8 @@ contract Step {
             function getExited() -> out {
                 out := readState(stateOffsetExited(), stateSizeExited())
             }
-            function setExited(v) {
-                writeState(stateOffsetExited(), stateSizeExited(), v)
+            function setExited() {
+                writeState(stateOffsetExited(), stateSizeExited(), 1)
             }
 
             // no getExitCode necessary
@@ -379,7 +397,7 @@ contract Step {
                 let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
                 out := readState(offset, 8)
             }
-            function setRegister(reg, val) {
+            function setRegister(reg, v) {
                 if iszero64(reg) { // reg 0 must stay 0
                     // v is a HINT, but no hints are specified by standard spec, or used by us.
                     leave
@@ -477,7 +495,7 @@ contract Step {
             function proofOffset(proofIndex) -> offset {
                 // proof size: 64-5+1=60 (a 64-bit mem-address branch to 32 byte leaf, incl leaf itself), all 32 bytes
                 offset := mul64(mul64(toU64(proofIndex), toU64(60)), toU64(32))
-                offset := add64(offset, proof.offset)
+                offset := add64(offset, proofContentOffset())
             }
 
             function hashPair(a, b) -> h {
@@ -593,33 +611,22 @@ contract Step {
                 }
             }
 
-            function storeMemUnaligned(addr, size, value, proofIndexL, proofIndexR) {
-                if gt(size, 32) {
-                    revertWithCode(0xbad512e1) // cannot store more than 32 bytes
-                }
-
-                let leftAddr := and64(addr, not64(toU64(31)))
-                let rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
-                let alignment := sub64(addr, leftAddr)
-                let leftPatch := toU256(0)
-                let rightPatch := toU256(0)
-                let leftMask := toU256(0)
-                let rightMask := toU256(0)
-                let shift8 := toU256(8)
-                let min := alignment
-                let max := add64(alignment, size)
+            // Splits the value into a left and a right part, each with a mask (identify data) and a patch (diff content).
+            function leftAndRight(alignment, size, value) -> leftMask, rightMask, leftPatch, rightPatch {
+                let start := alignment
+                let end := add64(alignment, size)
                 for { let i := 0 } lt(i, 64) { i := add(i, 1) } {
                     let index := toU64(i)
                     let leftSide := lt64(index, toU64(32))
                     switch leftSide
                     case 1 {
-                        leftPatch := shl(shift8, leftPatch)
-                        leftMask := shl(shift8, leftMask)
+                        leftPatch := shl(8, leftPatch)
+                        leftMask := shl(8, leftMask)
                     } case 0 {
-                        rightPatch := shl(shift8, rightPatch)
-                        rightMask := shl(shift8, rightMask)
+                        rightPatch := shl(8, rightPatch)
+                        rightMask := shl(8, rightMask)
                     }
-                    if and64(eq64(lt64(index, min), toU64(0)), lt64(index, max)) { // if alignment <= i < alignment+size
+                    if and64(eq64(lt64(index, start), toU64(0)), lt64(index, end)) { // if alignment <= i < alignment+size
                         let b := and(shr(u64ToU256(shl64(toU64(3), sub64(index, alignment))), value), toU256(0xff))
                         switch leftSide
                         case 1 {
@@ -631,6 +638,17 @@ contract Step {
                         }
                     }
                 }
+            }
+
+            function storeMemUnaligned(addr, size, value, proofIndexL, proofIndexR) {
+                if gt(size, 32) {
+                    revertWithCode(0xbad512e1) // cannot store more than 32 bytes
+                }
+
+                let leftAddr := and64(addr, not64(toU64(31)))
+                let rightAddr := and64(add64(addr, sub64(size, toU64(1))), not64(toU64(31)))
+                let alignment := sub64(addr, leftAddr)
+                let leftMask, rightMask, leftPatch, rightPatch := leftAndRight(alignment, size, value)
 
                 // load the left base
                 let left := b32asBEWord(getMemoryB32(leftAddr, proofIndexL))
@@ -661,11 +679,11 @@ contract Step {
             //
             // CSR (control and status registers) functions
             //
-            function readCSR() -> out {
+            function readCSR(num) -> out {
                 out := 0 // just return zero, CSR is not supported, but may be in the future.
             }
 
-            function writeCSR(v) -> out {
+            function writeCSR(num, v) {
                 // no-op
             }
 
@@ -905,7 +923,7 @@ contract Step {
                     let addr := getRegister(toU64(11)) // addr of timespec struct
                     // first 8 bytes: tv_sec: 1337 seconds
                     // second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
-                    storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
+                    storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1337000000000))), 1, 2)
                     setRegister(toU64(10), toU64(0))
                     setRegister(toU64(11), toU64(0))
                 } case 135 { // rt_sigprocmask - ignore any sigset changes
@@ -1257,14 +1275,14 @@ contract Step {
                 let op := shr64(toU64(2), funct7)
                 switch op
                 case 0x2 { // 00010 = LR = Load Reserved
-                    let v := loadMem(addr, size, true)
+                    let v := loadMem(addr, size, true, 1, 2)
                     setRegister(rd, v)
                     setLoadReservation(addr)
                 } case 0x3 { // 00011 = SC = Store Conditional
                     let rdValue := toU64(1)
                     if eq64(addr, getLoadReservation()) {
                         let rs2Value := getRegister(rs2)
-                        storeMem(addr, size, rs2Value)
+                        storeMem(addr, size, rs2Value, 1, 2)
                         rdValue := toU64(0)
                     }
                     setRegister(rd, rdValue)
