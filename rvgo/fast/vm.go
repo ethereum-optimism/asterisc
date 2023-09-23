@@ -143,26 +143,27 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	// Memory functions
 	//
 
-	getMemoryB32 := func(addr uint64, proofIndex uint8) (out [32]byte) {
-		if addr&31 != 0 {
-			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+	getMemoryB32 := func(addr U64, proofIndex uint8) (out [32]byte) {
+		if addr&31 != 0 { // quick addr alignment check
+			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
 		inst.trackMemAccess(addr, proofIndex)
 		s.Memory.GetUnaligned(addr, out[:])
 		return
 	}
 
-	setMemoryB32 := func(addr uint64, v [32]byte, proofIndex uint8) {
+	setMemoryB32 := func(addr U64, v [32]byte, proofIndex uint8) {
 		if addr&31 != 0 {
 			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
-		inst.trackMemAccess(addr, proofIndex)
+		inst.verifyMemChange(addr, proofIndex)
 		s.Memory.SetUnaligned(addr, v[:])
 	}
 
-	loadMem := func(addr uint64, size uint64, signed bool, proofIndexL uint8, proofIndexR uint8) uint64 {
+	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
+	loadMem := func(addr U64, size U64, signed bool, proofIndexL uint8, proofIndexR uint8) (out U64) {
 		if size > 8 {
-			panic(fmt.Errorf("cannot load more than 8 bytes: %d", size))
+			revertWithCode(0xbad512e0, fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
 		inst.trackMemAccess(addr&^31, proofIndexL)
 		if (addr+size-1)&^31 != addr&^31 {
@@ -171,17 +172,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			inst.trackMemAccess((addr+size-1)&^31, proofIndexR)
 		}
-		var out [8]byte
-		s.Memory.GetUnaligned(addr, out[:size])
-		v := binary.LittleEndian.Uint64(out[:])
+		var v [8]byte
+		s.Memory.GetUnaligned(addr, v[:size])
+		out = binary.LittleEndian.Uint64(v[:])
 		bitSize := size << 3
-		if signed && v&(1<<(bitSize-1)) != 0 { // if the last bit is set, then extend it to the full 64 bits
-			v |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
+		if signed && out&(1<<(bitSize-1)) != 0 { // if the last bit is set, then extend it to the full 64 bits
+			out |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
 		} // otherwise just leave it zeroed
 		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
-		return v
+		return out
 	}
-	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
+
+	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
 		if size > 32 {
 			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
 		}
@@ -192,7 +194,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		binary.LittleEndian.PutUint64(bytez[24:], value[3])
 
 		leftAddr := addr &^ 31
-		inst.trackMemAccess(leftAddr, proofIndexL)
+		if verifyL {
+			inst.trackMemAccess(leftAddr, proofIndexL)
+		}
+		inst.verifyMemChange(leftAddr, proofIndexL)
 		if (addr+size-1)&3^1 == addr&^31 { // if aligned
 			s.Memory.SetUnaligned(addr, bytez[:size])
 			return
@@ -204,18 +209,24 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
 		s.Memory.SetUnaligned(addr, bytez[:leftSize])
-		inst.trackMemAccess(rightAddr, proofIndexR)
+		if verifyR {
+			inst.trackMemAccess(rightAddr, proofIndexR)
+		}
+		inst.verifyMemChange(rightAddr, proofIndexR)
 		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
 	}
 
-	storeMem := func(addr uint64, size uint64, value uint64, proofIndexL uint8, proofIndexR uint8) {
+	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
 		if size > 8 {
 			revertWithCode(0xbad512e8, fmt.Errorf("cannot store more than 8 bytes: %d", size))
 		}
 		var bytez [8]byte
 		binary.LittleEndian.PutUint64(bytez[:], value)
 		leftAddr := addr &^ 31
-		inst.trackMemAccess(leftAddr, proofIndexL)
+		if verifyL {
+			inst.trackMemAccess(leftAddr, proofIndexL)
+		}
+		inst.verifyMemChange(leftAddr, proofIndexL)
 		if (addr+size-1)&^31 == addr&^31 { // if aligned
 			s.Memory.SetUnaligned(addr, bytez[:size])
 			return
@@ -227,7 +238,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
 		s.Memory.SetUnaligned(addr, bytez[:leftSize])
-		inst.trackMemAccess(rightAddr, proofIndexR)
+		if verifyR {
+			inst.trackMemAccess(rightAddr, proofIndexR)
+		}
+		inst.verifyMemChange(rightAddr, proofIndexR)
 		s.Memory.SetUnaligned(rightAddr, bytez[leftSize:size])
 	}
 
@@ -291,7 +305,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 
 	readPreimageValue := func(addr U64, count U64) U64 {
-		preImageKey, offset := getPreimageKey(), getPreimageOffset()
+		preImageKey := getPreimageKey()
+		offset := getPreimageOffset()
 
 		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
@@ -380,7 +395,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
 			count := getRegister(toU64(12)) // A2 = count
-			var n, errCode U64
+			var n U64
+			var errCode U64
 			switch fd {
 			case fdStdin: // stdin
 				n = toU64(0) // never read anything from stdin
@@ -402,7 +418,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
 			count := getRegister(toU64(12)) // A2 = count
-			var n, errCode U64
+			var n U64
+			var errCode U64
 			switch fd {
 			case fdStdout: // stdout
 				_, err := io.Copy(inst.stdOut, s.Memory.ReadMemoryRange(addr, count))
@@ -445,7 +462,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 25: // fcntl - file descriptor manipulation / info lookup
 			fd := getRegister(toU64(10))  // A0 = fd
 			cmd := getRegister(toU64(11)) // A1 = cmd
-			var out, errCode U64
+			var out U64
+			var errCode U64
 			switch cmd {
 			case 0x3: // F_GETFL: get file descriptor flags
 				switch fd {
@@ -483,7 +501,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			addr := getRegister(toU64(11)) // addr of timespec struct
 			// first 8 bytes: tv_sec: 1337 seconds
 			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
-			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2)
+			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2, true, true)
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
@@ -506,7 +524,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			case 0x7: // RLIMIT_NOFILE
 				// first 8 bytes: soft limit. 1024 file handles max open
 				// second 8 bytes: hard limit
-				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2)
+				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2, true, true)
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
@@ -519,7 +537,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	// Instruction execution
 	//
 
-	if getExited() {
+	if getExited() { // early exit if we can
 		return nil
 	}
 	setStep(add64(getStep(), toU64(1)))
@@ -553,7 +571,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		value := getRegister(rs2)
 		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-		storeMem(memIndex, size, value, 1, 2)
+		storeMem(memIndex, size, value, 1, 2, true, true)
 		setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
 		rs1Value := getRegister(rs1)
@@ -841,8 +859,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != 0 {
 				rs2Value := getRegister(rs2)
-				// TODO may need to verify proof still
-				storeMem(addr, size, rs2Value, 1, 2)
+				storeMem(addr, size, rs2Value, 1, 2, true, true)
 				rdValue = toU64(0)
 			}
 			setRegister(rd, rdValue)
@@ -885,7 +902,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			default:
 				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
 			}
-			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
+			storeMem(addr, size, v, 1, 3, false, true) // after overwriting 1, proof 2 is no longer valid
 			setRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))

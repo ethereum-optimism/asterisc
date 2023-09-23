@@ -11,15 +11,17 @@ type PreimageOracle interface {
 	GetPreimage(k [32]byte) ([]byte, error)
 }
 
+const memProofSize = (64 - 5 + 1) * 32
+
 type InstrumentedState struct {
 	state *VMState
 
 	stdOut io.Writer
 	stdErr io.Writer
 
-	lastMemAccess   uint64
 	memProofEnabled bool
-	memProof        [(64 - 5 + 1) * 32]byte
+	memProofs       [][memProofSize]byte
+	memAccess       []uint64
 
 	preimageOracle PreimageOracle
 
@@ -42,23 +44,26 @@ func NewInstrumentedState(state *VMState, po PreimageOracle, stdOut, stdErr io.W
 
 func (m *InstrumentedState) Step(proof bool) (wit *StepWitness, err error) {
 	m.memProofEnabled = proof
-	m.lastMemAccess = ^uint64(0)
+	m.memAccess = m.memAccess[:0]
+	m.memProofs = m.memProofs[:0]
 	m.lastPreimageOffset = ^uint64(0)
 
 	if proof {
-		insnProof := m.state.Memory.MerkleProof(m.state.PC)
 		wit = &StepWitness{
-			State:    m.state.EncodeWitness(),
-			MemProof: insnProof[:],
+			State: m.state.EncodeWitness(), // we need the pre-state as wit-ness
 		}
 	}
+
 	err = m.riscvStep()
 	if err != nil {
 		return nil, err
 	}
 
 	if proof {
-		wit.MemProof = append(wit.MemProof, m.memProof[:]...)
+		wit.MemProof = make([]byte, 0, len(m.memProofs)*memProofSize)
+		for i := range m.memProofs {
+			wit.MemProof = append(wit.MemProof, m.memProofs[i][:]...)
+		}
 		if m.lastPreimageOffset != ^uint64(0) {
 			wit.PreimageOffset = m.lastPreimageOffset
 			wit.PreimageKey = m.lastPreimageKey
@@ -87,16 +92,27 @@ func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]b
 	return
 }
 
+// trackMemAccess remembers a merkle-branch of memory to the given address,
+// and ensures it comes right after the last memory proof.
 func (m *InstrumentedState) trackMemAccess(effAddr uint64, proofIndex uint8) {
 	if effAddr&31 != 0 {
 		panic("effective memory access must be aligned to 32 bytes")
 	}
-	if m.memProofEnabled && m.lastMemAccess != effAddr {
-		if m.lastMemAccess != ^uint64(0) {
-			// TODO: need to support access to multiple memory locations, with proofIndex
-			panic(fmt.Errorf("unexpected different mem access at %08x, already have access at %08x buffered", effAddr, m.lastMemAccess))
+	if m.memProofEnabled {
+		if len(m.memProofs) != int(proofIndex) {
+			panic(fmt.Errorf("mem access with unexpected proof index, got %d but expected %d", proofIndex, len(m.memProofs)))
 		}
-		m.lastMemAccess = effAddr
-		m.memProof = m.state.Memory.MerkleProof(effAddr)
+		m.memProofs = append(m.memProofs, m.state.Memory.MerkleProof(effAddr))
+		m.memAccess = append(m.memAccess, effAddr)
+	}
+}
+
+// verifyMemChange verifies a memory change proof reused the last verified mem-proof at the same address
+func (m *InstrumentedState) verifyMemChange(effAddr uint64, proofIndex uint8) {
+	if int(proofIndex) >= len(m.memAccess) {
+		panic(fmt.Errorf("mem change at %016x with proof index %d, but only aware of %d proofs", effAddr, proofIndex, len(m.memAccess)))
+	}
+	if effAddr != m.memAccess[proofIndex] {
+		panic(fmt.Errorf("mem access at %016x with mismatching prior proof verification for address %016x", effAddr, m.memAccess[proofIndex]))
 	}
 }
