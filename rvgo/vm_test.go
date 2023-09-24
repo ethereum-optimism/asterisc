@@ -115,13 +115,13 @@ func runEVMTestSuite(t *testing.T, path string) {
 
 	maxGasUsed := uint64(0)
 
-	for i := 0; i < 10_000; i++ {
+	for i := uint64(0); i < 10_000; i++ {
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
 		wit, err := instState.Step(true)
 		require.NoError(t, err)
 
-		evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs)
+		evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs, i)
 		if gasUsed > maxGasUsed {
 			maxGasUsed = gasUsed
 		}

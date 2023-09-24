@@ -758,11 +758,12 @@ contract Step {
 
             function readPreimagePart(key, offset) -> dat, datlen {
                 let addr := sload(preimageOraclePos()) // calling Oracle.readPreimage(bytes32,uint256)
-                mstore(0x80, shl(224, 0xe03110e1)) // (32-4)*8=224: right-pad the function selector, and then store it as prefix
-                mstore(0x84, key)
-                mstore(0xa4, offset)
+                let memPtr := mload(0x40) // get pointer to free memory for preimage interactions
+                mstore(memPtr, shl(224, 0xe03110e1)) // (32-4)*8=224: right-pad the function selector, and then store it as prefix
+                mstore(add(memPtr, 0x04), key)
+                mstore(add(memPtr, 0x24), offset)
                 let cgas := 100000 // TODO change call gas
-                let res := call(cgas, addr, 0, 0x80, 0x44, 0x00, 0x40) // output into scratch space
+                let res := call(cgas, addr, 0, memPtr, 0x44, 0x00, 0x40) // output into scratch space
                 if res { // 1 on success
                     dat := mload(0x00)
                     datlen := mload(0x20)

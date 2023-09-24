@@ -133,14 +133,17 @@ func testContracts(t *testing.T) *Contracts {
 func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts) {
 	//env.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
 
-	m, err := contracts.RISCV.SourceMap([]string{"../rvsol/src/Step.sol"})
+	a, err := contracts.RISCV.SourceMap([]string{"../rvsol/src/Step.sol"})
+	require.NoError(t, err)
+	b, err := contracts.Oracle.SourceMap([]string{"../rvsol/src/PreimageOracle.sol"})
 	require.NoError(t, err)
 	env.Config.Tracer = srcmap.NewSourceMapTracer(map[common.Address]*srcmap.SourceMap{
-		addrs.RISCV: m,
+		addrs.RISCV:  a,
+		addrs.Oracle: b,
 	}, os.Stdout)
 }
 
-func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses) (postState []byte, postHash common.Hash, gasUsed uint64) {
+func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses, step uint64) (postState []byte, postHash common.Hash, gasUsed uint64) {
 	startingGas := uint64(30_000_000)
 
 	snap := env.StateDB.Snapshot()
@@ -155,7 +158,7 @@ func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses)
 	input := wit.EncodeStepInput()
 
 	ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.RISCV, input, startingGas, big.NewInt(0))
-	require.NoError(t, err, "evm must not fail (ret: %x)", ret)
+	require.NoError(t, err, "evm must not fail (ret: %x), at step %d", ret, step)
 	gasUsed = startingGas - leftOverGas
 
 	require.Len(t, ret, 32)

@@ -78,7 +78,7 @@ func fullTest(t *testing.T, vmState *fast.VMState, po *testOracle, symbols fast.
 	maxGasUsed := uint64(0)
 
 	var lastSym elf.Symbol
-	for i := 0; i < 2000_000; i++ {
+	for i := uint64(0); i < 2000_000; i++ {
 		sym := symbols.FindSymbol(vmState.PC)
 
 		if sym.Name != lastSym.Name {
@@ -117,13 +117,13 @@ func fullTest(t *testing.T, vmState *fast.VMState, po *testOracle, symbols fast.
 			}
 
 			if runEVM {
-				evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs)
+				evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs, i)
 				if gasUsed > maxGasUsed {
 					maxGasUsed = gasUsed
 				}
 
 				if evmPostHash != fastStateHash {
-					t.Fatalf("evm state %x must match fast state %x\nfast:%x\nevm: %x\n", evmPostHash, fastStateHash, fastPostState, evmPost)
+					t.Fatalf("evm state %x must match fast state %x\nfast:%x\nevm: %x\nat step %d\n", evmPostHash, fastStateHash, fastPostState, evmPost, i)
 				}
 			}
 		}
@@ -200,7 +200,6 @@ func TestSimple(t *testing.T) {
 	})
 
 	t.Run("evm", func(t *testing.T) {
-		t.Skip("TODO still failing with a memory error after preimage read") // TODO
 		vmState, err := fast.LoadELF(programELF)
 		require.NoError(t, err, "must load test suite ELF binary")
 
