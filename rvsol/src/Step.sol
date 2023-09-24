@@ -274,12 +274,13 @@ contract Step {
                 // 32*3+4 = 100 expected state data offset
                 revert(0, 0)
             }
-            if iszero(eq(calldataload(stateData.offset), stateSize())) {
+            if iszero(eq(calldataload(sub(stateData.offset, 32)), stateSize())) {
                 // user-provided state size must match expected state size
                 revert(0, 0)
             }
             function paddedLen(v) -> out { // padded to multiple of 32 bytes
-                out := mod(sub(32, mod(v, 32)), 32)
+                let padding := mod(sub(32, mod(v, 32)), 32)
+                out := add(v, padding)
             }
             if iszero(eq(proof.offset, add(add(stateData.offset, paddedLen(stateSize())), 32))) {
                 // 100+stateSize+padding+32 = expected proof offset
@@ -299,7 +300,7 @@ contract Step {
             function memStateOffset() -> out { out := 0x80 }
             // copy the state calldata into memory, so we can mutate it
             mstore(0x40, add(memStateOffset(), stateSize())) // alloc, update free mem pointer
-            calldatacopy(memStateOffset(), add(stateData.offset, 32), stateSize()) // same format in memory as in calldata
+            calldatacopy(memStateOffset(), stateData.offset, stateSize()) // same format in memory as in calldata
 
             //
             // State output
@@ -526,7 +527,7 @@ contract Step {
                 }
                 let memRoot := getMemRoot()
                 if iszero(eq(b32asBEWord(node), b32asBEWord(memRoot))) { // verify the root matches
-                    revertWithCode(0x0badf00d) // bad memory proof
+                    revertWithCode(0xbadf00d1) // bad memory proof
                 }
                 out := leaf
             }
@@ -745,7 +746,7 @@ contract Step {
                     datlen := mload(0x20)
                     leave
                 }
-                revertWithCode(0xbadf00d)
+                revertWithCode(0xbadf00d0)
             }
 
             function readPreimageValue(addr, count) -> out {

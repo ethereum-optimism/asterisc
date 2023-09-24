@@ -255,7 +255,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		}
 		memRoot := getMemRoot()
 		if iszero(eq(b32asBEWord(node), b32asBEWord(memRoot))) { // verify the root matches
-			revertWithCode(0x0badf00d, fmt.Errorf("bad memory proof, got mem root: %x, expected %x", node, memRoot))
+			revertWithCode(0xbadf00d1, fmt.Errorf("bad memory proof, got mem root: %x, expected %x", node, memRoot))
 		}
 		out = leaf
 		return
@@ -474,7 +474,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			datlen = toU64(l)
 			return
 		}
-		revertWithCode(0xbadf00d, err)
+		revertWithCode(0xbadf00d0, err)
 		return
 	}
 

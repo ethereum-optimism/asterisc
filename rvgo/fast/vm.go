@@ -310,7 +310,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
-			revertWithCode(0xbadf00d, err)
+			revertWithCode(0xbadf00d0, err)
 		}
 		if iszero64(pdatlen) { // EOF
 			return toU64(0)
