@@ -2,8 +2,9 @@ package fast
 
 import (
 	"debug/elf"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/protolambda/asterisc/rvgo/slow"
+	"encoding/binary"
+	"encoding/json"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
+
+	"github.com/ethereum-optimism/optimism/op-chain-ops/srcmap"
+
 	"github.com/protolambda/asterisc/rvgo/fast"
+	"github.com/protolambda/asterisc/rvgo/slow"
 )
 
 func forEachTestSuite(t *testing.T, path string, callItem func(t *testing.T, path string)) {
@@ -76,12 +92,11 @@ func runSlowTestSuite(t *testing.T, path string) {
 		require.NoError(t, err)
 
 		// Now run the same in slow mode
-		calldata := wit.EncodeStepInput()
-		post, err := slow.Step(calldata, nil)
+		input := wit.EncodeStepInput()
+		post, err := slow.Step(input, nil)
 		require.NoErrorf(t, err, "slow VM err at step %d, PC %08x: %v", i, vmState.PC, err)
 
 		fastPostState := vmState.EncodeWitness()
-
 		fastRoot := crypto.Keccak256Hash(fastPostState)
 		if post != fastRoot {
 			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
@@ -98,8 +113,6 @@ func runSlowTestSuite(t *testing.T, path string) {
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }
-
-/*
 
 // TODO iterate all test suites
 // TODO maybe load ELF sections for debugging
@@ -134,17 +147,18 @@ func fakeHeader(n uint64, parentHash common.Hash) *types.Header {
 	return &header
 }
 
-func loadStepContractCode(t *testing.T) []byte {
+func loadStepContractCode(t *testing.T) (deployedCode []byte, srcMapData string) {
 	dat, err := os.ReadFile("../rvsol/out/Step.sol/Step.json")
 	require.NoError(t, err)
 	var outDat struct {
 		DeployedBytecode struct {
-			Object hexutil.Bytes `json:"object"`
+			Object    hexutil.Bytes `json:"object"`
+			SourceMap string        `json:"sourceMap"`
 		} `json:"deployedBytecode"`
 	}
 	err = json.Unmarshal(dat, &outDat)
 	require.NoError(t, err)
-	return outDat.DeployedBytecode.Object
+	return outDat.DeployedBytecode.Object, outDat.DeployedBytecode.SourceMap
 }
 
 func loadPreimageOracleContractCode(t *testing.T) []byte {
@@ -183,10 +197,16 @@ func newEVMEnv(t *testing.T, stepContractCode []byte, preimageOracleCode []byte)
 }
 
 func runEVMTestSuite(t *testing.T, path string) {
-	code := loadStepContractCode(t)
+	code, srcMap := loadStepContractCode(t)
 	vmenv := newEVMEnv(t, code, []byte{0}) // these tests run without pre-image oracle
-	vmenv.Config.Debug = false
-	vmenv.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
+	//vmenv.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
+	m, err := srcmap.ParseSourceMap([]string{"../rvsol/src/Step.sol"}, code, srcMap)
+	require.NoError(t, err)
+	tr := srcmap.NewSourceMapTracer(map[common.Address]*srcmap.SourceMap{
+		stepAddr: m,
+	}, os.Stdout)
+	_ = tr // tracer disabled, it adds lots logging
+	//vmenv.Config.Tracer = tr
 
 	sender := common.HexToAddress("0xaaaa")
 
@@ -197,34 +217,20 @@ func runEVMTestSuite(t *testing.T, path string) {
 	vmState, err := fast.LoadELF(testSuiteELF)
 	require.NoError(t, err, "must load test suite ELF binary")
 
-	so := oracle.NewStateOracle()
-	pre := vmState.Merkleize(so)
+	instState := fast.NewInstrumentedState(vmState, nil, nil, nil)
 
-	maxAccessListLen := 0
 	maxGasUsed := uint64(0)
 
 	for i := 0; i < 10_000; i++ {
-		so.BuildAccessList(true)
 		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
-		post, err := slow.Step(pre, so, nil)
+		wit, err := instState.Step(true)
 		require.NoError(t, err)
 
-		al := so.AccessList()
+		// Now run the same in slow mode
+		input := wit.EncodeStepInput()
 
-		// Now run the same in fast mode
-		if err := fast.Step(vmState, os.Stdout, os.Stderr); err != nil {
-			t.Fatalf("VM err at step %d, PC %d: %v", i, vmState.PC, err)
-		}
-
-		fastRoot := vmState.Merkleize(so)
-		if post != fastRoot {
-			so.Diff(post, fastRoot, 1)
-			t.Fatalf("slow state %x must match fast state %x", post, fastRoot)
-		}
-
-		// Now run the same in EVM, but using the access-list
-		input := oracle.Input(al, pre)
+		// Now run the same in EVM, but using the encoded state-witness and proof data
 		startingGas := uint64(30_000_000)
 		ret, leftOverGas, err := vmenv.Call(vm.AccountRef(sender), stepAddr, input, startingGas, big.NewInt(0))
 		require.NoError(t, err, "evm must not fail (ret: %x)", ret)
@@ -233,23 +239,19 @@ func runEVMTestSuite(t *testing.T, path string) {
 			maxGasUsed = gasUsed
 		}
 		require.Len(t, ret, 32)
-		post2 := common.BytesToHash(ret)
-		if post2 != fastRoot {
-			so.Diff(post2, fastRoot, 1)
-			t.Fatalf("evm state %x must match fast state %x", post2, fastRoot)
-		}
-		if len(al) > maxAccessListLen {
-			maxAccessListLen = len(al)
-		}
+		post := common.BytesToHash(ret)
 
-		pre = post
+		fastPostState := vmState.EncodeWitness()
+		fastRoot := crypto.Keccak256Hash(fastPostState)
+		if post != fastRoot {
+			t.Fatalf("evm state %x must match fast state %x", post, fastRoot)
+		}
 
 		if vmState.Exited {
 			break
 		}
 	}
 
-	t.Logf("max access-list length: %d", maxAccessListLen)
 	t.Logf("max gas used: %d", maxGasUsed)
 
 	require.True(t, vmState.Exited, "ran out of steps")
@@ -258,7 +260,6 @@ func runEVMTestSuite(t *testing.T, path string) {
 		t.Fatalf("failed at test case %d", testCaseNum)
 	}
 }
-*/
 
 func TestFastStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
@@ -286,7 +287,6 @@ func TestSlowStep(t *testing.T) {
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 
-/*
 func TestEVMStep(t *testing.T) {
 	testsPath := filepath.FromSlash("../tests/riscv-tests")
 	runTestCategory := func(name string) {
@@ -299,4 +299,3 @@ func TestEVMStep(t *testing.T) {
 	runTestCategory("rv64ua-p")
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
-*/

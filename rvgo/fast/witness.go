@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	preimage "github.com/ethereum-optimism/optimism/op-preimage"
+	"github.com/ethereum-optimism/optimism/op-preimage"
 )
 
 type StepWitness struct {
