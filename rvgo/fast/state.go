@@ -2,7 +2,10 @@ package fast
 
 import (
 	"encoding/binary"
+	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // page size must be at least 32 bytes (one merkle node)
@@ -55,7 +58,7 @@ func NewVMState() *VMState {
 	}
 }
 
-func (state *VMState) EncodeWitness() []byte {
+func (state *VMState) EncodeWitness() StateWitness {
 	out := make([]byte, 0)
 	memRoot := state.Memory.MerkleRoot()
 	out = append(out, memRoot[:]...)
@@ -81,4 +84,41 @@ func (state *VMState) Instr() uint32 {
 	var out [4]byte
 	state.Memory.GetUnaligned(state.PC, out[:])
 	return binary.LittleEndian.Uint32(out[:])
+}
+
+type StateWitness []byte
+
+const (
+	VMStatusValid      = 0
+	VMStatusInvalid    = 1
+	VMStatusPanic      = 2
+	VMStatusUnfinished = 3
+)
+
+func (sw StateWitness) StateHash() (common.Hash, error) {
+	offset := 32 + 32 + 8 + 8 // mem-root, preimage-key, preimage-offset, PC
+	if len(sw) <= offset+1 {
+		return common.Hash{}, fmt.Errorf("state must at least be %d bytes, but got %d", offset, len(sw))
+	}
+
+	hash := crypto.Keccak256Hash(sw)
+	exitCode := sw[offset]
+	exited := sw[offset+1]
+	status := vmStatus(exited == 1, exitCode)
+	hash[0] = status
+	return hash, nil
+}
+
+func vmStatus(exited bool, exitCode uint8) uint8 {
+	if !exited {
+		return VMStatusUnfinished
+	}
+	switch exitCode {
+	case 0:
+		return VMStatusValid
+	case 1:
+		return VMStatusInvalid
+	default:
+		return VMStatusPanic
+	}
 }

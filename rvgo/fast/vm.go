@@ -198,7 +198,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			inst.trackMemAccess(leftAddr, proofIndexL)
 		}
 		inst.verifyMemChange(leftAddr, proofIndexL)
-		if (addr+size-1)&3^1 == addr&^31 { // if aligned
+		if (addr+size-1)&^31 == addr&^31 { // if aligned
 			s.Memory.SetUnaligned(addr, bytez[:size])
 			return
 		}
@@ -497,11 +497,14 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
+		case 124: // sched_yield - nothing to yield, synchronous execution only, for now
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 113: // clock_gettime
 			addr := getRegister(toU64(11)) // addr of timespec struct
-			// first 8 bytes: tv_sec: 1337 seconds
-			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
-			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2, true, true)
+			// write 1337s + 42ns as time
+			storeMemUnaligned(addr, toU64(8), shortToU256(1337), 1, 0xff, true, false)
+			storeMemUnaligned(add64(addr, toU64(8)), toU64(8), toU256(42), 2, 0xff, true, false)
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
@@ -516,7 +519,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 134: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		//case 220: // clone - not supported
+		case 220: // clone - not supported
+			setRegister(toU64(10), toU64(1))
+			setRegister(toU64(11), toU64(0))
 		case 163: // getrlimit
 			res := getRegister(toU64(10))
 			addr := getRegister(toU64(11))
@@ -528,6 +533,15 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
+		case 233: // madvise - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 261: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
+			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+		case 422: // futex - not supported, for now
+			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+		case 101: // nanosleep - not supported, for now
+			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
 		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}

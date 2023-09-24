@@ -3,8 +3,8 @@ package slow
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/protolambda/asterisc/rvgo/oracle"
 )
 
 const (
@@ -59,7 +59,11 @@ const (
 	paddedStateSize            = stateSize + ((32 - (stateSize % 32)) % 32)
 )
 
-func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr error) {
+type PreimageOracle interface {
+	ReadPreimagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error)
+}
+
+func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr error) {
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
@@ -115,13 +119,6 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	copy(stateData, calldata[stateContentOffset:])
 
 	//
-	// State output
-	//
-	computeStateHash := func() [32]byte {
-		return crypto.Keccak256Hash(stateData)
-	}
-
-	//
 	// State access
 	//
 	readState := func(offset uint64, length uint64) []byte {
@@ -168,7 +165,9 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		stateData[stateOffsetExited] = 1
 	}
 
-	// no getExitCode necessary
+	getExitCode := func() uint8 {
+		return stateData[stateOffsetExitCode]
+	}
 	setExitCode := func(v uint8) {
 		stateData[stateOffsetExitCode] = v
 	}
@@ -213,6 +212,32 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		}
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
 		writeState(offset.val(), 8, encodeU64BE(v))
+	}
+
+	//
+	// State output
+	//
+	vmStatus := func() (status uint8) {
+		switch getExited() {
+		case true:
+			switch getExitCode() {
+			case 0:
+				status = 0 // VMStatusValid
+			case 1:
+				status = 1 // VMStatusInvalid
+			default:
+				status = 2 // VMStatusPanic
+			}
+		default:
+			status = 3 // VMStatusUnfinished
+		}
+		return
+	}
+
+	computeStateHash := func() (out [32]byte) {
+		out = crypto.Keccak256Hash(stateData)
+		out[0] = vmStatus()
+		return
 	}
 
 	//
@@ -372,7 +397,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		return
 	}
 
-	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
+	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
 		if size.val() > 32 {
 			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
 		}
@@ -403,8 +428,8 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		// write the right (with updated mem root)
 		setMemoryB32(rightAddr, beWordAsB32(right), proofIndexR)
 	}
-	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
-		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR, verifyL, verifyR)
+	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8) {
+		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
 	}
 
 	//
@@ -468,7 +493,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 	}
 
 	readPreimagePart := func(key [32]byte, offset U64) (dat [32]byte, datlen U64) {
-		d, l, err := po.ReadPreImagePart(key, offset.val())
+		d, l, err := po.ReadPreimagePart(key, offset.val())
 		if err == nil {
 			dat = d
 			datlen = toU64(l)
@@ -651,11 +676,14 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
+		case 124: // sched_yield - nothing to yield, synchronous execution only, for now
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 113: // clock_gettime
 			addr := getRegister(toU64(11)) // addr of timespec struct
-			// first 8 bytes: tv_sec: 1337 seconds
-			// second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
-			storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1_337_000_000_000))), 1, 2, true, true)
+			// write 1337s + 42ns as time
+			storeMemUnaligned(addr, toU64(8), shortToU256(1337), 1, 0xff)
+			storeMemUnaligned(add64(addr, toU64(8)), toU64(8), toU256(42), 2, 0xff)
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case 135: // rt_sigprocmask - ignore any sigset changes
@@ -670,7 +698,9 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		case 134: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		//case 220: // clone - not supported
+		case 220: // clone - not supported
+			setRegister(toU64(10), toU64(1))
+			setRegister(toU64(11), toU64(0))
 		case 163: // getrlimit
 			res := getRegister(toU64(10))
 			addr := getRegister(toU64(11))
@@ -678,10 +708,19 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			case 0x7: // RLIMIT_NOFILE
 				// first 8 bytes: soft limit. 1024 file handles max open
 				// second 8 bytes: hard limit
-				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2, true, true)
+				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2)
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
+		case 233: // madvise - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 261: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
+			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+		case 422: // futex - not supported, for now
+			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+		case 101: // nanosleep - not supported, for now
+			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
 		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
@@ -725,7 +764,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 		value := getRegister(rs2)
 		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
-		storeMem(memIndex, size, value, 1, 2, true, true)
+		storeMem(memIndex, size, value, 1, 2)
 		setPC(add64(pc, toU64(4)))
 	case 0x63: // 110_0011: branching
 		rs1Value := getRegister(rs1)
@@ -1013,7 +1052,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			rdValue := toU64(1)
 			if eq64(addr, getLoadReservation()) != (U64{}) {
 				rs2Value := getRegister(rs2)
-				storeMem(addr, size, rs2Value, 1, 2, true, true)
+				storeMem(addr, size, rs2Value, 1, 2)
 				rdValue = toU64(0)
 			}
 			setRegister(rd, rdValue)
@@ -1056,7 +1095,7 @@ func Step(calldata []byte, po oracle.PreImageOracle) (stateHash [32]byte, outErr
 			default:
 				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
 			}
-			storeMem(addr, size, v, 1, 3, false, true) // after overwriting 1, proof 2 is no longer valid
+			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
 			setRegister(rd, rdValue)
 		}
 		setPC(add64(pc, toU64(4)))

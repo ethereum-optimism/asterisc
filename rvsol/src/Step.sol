@@ -303,13 +303,6 @@ contract Step {
             calldatacopy(memStateOffset(), stateData.offset, stateSize()) // same format in memory as in calldata
 
             //
-            // State output
-            //
-            function computeStateHash() -> out {
-                out := keccak256(memStateOffset(), stateSize())
-            }
-
-            //
             // State access
             //
             function readState(offset, length) -> out {
@@ -365,7 +358,9 @@ contract Step {
                 writeState(stateOffsetExited(), stateSizeExited(), 1)
             }
 
-            // no getExitCode necessary
+            function getExitCode() -> out {
+                out := readState(stateOffsetExitCode(), stateSizeExitCode())
+            }
             function setExitCode(v) {
                 writeState(stateOffsetExitCode(), stateSizeExitCode(), v)
             }
@@ -408,6 +403,33 @@ contract Step {
                 }
                 let offset := add64(toU64(stateOffsetRegisters()), mul64(reg, toU64(8)))
                 writeState(offset, 8, v)
+            }
+
+            //
+            // State output
+            //
+            function vmStatus() -> status {
+                switch getExited()
+                case 1 {
+                    switch getExitCode()
+                    case 0 {
+                        status := 0 // VMStatusValid
+                    } case 1 {
+                        status := 1 // VMStatusInvalid
+                    } default {
+                        status := 2 // VMStatusPanic
+                    }
+                } default {
+                    status := 3 // VMStatusUnfinished
+                }
+            }
+
+            function computeStateHash() -> out {
+                // Log the RISC-V state for debugging
+                log0(memStateOffset(), stateSize())
+
+                out := keccak256(memStateOffset(), stateSize())
+                out := or(and(not(shl(248, 0xFF)), out), shl(248, vmStatus()))
             }
 
             //
@@ -920,11 +942,14 @@ contract Step {
                 } case 123 { // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
                     setRegister(toU64(10), toU64(0))
                     setRegister(toU64(11), toU64(0))
+                } case 124 { // sched_yield - nothing to yield, synchronous execution only, for now
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
                 } case 113 { // clock_gettime
                     let addr := getRegister(toU64(11)) // addr of timespec struct
-                    // first 8 bytes: tv_sec: 1337 seconds
-                    // second 8 bytes: tv_nsec: 1337*1000000000 nanoseconds (must be nonzero to pass Go runtimeInitTime check)
-                    storeMemUnaligned(addr, toU64(16), or(u64ToU256(shortToU64(1337)), shl(toU256(64), longToU256(1337000000000))), 1, 2)
+                    // write 1337s + 42ns as time
+                    storeMemUnaligned(addr, toU64(8), shortToU256(1337), 1, 0xff)
+                    storeMemUnaligned(add64(addr, toU64(8)), toU64(8), toU256(42), 2, 0xff)
                     setRegister(toU64(10), toU64(0))
                     setRegister(toU64(11), toU64(0))
                 } case 135 { // rt_sigprocmask - ignore any sigset changes
@@ -939,7 +964,9 @@ contract Step {
                 } case 134 { // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
                     setRegister(toU64(10), toU64(0))
                     setRegister(toU64(11), toU64(0))
-                //case 220 // clone - not supported
+                } case 220 { // clone - not supported
+                    setRegister(toU64(10), toU64(1))
+                    setRegister(toU64(11), toU64(0))
                 } case 163 { // getrlimit
                     let res := getRegister(toU64(10))
                     let addr := getRegister(toU64(11))
@@ -951,6 +978,15 @@ contract Step {
                     } default {
                         revertWithCode(0xf0012) // unrecognized resource limit lookup
                     }
+                } case 233 { // madvise - ignored
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
+                } case 261 { // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
+                    revertWithCode(0xf001ca11) // unsupported system call
+                } case 422 { // futex - not supported, for now
+                    revertWithCode(0xf001ca11) // unsupported system call
+                } case 101 { // nanosleep - not supported, for now
+                    revertWithCode(0xf001ca11) // unsupported system call
                 } default {
                     revertWithCode(0xf001ca11) // unrecognized system call
                 }

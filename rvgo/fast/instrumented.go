@@ -95,20 +95,24 @@ func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]b
 // trackMemAccess remembers a merkle-branch of memory to the given address,
 // and ensures it comes right after the last memory proof.
 func (m *InstrumentedState) trackMemAccess(effAddr uint64, proofIndex uint8) {
+	if !m.memProofEnabled {
+		return
+	}
 	if effAddr&31 != 0 {
 		panic("effective memory access must be aligned to 32 bytes")
 	}
-	if m.memProofEnabled {
-		if len(m.memProofs) != int(proofIndex) {
-			panic(fmt.Errorf("mem access with unexpected proof index, got %d but expected %d", proofIndex, len(m.memProofs)))
-		}
-		m.memProofs = append(m.memProofs, m.state.Memory.MerkleProof(effAddr))
-		m.memAccess = append(m.memAccess, effAddr)
+	if len(m.memProofs) != int(proofIndex) {
+		panic(fmt.Errorf("mem access with unexpected proof index, got %d but expected %d", proofIndex, len(m.memProofs)))
 	}
+	m.memProofs = append(m.memProofs, m.state.Memory.MerkleProof(effAddr))
+	m.memAccess = append(m.memAccess, effAddr)
 }
 
 // verifyMemChange verifies a memory change proof reused the last verified mem-proof at the same address
 func (m *InstrumentedState) verifyMemChange(effAddr uint64, proofIndex uint8) {
+	if !m.memProofEnabled {
+		return
+	}
 	if int(proofIndex) >= len(m.memAccess) {
 		panic(fmt.Errorf("mem change at %016x with proof index %d, but only aware of %d proofs", effAddr, proofIndex, len(m.memAccess)))
 	}
