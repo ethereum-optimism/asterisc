@@ -51,23 +51,23 @@ Go emulators to diff-fuzz against maybe:
   - "abbreviation G for the IMAFDZicsr Zifencei combination of instruction-set extensions."
   - "C" is the "compressed instruction set for performance / code size / energy efficiency"
     - Unprivileged:
-      Atomics A
-      Single-Precision Floating-Point F
-      Double-Precision Floating-Point D
-      General G
-      Quad-Precision Floating-Point Q
-      Decimal Floating-Point L
-      16-bit Compressed Instructions C
-      Bit Manipulation B
-      Dynamic Languages J
-      Transactional Memory T
-      Packed-SIMD Extensions P
-      Vector Extensions V
-      User-Level Interrupts N
-      Control and Status Register Access
-      Instruction-Fetch Fence Zifencei
-      Misaligned Atomics Zam
-      Total Store Ordering Ztso
+      - Atomics A
+      - Single-Precision Floating-Point F
+      - Double-Precision Floating-Point D
+      - General G
+      - Quad-Precision Floating-Point Q
+      - Decimal Floating-Point L
+      - 16-bit Compressed Instructions C
+      - Bit Manipulation B
+      - Dynamic Languages J
+      - Transactional Memory T
+      - Packed-SIMD Extensions P
+      - Vector Extensions V
+      - User-Level Interrupts N
+      - Control and Status Register Access
+      - Instruction-Fetch Fence Zifencei
+      - Misaligned Atomics Zam
+      - Total Store Ordering Ztso
 
   - RV32I Base Instruction Set:
     - addi, slti, sltiu, xori, ori, andi, slli, srli, srai # immediate
