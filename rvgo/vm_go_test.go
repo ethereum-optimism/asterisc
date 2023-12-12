@@ -60,8 +60,10 @@ func (t *testOracle) ReadPreimagePart(key [32]byte, offset uint64) (dat [32]byte
 	return
 }
 
-var _ fast.PreimageOracle = (*testOracle)(nil)
-var _ slow.PreimageOracle = (*testOracle)(nil)
+var (
+	_ fast.PreimageOracle = (*testOracle)(nil)
+	_ slow.PreimageOracle = (*testOracle)(nil)
+)
 
 func fullTest(t *testing.T, vmState *fast.VMState, po *testOracle, symbols fast.SortedSymbols, runSlow, runEVM bool) {
 	instState := fast.NewInstrumentedState(vmState, po, os.Stdout, os.Stderr)
@@ -211,51 +213,60 @@ func TestSimple(t *testing.T) {
 }
 
 func TestMinimal(t *testing.T) {
-	programELF, err := elf.Open("../tests/go-tests/bin/minimal")
-	require.NoError(t, err)
-	defer programELF.Close()
-
-	symbols, err := fast.Symbols(programELF)
-	require.NoError(t, err)
-
-	po := &testOracle{
-		hint: func(v []byte) error {
-			t.Fatalf("unexpected pre-image hint %x", v)
-			return nil
-		},
-		getPreimage: func(k [32]byte) ([]byte, error) {
-			t.Fatalf("unexpected pre-image request %x", k)
-			return nil, nil
-		},
+	bins := []string{
+		"../tests/go-tests/bin/minimal",
+		"../tests/rust-tests/minimal/target/riscv64gc-unknown-linux-gnu/release/minimal",
 	}
 
-	t.Run("fast", func(t *testing.T) {
-		vmState, err := fast.LoadELF(programELF)
-		require.NoError(t, err, "must load test suite ELF binary")
+	for _, binPath := range bins {
+		t.Run(binPath, func(t *testing.T) {
+			programELF, err := elf.Open(binPath)
+			require.NoError(t, err)
+			defer programELF.Close()
 
-		err = fast.PatchVM(programELF, vmState)
-		require.NoError(t, err, "must patch VM")
+			symbols, err := fast.Symbols(programELF)
+			require.NoError(t, err)
 
-		fullTest(t, vmState, po, symbols, false, false)
-	})
+			po := &testOracle{
+				hint: func(v []byte) error {
+					t.Fatalf("unexpected pre-image hint %x", v)
+					return nil
+				},
+				getPreimage: func(k [32]byte) ([]byte, error) {
+					t.Fatalf("unexpected pre-image request %x", k)
+					return nil, nil
+				},
+			}
 
-	t.Run("slow", func(t *testing.T) {
-		vmState, err := fast.LoadELF(programELF)
-		require.NoError(t, err, "must load test suite ELF binary")
+			t.Run("fast", func(t *testing.T) {
+				vmState, err := fast.LoadELF(programELF)
+				require.NoError(t, err, "must load test suite ELF binary")
 
-		err = fast.PatchVM(programELF, vmState)
-		require.NoError(t, err, "must patch VM")
+				err = fast.PatchVM(programELF, vmState)
+				require.NoError(t, err, "must patch VM")
 
-		fullTest(t, vmState, po, symbols, true, false)
-	})
+				fullTest(t, vmState, po, symbols, false, false)
+			})
 
-	t.Run("evm", func(t *testing.T) {
-		vmState, err := fast.LoadELF(programELF)
-		require.NoError(t, err, "must load test suite ELF binary")
+			t.Run("slow", func(t *testing.T) {
+				vmState, err := fast.LoadELF(programELF)
+				require.NoError(t, err, "must load test suite ELF binary")
 
-		err = fast.PatchVM(programELF, vmState)
-		require.NoError(t, err, "must patch VM")
+				err = fast.PatchVM(programELF, vmState)
+				require.NoError(t, err, "must patch VM")
 
-		fullTest(t, vmState, po, symbols, false, true)
-	})
+				fullTest(t, vmState, po, symbols, true, false)
+			})
+
+			t.Run("evm", func(t *testing.T) {
+				vmState, err := fast.LoadELF(programELF)
+				require.NoError(t, err, "must load test suite ELF binary")
+
+				err = fast.PatchVM(programELF, vmState)
+				require.NoError(t, err, "must patch VM")
+
+				fullTest(t, vmState, po, symbols, false, true)
+			})
+		})
+	}
 }
