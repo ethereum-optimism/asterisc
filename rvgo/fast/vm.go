@@ -611,7 +611,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		switch branchHit {
 		case 0:
-			pc = add64(pc, toU64(4))
+			pc = add64(pc, pcBump)
 		default:
 			imm := parseImmTypeB(instr)
 			// imm is a signed offset, in multiples of 2 bytes.
@@ -818,13 +818,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		setPC(add64(pc, pcBump))
 	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
-		rdValue := add64(pc, toU64(4))
+		rdValue := add64(pc, pcBump)
 		setRegister(rd, rdValue)
 		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
-		rdValue := add64(pc, toU64(4))
+		rdValue := add64(pc, pcBump)
 		setRegister(rd, rdValue)
 		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
