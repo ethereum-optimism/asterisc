@@ -40,46 +40,117 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	// opcode := and64(instr, toU64(3))
 	// funct := parseFunct3C(instr)
 
-	switch instr {
+	switch switchKeyC(instr) {
 	// C.ADDI4SPN [OP: C0 | Funct3: 000 | Format: CIW]
 	case 0x0:
-		// TODO: Perform translation to 32 bit analogue.
+		imm, _ := decodeCIW(instr)
+		imm = or64(
+			or64(
+				shr64(toU64(2), and64(imm, toU64(0xC0))),
+				shl64(toU64(4), and64(imm, toU64(0x3C))),
+			),
+			or64(
+				shl64(toU64(1), and64(imm, toU64(0x02))),
+				shl64(toU64(3), and64(imm, toU64(0x01))),
+			),
+		)
+		// TODO: Translate to 32 bit analogue
+		panic(imm)
 	// C.NOP, C.ADDI [OP: C1 | Funct3: 000 | Format: CI]
 	case 0x1:
-		// TODO: Perform translation to 32 bit analogue.
+		imm, _ := decodeCI(instr)
+		imm = signExtend64(imm, toU64(5))
+		// TODO: Translate to 32 bit analogue
+		panic(imm)
 	// C.SLLI64 [OP: C2 | Funct3: 000 | Format: CI]
 	case 0x2:
-		// TODO: Perform translation to 32 bit analogue.
+		imm, _ := decodeCI(instr)
+		// TODO: Translate to 32 bit analogue
+		panic(imm)
 	// C.FLD [OP: C0 | Funct3: 001 | Format: CL]
 	case 0x4:
 		// TODO: Perform translation to 32 bit analogue.
 	// C.ADDIW [OP: C1 | Funct3: 001 | Format: CI]
 	case 0x5:
-		// TODO: Perform translation to 32 bit analogue.
+		imm, _ := decodeCI(instr)
+		// todo: c.jal / c.addiw ambiguity - r == 0 / r != 0
+		imm = signExtend64(imm, toU64(5))
+		// TODO: Translate to 32 bit analogue
+		panic(imm)
 	// C.FLDSP (Unsupported) [OP: C2 | Funct3: 001 | Format: CI]
 	case 0x6:
 		// TODO: Perform translation to 32 bit analogue.
 	// C.LW [OP: C0 | Funct3: 010 | Format: CL]
 	case 0x8:
-		// TODO: Perform translation to 32 bit analogue.
+		imm, _, _ := decodeCLCS(instr)
+		imm = shl64(toU64(1), and64(
+			or64(shl64(toU64(5), imm), imm),
+			toU64(0x3E),
+		))
+		// TODO: Translate to 32 bit analogue
+		panic(imm)
 	// C.LI [OP: C1 | Funct3: 010 | Format: CI]
 	case 0x9:
+		imm, _ := decodeCI(instr)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// C.LWSP [OP: C2 | Funct3: 010 | Format: CI]
 	case 0xA:
+		imm, _ := decodeCI(instr)
+		imm = and64(
+			or64(shl64(toU64(6), imm), imm),
+			toU64(0xFC),
+		)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// C.LD [OP: C0 | Funct3: 011 | Format: CL]
 	case 0xC:
+		imm, _, _ := decodeCLCS(instr)
+		imm = and64(
+			or64(shl64(toU64(6), imm), shl64(toU64(1), imm)),
+			toU64(0xF8),
+		)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// C.ADDI16SP, C.LUI [OP: C1 | Funct3: 011 | Format: CI]
 	case 0xD:
-		// TODO: Perform translation to 32 bit analogue.
+		imm, r := decodeCI(instr)
+		if r == 2 {
+			// C.ADDI16SP
+			imm = or64(
+				or64(
+					or64(
+						shl64(toU64(4), and64(imm, toU64(0x20))),
+						and64(imm, toU64(0x10)),
+					),
+					or64(
+						shl64(toU64(3), and64(imm, toU64(0x08))),
+						shl64(toU64(6), and64(imm, toU64(0x06))),
+					),
+				),
+				shl64(toU64(5), and64(imm, toU64(0x01))),
+			)
+			imm = signExtend64(imm, 9)
+			// TODO: Perform translation to 32 bit analogue.
+			panic(imm)
+		} else {
+			// C.LUI
+			imm = signExtend64(shl64(toU64(12), imm), 17)
+			// TODO: Perform translation to 32 bit analogue.
+			panic(imm)
+		}
 	// C.LDSP [OP: C2 | Funct3: 011 | Format: CI]
 	case 0xE:
+		imm, _ := decodeCI(instr)
+		imm = and64(
+			or64(shl64(toU64(6), imm), imm),
+			U64(0x1F8),
+		)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// Reserved [OP: C0 | Funct3: 100 | Format: ~]
 	case 0x10:
-		// TODO: Perform translation to 32 bit analogue.
+		return 0, 0, fmt.Errorf("hit reserved instruction: %x", instr)
 	// C.SRLI, S.SRLI64, C.SRAI64, C.ANDI, C.SUB, C.XOR, C.OR, C.AND, C.SUBW, C.ADDW [OP: C1 | Funct3: 100 | Format: ?]
 	case 0x11:
 		// TODO: Perform translation to 32 bit analogue.
@@ -91,13 +162,38 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		// TODO: Perform translation to 32 bit analogue.
 	// C.J [OP: C1 | Funct3: 101 | Format: CR]
 	case 0x15:
+		imm := decodeCJ(instr)
+		imm = or64(
+			or64(
+				or64(
+					shr64(toU64(5), and64(imm, U64(0x200))),
+					shl64(toU64(4), and64(imm, toU64(0x40))),
+				),
+				or64(
+					shl64(toU64(1), and64(imm, U64(0x5A0))),
+					shl64(toU64(3), and64(imm, toU64(0x10))),
+				),
+			),
+			or64(
+				and64(toU64(0x0E), imm),
+				shl64(toU64(5), and64(imm, toU64(0x01))),
+			),
+		)
+		imm = signExtend64(imm, 11)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// C.FSDSP (Unsupported) [OP: C2 | Funct3: 101 | Format: CSS]
 	case 0x16:
 		// TODO: Perform translation to 32 bit analogue.
 	// C.SW [OP: C0 | Funct3: 110 | Format: CS]
 	case 0x18:
+		imm, _, _ := decodeCLCS(instr)
+		imm = and64(
+			shl64(toU64(1), or64(shl64(toU64(5), imm), imm)),
+			toU64(0x7C),
+		)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// C.BEQZ [OP: C1 | Funct3: 110 | Format: CB]
 	case 0x19:
 		// TODO: Perform translation to 32 bit analogue.
@@ -106,7 +202,13 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		// TODO: Perform translation to 32 bit analogue.
 	// C.SD [OP: C0 | Funct3: 111 | Format: CS]
 	case 0x1C:
+		imm, _, _ := decodeCLCS(instr)
+		imm = and64(
+			shl64(toU64(1), or64(shl64(toU64(5), imm), imm)),
+			toU64(0xF8),
+		)
 		// TODO: Perform translation to 32 bit analogue.
+		panic(imm)
 	// C.BNEZ [OP: C1 | Funct3: 111 | Format: CB]
 	case 0x1D:
 		// TODO: Perform translation to 32 bit analogue.
@@ -191,5 +293,15 @@ func decodeCB(instr U64) (immediate, reg U64) {
 		and64(shr64(toU64(2), instr), toU64(0x1F)),
 	)
 	reg = mapCompressedRegister(and64(shr64(toU64(7), instr), toU64(7)))
+	return immediate, reg
+}
+
+// decodeCI pulls the `immediate` and `reg` out of a CI formatted instruction from the RVC extension.
+func decodeCI(instr U64) (immediate, reg U64) {
+	immediate = or64(
+		and64(shr64(toU64(7), instr), toU64(0x20)),
+		and64(shr64(toU64(2), instr), toU64(0x1F)),
+	)
+	reg = and64(shr64(toU64(7), instr), toU64(0x1F))
 	return immediate, reg
 }
