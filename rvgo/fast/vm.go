@@ -120,11 +120,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if reg > 31 {
 			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg))
 		}
-		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
+		// fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		return s.Registers[reg]
 	}
 	setRegister := func(reg U64, v U64) {
-		//fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
+		// fmt.Printf("write reg %2d: %016x   value: %016x\n", reg, state.Registers[reg], v)
 		if reg == 0 { // reg 0 must stay 0
 			// v is a HINT, but no hints are specified by standard spec, or used by us.
 			return
@@ -179,7 +179,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		if signed && out&(1<<(bitSize-1)) != 0 { // if the last bit is set, then extend it to the full 64 bits
 			out |= 0xFFFF_FFFF_FFFF_FFFF << bitSize
 		} // otherwise just leave it zeroed
-		//fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
+		// fmt.Printf("load mem: %016x  size: %d  value: %016x  signed: %v\n", addr, size, v, signed)
 		return out
 	}
 
@@ -385,10 +385,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				prevHeap := getHeap()
 				setRegister(toU64(10), prevHeap)
 				setHeap(add64(prevHeap, length)) // increment heap with length
-				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
+				// fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
 			default:
 				// allow hinted memory address (leave it in A0 as return argument)
-				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
+				// fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
 			setRegister(toU64(11), toU64(0)) // no error
 		case 63: // read
@@ -556,8 +556,12 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 	setStep(add64(getStep(), toU64(1)))
 
+	// TODO: probably a problem with `loadMem` due to directly setting the size of the read to 32 bits.
 	pc := getPC()
-	instr := loadMem(pc, toU64(4), false, 0, 0xff) // raw instruction
+	instr, pcBump, err := DecompressInstruction(loadMem(pc, toU64(4), false, 0, 0xff)) // raw instruction
+	if err != nil {
+		return fmt.Errorf("error decompressing instruction: %w", err)
+	}
 
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
@@ -577,7 +581,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		rdValue := loadMem(memIndex, size, signed, 1, 2)
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
@@ -586,7 +590,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		rs1Value := getRegister(rs1)
 		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
 		storeMem(memIndex, size, value, 1, 2, true, true)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x63: // 110_0011: branching
 		rs1Value := getRegister(rs1)
 		rs2Value := getRegister(rs2)
@@ -644,7 +648,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			rdValue = and64(rs1Value, imm)
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
@@ -664,7 +668,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x33: // 011_0011: register arithmetic and logic
 		rs1Value := getRegister(rs1)
 		rs2Value := getRegister(rs2)
@@ -740,7 +744,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
 		rs1Value := getRegister(rs1)
 		rs2Value := getRegister(rs2)
@@ -801,17 +805,17 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
 		rdValue := shl64(toU64(12), imm)
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
 		rdValue := add64(pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
@@ -829,9 +833,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			switch shr64(toU64(20), instr) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				sysCall()
-				setPC(add64(pc, toU64(4)))
+				setPC(add64(pc, pcBump))
 			default: // imm12 = 000000000001 EBREAK
-				setPC(add64(pc, toU64(4))) // ignore breakpoint
+				setPC(add64(pc, pcBump)) // ignore breakpoint
 			}
 		default: // CSR instructions
 			imm := parseCSSR(instr)
@@ -842,7 +846,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			mode := and64(funct3, toU64(3))
 			rdValue := updateCSR(imm, value, mode)
 			setRegister(rd, rdValue)
-			setPC(add64(pc, toU64(4)))
+			setPC(add64(pc, pcBump))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
 		// acquire and release bits:
@@ -919,18 +923,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			storeMem(addr, size, v, 1, 3, false, true) // after overwriting 1, proof 2 is no longer valid
 			setRegister(rd, rdValue)
 		}
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x0F: // 000_1111: fence
 		// Used to impose additional ordering constraints; flushing the mem operation pipeline.
 		// This VM doesn't have a pipeline, nor additional harts, so this is a no-op.
 		// FENCE / FENCE.TSO / FENCE.I all no-op: there's nothing to synchronize.
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, pcBump))
 	case 0x07: // FLW/FLD: floating point load word/double
-		setPC(add64(pc, toU64(4))) // no-op this.
+		setPC(add64(pc, pcBump)) // no-op this.
 	case 0x27: // FSW/FSD: floating point store word/double
-		setPC(add64(pc, toU64(4))) // no-op this.
+		setPC(add64(pc, pcBump)) // no-op this.
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
-		setPC(add64(pc, toU64(4))) // no-op this.
+		setPC(add64(pc, pcBump)) // no-op this.
 	default:
 		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
