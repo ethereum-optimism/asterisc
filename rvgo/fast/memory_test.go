@@ -29,7 +29,7 @@ func TestMemoryMerkleProof(t *testing.T) {
 		m.SetUnaligned(0x13370000, []byte{123})
 		root := m.MerkleRoot()
 		proof := m.MerkleProof(0x80004)
-		require.Equal(t, uint32(42), binary.BigEndian.Uint32(proof[4:8]))
+		require.Equal(t, uint32(42<<24), binary.BigEndian.Uint32(proof[4:8]))
 		node := *(*[32]byte)(proof[:32])
 		path := uint32(0x80004) >> 5
 		for i := 32; i < len(proof); i += 32 {
@@ -111,7 +111,6 @@ func TestMemoryMerkleRoot(t *testing.T) {
 }
 
 func TestMemoryReadWrite(t *testing.T) {
-
 	t.Run("large random", func(t *testing.T) {
 		m := NewMemory()
 		data := make([]byte, 20_000)
