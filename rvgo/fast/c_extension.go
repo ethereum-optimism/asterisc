@@ -32,7 +32,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	instr = and64(instr, U64(0xFFFF))
 
 	// Fully unset bits signals an illegal instruction, so we check here prior to the switch case in order to disambiguate
-	// funct3 = 0 ++ opcode = 0 from C.ADDI4SPN.
+	// funct3 == 0 && opcode == 0 from C.ADDI4SPN.
 	if instr == 0 {
 		return 0, 0, fmt.Errorf("illegal instruction: %x", instr)
 	}
@@ -40,10 +40,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	// opcode := and64(instr, toU64(3))
 	// funct := parseFunct3C(instr)
 
+	var decompressedInstr U64
+
 	switch switchKeyC(instr) {
 	// C.ADDI4SPN [OP: C0 | Funct3: 000 | Format: CIW]
 	case 0x0:
-		imm, _ := decodeCIW(instr)
+		imm, reg := decodeCIW(instr)
 		imm = or64(
 			or64(
 				shr64(toU64(2), and64(imm, toU64(0xC0))),
@@ -54,68 +56,111 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 				shl64(toU64(3), and64(imm, toU64(0x01))),
 			),
 		)
-		// TODO: Translate to 32 bit analogue
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0010011, // Arithmetic
+			0,         // ADDI
+			reg,       // rs1
+			2,         // rd - SP
+			imm,       // immediate
+		)
 	// C.NOP, C.ADDI [OP: C1 | Funct3: 000 | Format: CI]
 	case 0x1:
-		imm, _ := decodeCI(instr)
+		imm, reg := decodeCI(instr)
 		imm = signExtend64(imm, toU64(5))
-		// TODO: Translate to 32 bit analogue
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0010011, // Arithmetic
+			0,         // ADDI
+			reg,       // rd
+			reg,       // rs1
+			imm,       // immediate
+		)
 	// C.SLLI64 [OP: C2 | Funct3: 000 | Format: CI]
 	case 0x2:
-		imm, _ := decodeCI(instr)
-		// TODO: Translate to 32 bit analogue
-		panic(imm)
-	// C.FLD [OP: C0 | Funct3: 001 | Format: CL]
+		imm, reg := decodeCI(instr)
+		decompressedInstr = encodeRSBType(
+			0b0010011, // Arithmetic
+			1,         // SLLI - funct3
+			0,         // SLLI - funct7
+			reg,       // rd
+			reg,       // rs1
+			imm,       // shamt
+
+		)
+	// C.FLD (Unsupported) [OP: C0 | Funct3: 001 | Format: CL]
 	case 0x4:
-		// TODO: Perform translation to 32 bit analogue.
+		panic("unsupported")
 	// C.ADDIW [OP: C1 | Funct3: 001 | Format: CI]
 	case 0x5:
-		imm, _ := decodeCI(instr)
+		imm, reg := decodeCI(instr)
 		// todo: c.jal / c.addiw ambiguity - r == 0 / r != 0
 		imm = signExtend64(imm, toU64(5))
-		// TODO: Translate to 32 bit analogue
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0011011, // Arithmetic (RV64I)
+			0,         // ADDIW
+			reg,       // rd
+			reg,       // rs1
+			imm,       // immediate
+		)
 	// C.FLDSP (Unsupported) [OP: C2 | Funct3: 001 | Format: CI]
 	case 0x6:
-		// TODO: Perform translation to 32 bit analogue.
+		panic("unsupported")
 	// C.LW [OP: C0 | Funct3: 010 | Format: CL]
 	case 0x8:
-		imm, _, _ := decodeCLCS(instr)
+		imm, reg1, reg2 := decodeCLCS(instr)
 		imm = shl64(toU64(1), and64(
 			or64(shl64(toU64(5), imm), imm),
 			toU64(0x3E),
 		))
-		// TODO: Translate to 32 bit analogue
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0000011, // Load
+			0b010,     // LW
+			reg2,      // rd
+			reg1,      // rs1
+			imm,       // immediate
+		)
 	// C.LI [OP: C1 | Funct3: 010 | Format: CI]
 	case 0x9:
-		imm, _ := decodeCI(instr)
-		// TODO: Perform translation to 32 bit analogue.
-		panic(imm)
+		imm, reg := decodeCI(instr)
+		imm = signExtend64(imm, toU64(5))
+		decompressedInstr = encodeIType(
+			0b0011011, // Arithmetic (RV64I)
+			0,         // ADDIW
+			reg,       // rd
+			0,         // rs1
+			imm,       // immediate
+		)
 	// C.LWSP [OP: C2 | Funct3: 010 | Format: CI]
 	case 0xA:
-		imm, _ := decodeCI(instr)
+		imm, reg := decodeCI(instr)
 		imm = and64(
 			or64(shl64(toU64(6), imm), imm),
 			toU64(0xFC),
 		)
-		// TODO: Perform translation to 32 bit analogue.
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0000011, // Load
+			0b010,     // LW
+			reg,       // rd
+			2,         // rs1 - SP
+			imm,       // immediate
+		)
 	// C.LD [OP: C0 | Funct3: 011 | Format: CL]
 	case 0xC:
-		imm, _, _ := decodeCLCS(instr)
+		imm, reg1, reg2 := decodeCLCS(instr)
 		imm = and64(
 			or64(shl64(toU64(6), imm), shl64(toU64(1), imm)),
 			toU64(0xF8),
 		)
-		// TODO: Perform translation to 32 bit analogue.
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0000011, // Load
+			0b011,     // LD
+			reg2,      // rd
+			reg1,      // rs1
+			imm,       // immediate
+		)
 	// C.ADDI16SP, C.LUI [OP: C1 | Funct3: 011 | Format: CI]
 	case 0xD:
-		imm, r := decodeCI(instr)
-		if r == 2 {
+		imm, reg := decodeCI(instr)
+		if reg == 2 {
 			// C.ADDI16SP
 			imm = or64(
 				or64(
@@ -131,23 +176,36 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 				shl64(toU64(5), and64(imm, toU64(0x01))),
 			)
 			imm = signExtend64(imm, 9)
-			// TODO: Perform translation to 32 bit analogue.
-			panic(imm)
+			decompressedInstr = encodeIType(
+				0b0010011, // Arithmetic
+				0,         // ADDI
+				2,         // rd - SP
+				2,         // rs1 - SP
+				imm,       // immediate
+			)
 		} else {
 			// C.LUI
 			imm = signExtend64(shl64(toU64(12), imm), 17)
-			// TODO: Perform translation to 32 bit analogue.
-			panic(imm)
+			decompressedInstr = encodeUJType(
+				0b0110111, // LUI
+				reg,       // rd
+				imm,       // immediate
+			)
 		}
 	// C.LDSP [OP: C2 | Funct3: 011 | Format: CI]
 	case 0xE:
-		imm, _ := decodeCI(instr)
+		imm, reg := decodeCI(instr)
 		imm = and64(
 			or64(shl64(toU64(6), imm), imm),
 			U64(0x1F8),
 		)
-		// TODO: Perform translation to 32 bit analogue.
-		panic(imm)
+		decompressedInstr = encodeIType(
+			0b0000011, // Load
+			0b011,     // LD
+			reg,       // rd
+			2,         // rs1 - SP
+			imm,       // immediate
+		)
 	// Reserved [OP: C0 | Funct3: 100 | Format: ~]
 	case 0x10:
 		return 0, 0, fmt.Errorf("hit reserved instruction: %x", instr)
@@ -159,7 +217,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		// TODO: Perform translation to 32 bit analogue.
 	// C.FSD (Unsupported) [OP: C0 | Funct3: 101 | Format: CS]
 	case 0x14:
-		// TODO: Perform translation to 32 bit analogue.
+		panic("unsupported")
 	// C.J [OP: C1 | Funct3: 101 | Format: CR]
 	case 0x15:
 		imm := decodeCJ(instr)
@@ -180,11 +238,11 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			),
 		)
 		imm = signExtend64(imm, 11)
-		// TODO: Perform translation to 32 bit analogue.
+		// TODO: Custom handler for C.J
 		panic(imm)
 	// C.FSDSP (Unsupported) [OP: C2 | Funct3: 101 | Format: CSS]
 	case 0x16:
-		// TODO: Perform translation to 32 bit analogue.
+		panic("unsupported")
 	// C.SW [OP: C0 | Funct3: 110 | Format: CS]
 	case 0x18:
 		imm, _, _ := decodeCLCS(instr)
@@ -219,7 +277,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		return 0, 0, fmt.Errorf("unknown instruction: %x", instr)
 	}
 
-	return 0, 0, fmt.Errorf("unknown instruction: %x", instr)
+	return decompressedInstr, COMPRESSED_SIZE, nil
 }
 
 ////////////////////////////////////////////////////////////////
@@ -304,4 +362,62 @@ func decodeCI(instr U64) (immediate, reg U64) {
 	)
 	reg = and64(shr64(toU64(7), instr), toU64(0x1F))
 	return immediate, reg
+}
+
+func decodeCR(instr U64) (reg1, reg2 U64) {
+	reg1 = and64(shr64(toU64(7), instr), toU64(0x1F))
+	reg2 = and64(shr64(toU64(2), instr), toU64(0x1F))
+	return reg1, reg2
+}
+
+////////////////////////////////////////////////////////////////
+//                    ENCODING - BASE ISA                     //
+////////////////////////////////////////////////////////////////
+
+// encodeRSBType encodes parameters into an R-type, S-type, or U-type instruction.
+func encodeRSBType(opcode, funct3, funct7, rd, rs1, rs2 U64) (instr U64) {
+	return or64(
+		or64(
+			or64(
+				and64(opcode, toU64(0x7F)),
+				shl64(toU64(7), and64(rd, toU64(0x1F))),
+			),
+			or64(
+				shl64(toU64(12), and64(funct3, toU64(7))),
+				shl64(toU64(15), and64(rs1, toU64(0x1F))),
+			),
+		),
+		or64(
+			shl64(toU64(20), and64(rs2, toU64(0x1F))),
+			shl64(toU64(25), and64(funct7, toU64(0x7F))),
+		),
+	)
+}
+
+// encodeIType encodes parameters into an I-type instruction.
+func encodeIType(opcode, funct3, rd, rs1, immediate U64) (instr U64) {
+	return or64(
+		and64(opcode, toU64(0x7F)),
+		or64(
+			or64(
+				shl64(toU64(7), and64(rd, toU64(0x1F))),
+				shl64(toU64(12), and64(funct3, toU64(7))),
+			),
+			or64(
+				shl64(toU64(15), and64(rs1, toU64(0x1F))),
+				shl64(toU64(20), and64(immediate, U64(0x7FF))),
+			),
+		),
+	)
+}
+
+// encodeUJType encodes parameters into a U-type or J-type instruction.
+func encodeUJType(opcode, rd, immediate U64) (instr U64) {
+	return or64(
+		and64(opcode, toU64(0x7F)),
+		or64(
+			shl64(toU64(7), and64(rd, toU64(0x1F))),
+			shl64(toU64(12), and64(immediate, U64(0xFFFFF))),
+		),
+	)
 }
