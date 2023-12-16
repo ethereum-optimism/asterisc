@@ -54,7 +54,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 				shl64(toU64(3), and64(imm, toU64(0x01))),
 			),
 		)
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
 			0,         // ADDI
 			reg,       // rs1
@@ -65,24 +65,23 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	case 0x1:
 		imm, reg := decodeCI(instr)
 		imm = signExtend64(imm, toU64(5))
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
 			0,         // ADDI
 			reg,       // rd
 			reg,       // rs1
 			imm,       // immediate
 		)
-	// C.SLLI64 [OP: C2 | Funct3: 000 | Format: CI]
+	// C.SLLI [OP: C2 | Funct3: 000 | Format: CI]
 	case 0x2:
 		imm, reg := decodeCI(instr)
 		imm = and64(imm, toU64(0x1F))
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
 			1,         // SLLI - funct3
 			reg,       // rd
 			reg,       // rs1
 			imm,       // shamt
-
 		)
 	// C.FLD (Unsupported) [OP: C0 | Funct3: 001 | Format: CL]
 	case 0x4:
@@ -91,7 +90,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	case 0x5:
 		imm, reg := decodeCI(instr)
 		imm = signExtend64(imm, toU64(5))
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0011011, // Arithmetic (RV64I)
 			0,         // ADDIW
 			reg,       // rd
@@ -108,7 +107,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			or64(shl64(toU64(5), imm), imm),
 			toU64(0x3E),
 		))
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0000011, // Load
 			0b010,     // LW
 			reg2,      // rd
@@ -119,7 +118,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	case 0x9:
 		imm, reg := decodeCI(instr)
 		imm = signExtend64(imm, toU64(5))
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
 			0,         // ADDI
 			reg,       // rd
@@ -133,7 +132,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			or64(shl64(toU64(6), imm), imm),
 			toU64(0xFC),
 		)
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0000011, // Load
 			0b010,     // LW
 			reg,       // rd
@@ -147,7 +146,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			or64(shl64(toU64(6), imm), shl64(toU64(1), imm)),
 			toU64(0xF8),
 		)
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0000011, // Load
 			0b011,     // LD
 			reg2,      // rd
@@ -173,7 +172,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 				shl64(toU64(5), and64(imm, toU64(0x01))),
 			)
 			imm = signExtend64(imm, 9)
-			decompressedInstr = encodeIType(
+			decompressedInstr = recodeIType(
 				0b0010011, // Arithmetic
 				0,         // ADDI
 				SP,        // rd - SP
@@ -183,8 +182,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		} else {
 			// C.LUI
 			imm = signExtend64(shl64(toU64(12), imm), 17)
-			// TODO: Immediate re-formatting?
-			decompressedInstr = encodeUJType(
+			decompressedInstr = recodeUType(
 				0b0110111, // LUI
 				reg,       // rd
 				imm,       // immediate
@@ -197,7 +195,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			or64(shl64(toU64(6), imm), imm),
 			U64(0x1F8),
 		)
-		decompressedInstr = encodeIType(
+		decompressedInstr = recodeIType(
 			0b0000011, // Load
 			0b011,     // LD
 			reg,       // rd
@@ -248,13 +246,13 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			panic("unimplemented")
 		// C.MV
 		case fnsel == 0:
-			decompressedInstr = encodeRSBType(
+			decompressedInstr = recodeRType(
 				0b0110011, // Arithmetic
-				0,         // funct3
-				0,         // funct7 - ADD
 				reg1,      // rd
+				0,         // funct3
 				0,         // rs1
 				reg2,      // rs2
+				0,         // funct7 - ADD
 			)
 		// C.EBREAK
 		case fnsel == 0x1000 && reg1 == 0 && reg2 == 0:
@@ -265,13 +263,13 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			panic("unimplemented")
 		// C.ADD
 		default:
-			decompressedInstr = encodeRSBType(
+			decompressedInstr = recodeRType(
 				0b0110011, // Arithmetic
-				0,         // funct3
-				0,         // funct7 - ADD
 				reg1,      // rd
+				0,         // funct3
 				reg1,      // rs1
 				reg2,      // rs2
+				0,         // funct7 - ADD
 			)
 		}
 	// C.FSD (Unsupported) [OP: C0 | Funct3: 101 | Format: CS]
@@ -309,13 +307,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			shl64(toU64(1), or64(shl64(toU64(5), imm), imm)),
 			toU64(0x7C),
 		)
-		decompressedInstr = encodeRSBType(
+		decompressedInstr = recodeSType(
 			0b0100011, // Store
 			0b010,     // SW
-			0,         // placeholder - immediate part
-			0,         // placeholder - immediate part
 			reg1,      // rs1
 			reg2,      // rs2
+			imm,       // immediate
 		)
 	// C.BEQZ [OP: C1 | Funct3: 110 | Format: CB]
 	case 0x19:
@@ -334,13 +331,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			shl64(toU64(5), and64(imm, toU64(0x01))),
 		)
 		imm = signExtend64(imm, 8)
-		decompressedInstr = encodeRSBType(
-			0b1100011, // Branch
+		decompressedInstr = recodeBType(
+			0b1100011, // branch
 			0,         // BEQ
-			0,         // placeholder - immediate part
-			0,         // placeholder - immediate part
 			reg,       // rs1
 			0,         // rs2 - ZERO
+			imm,       // immediate
 		)
 	// C.SWSP [OP: C2 | Funct3: 110 | Format: CSS]
 	case 0x1A:
@@ -349,13 +345,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			or64(shl64(toU64(6), imm), imm),
 			toU64(0xFC),
 		)
-		decompressedInstr = encodeRSBType(
+		decompressedInstr = recodeSType(
 			0b0100011, // Store
 			0b010,     // SW
-			0,         // placeholder - immediate part
-			0,         // placeholder - immediate part
 			SP,        // rs1
 			reg,       // rs2
+			imm,       // immediate
 		)
 	// C.SD [OP: C0 | Funct3: 111 | Format: CS]
 	case 0x1C:
@@ -367,13 +362,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			),
 			toU64(0xF8),
 		)
-		decompressedInstr = encodeRSBType(
+		decompressedInstr = recodeSType(
 			0b0100011, // Store
 			0b011,     // SD
-			0,         // placeholder - immediate part
-			0,         // placeholder - immediate part
 			reg1,      // rs1
 			reg2,      // rs2
+			imm,       // immediate
 		)
 	// C.BNEZ [OP: C1 | Funct3: 111 | Format: CB]
 	case 0x1D:
@@ -392,13 +386,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			shl64(toU64(5), and64(imm, toU64(0x01))),
 		)
 		imm = signExtend64(imm, toU64(8))
-		decompressedInstr = encodeRSBType(
+		decompressedInstr = recodeBType(
 			0b1100011, // Branch
 			1,         // BNE
-			0,         // placeholder - immediate part
-			0,         // placeholder - immediate part
 			reg,       // rs1
-			0,         // rs2
+			0,         // rs2 - ZERO
+			imm,       // immediate
 		)
 	// C.SDSP [OP: C2 | Funct3: 111 | Format: CSS]
 	case 0x1E:
@@ -407,13 +400,12 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			or64(shl64(toU64(6), imm), imm),
 			U64(0x1F8),
 		)
-		decompressedInstr = encodeRSBType(
+		decompressedInstr = recodeSType(
 			0b0100011, // Store
 			0b011,     // SD
-			0,         // placeholder - immediate part
-			0,         // placeholder - immediate part
 			SP,        // rs1
 			reg,       // rs2
+			imm,       // immediate
 		)
 	default:
 		return 0, 0, fmt.Errorf("unknown instruction: %x", instr)
@@ -524,34 +516,41 @@ func decodeCSS(instr U64) (immediate, reg U64) {
 //                    ENCODING - BASE ISA                     //
 ////////////////////////////////////////////////////////////////
 
-// encodeRSBType encodes parameters into an R-type, S-type, or U-type instruction.
-func encodeRSBType(opcode, funct3, funct7, rd, rs1, rs2 U64) (instr U64) {
+// bitSlice returns a slice of bits in the `in` U64 from [start, end] (inclusive)
+func bitSlice(in U64, start U64, end U64) (part U64) {
+	in = and64(in, shl64(start, 0xFFFFFFFF_FFFFFFFF))
+	in = and64(in, shr64(sub64(toU64(63), end), 0xFFFFFFFF_FFFFFFFF))
+	return in >> start
+}
+
+// recodeRType re-encodes parameters into an R-type instruction
+func recodeRType(opcode, rd, funct3, rs1, rs2, funct7 U64) (instr U64) {
 	return or64(
 		or64(
-			or64(
-				and64(opcode, toU64(0x7F)),
-				shl64(toU64(7), and64(rd, toU64(0x1F))),
-			),
-			or64(
-				shl64(toU64(12), and64(funct3, toU64(7))),
-				shl64(toU64(15), and64(rs1, toU64(0x1F))),
-			),
+			and64(opcode, toU64(0x7F)),
+			shl64(toU64(7), and64(rd, toU64(0x1F))),
 		),
 		or64(
-			shl64(toU64(20), and64(rs2, toU64(0x1F))),
-			shl64(toU64(25), and64(funct7, toU64(0x7F))),
+			or64(
+				shl64(toU64(12), and64(funct3, toU64(0x07))),
+				shl64(toU64(15), and64(rs1, toU64(0x1F))),
+			),
+			or64(
+				shl64(toU64(20), and64(rs2, toU64(0x1F))),
+				shl64(toU64(25), and64(funct7, toU64(0x7F))),
+			),
 		),
 	)
 }
 
-// encodeIType encodes parameters into an I-type instruction.
-func encodeIType(opcode, funct3, rd, rs1, immediate U64) (instr U64) {
+// recodeIType re-encodes parameters into an I-type instruction.
+func recodeIType(opcode, rd, funct3, rs1, immediate U64) (instr U64) {
 	return or64(
 		and64(opcode, toU64(0x7F)),
 		or64(
 			or64(
 				shl64(toU64(7), and64(rd, toU64(0x1F))),
-				shl64(toU64(12), and64(funct3, toU64(7))),
+				shl64(toU64(12), and64(funct3, toU64(0x07))),
 			),
 			or64(
 				shl64(toU64(15), and64(rs1, toU64(0x1F))),
@@ -561,13 +560,82 @@ func encodeIType(opcode, funct3, rd, rs1, immediate U64) (instr U64) {
 	)
 }
 
-// encodeUJType encodes parameters into a U-type or J-type instruction.
-func encodeUJType(opcode, rd, immediate U64) (instr U64) {
+// recodeSType re-encodes parameters into an S-type instruction
+func recodeSType(opcode, funct3, rs1, rs2, immediate U64) (instr U64) {
+	return or64(
+		or64(
+			and64(opcode, toU64(0x7F)),
+			shl64(toU64(7), and64(immediate, toU64(0x1F))),
+		),
+		or64(
+			or64(
+				shl64(toU64(12), and64(funct3, 0x07)),
+				shl64(toU64(15), and64(rs1, toU64(0x1F))),
+			),
+			or64(
+				shl64(toU64(20), and64(rs2, toU64(0x1F))),
+				shl64(toU64(25), bitSlice(immediate, 5, 11)),
+			),
+		),
+	)
+}
+
+// recodeBType re-encodes parameters into a B-type instruction.
+func recodeBType(opcode, funct3, rs1, rs2, immediate U64) (instr U64) {
+	immLeft := or64(
+		bitSlice(immediate, 11, 11),
+		shl64(toU64(1), bitSlice(immediate, 1, 4)),
+	)
+	immRight := or64(
+		bitSlice(immediate, 5, 10),
+		shl64(toU64(6), bitSlice(immediate, 12, 12)),
+	)
+	return or64(
+		or64(
+			and64(opcode, toU64(0x7F)),
+			shl64(7, immLeft),
+		),
+		or64(
+			or64(
+				shl64(toU64(12), and64(funct3, 0x07)),
+				shl64(toU64(15), and64(rs1, toU64(0x1F))),
+			),
+			or64(
+				shl64(toU64(20), and64(rs2, toU64(0x1F))),
+				shl64(25, immRight),
+			),
+		),
+	)
+}
+
+// recodeUType re-encodes parameters into a U-type instruction.
+func recodeUType(opcode, rd, immediate U64) (instr U64) {
 	return or64(
 		and64(opcode, toU64(0x7F)),
 		or64(
 			shl64(toU64(7), and64(rd, toU64(0x1F))),
-			shl64(toU64(12), and64(immediate, U64(0xFFFFF))),
+			and64(immediate, shl64(12, U64(0xFFFFF))),
+		),
+	)
+}
+
+// recodeJType re-encodes parameters into a J-type instruction.
+func recodeJType(opcode, rd, immediate U64) (instr U64) {
+	twiddledImmediate := or64(
+		or64(
+			bitSlice(immediate, 12, 19),
+			shl64(toU64(8), bitSlice(immediate, 11, 11)),
+		),
+		or64(
+			shl64(toU64(9), bitSlice(immediate, 1, 10)),
+			shl64(toU64(19), bitSlice(immediate, 20, 20)),
+		),
+	)
+	return or64(
+		and64(opcode, toU64(0x7F)),
+		or64(
+			shl64(toU64(7), and64(rd, toU64(0x1F))),
+			shl64(toU64(12), twiddledImmediate),
 		),
 	)
 }
