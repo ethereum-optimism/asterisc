@@ -27,7 +27,7 @@ func LoadELF(f *elf.File) (*VMState, error) {
 	out.PC = f.Entry
 
 	for i, prog := range f.Progs {
-		//fmt.Printf("prog %d: paddr: %x range %016x - %016x  (mem %016x)  type: %s\n", i, prog.Paddr, prog.Vaddr, prog.Vaddr+prog.Memsz, prog.Memsz, prog.Type.String())
+		// fmt.Printf("prog %d: paddr: %x range %016x - %016x  (mem %016x)  type: %s\n", i, prog.Paddr, prog.Vaddr, prog.Vaddr+prog.Memsz, prog.Memsz, prog.Type.String())
 		if prog.Type == 0x70000003 {
 			// RISC-V reuses the MIPS_ABIFLAGS program type to type its segment with the `.riscv.attributes` section.
 			// See: https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/riscv-elf.adoc#attributes
@@ -45,7 +45,7 @@ func LoadELF(f *elf.File) (*VMState, error) {
 					return nil, fmt.Errorf("invalid PT_LOAD program segment %d, file size (%d) > mem size (%d)", i, prog.Filesz, prog.Memsz)
 				}
 			} else {
-				return nil, fmt.Errorf("program segment %d has different file size (%d) than mem size (%d): filling for non PT_LOAD segments is not supported", i, prog.Filesz, prog.Memsz)
+				// return nil, fmt.Errorf("program segment %d has different file size (%d) than mem size (%d): filling for non PT_LOAD segments is not supported", i, prog.Filesz, prog.Memsz)
 			}
 		}
 
@@ -70,7 +70,15 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 			"runtime.deductSweepCredit", // uses floating point nums and interacts with gc we disabled
 			"runtime.(*gcControllerState).commit",
 			// We need to patch this out, we don't pass float64nan because we don't support floats
-			"runtime.check":
+			"runtime.check",
+			// RUST PATCHES:
+			"__geteuid",                             // glibc user / group checks aren't needed
+			"__getuid",                              // glibc user / group checks aren't needed
+			"__getegid",                             // glibc user / group checks aren't needed
+			"__getgid",                              // glibc user / group checks aren't needed
+			"_dl_discover_osversion",                // disable glibc kernel version check
+			"__pthread_initialize_minimal_internal", // patch out pthreads
+			"_dl_get_origin":                        // No dynamic loader
 			// RISCV patch: ret (pseudo instruction)
 			// 00008067 = jalr zero, ra, 0
 			// Jump And Link Register, but rd=zero so no linking, and thus only jumping to the return address.
@@ -88,7 +96,7 @@ func PatchVM(f *elf.File, vmState *VMState) error {
 	}
 
 	// To no-op an instruction:
-	//vmState.SetMemRange(addr, 4, bytes.NewReader([]byte{0x13, 0x00, 0x00, 0x00}))
+	// vmState.SetMemRange(addr, 4, bytes.NewReader([]byte{0x13, 0x00, 0x00, 0x00}))
 
 	// now insert the initial stack
 

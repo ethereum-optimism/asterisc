@@ -1,3 +1,4 @@
 rvsol/cache
 rvsol/out
 tests/go-tests/bin
+tests/rust-tests/target

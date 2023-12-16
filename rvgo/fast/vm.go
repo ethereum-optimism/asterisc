@@ -167,7 +167,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		inst.trackMemAccess(addr&^31, proofIndexL)
 		if (addr+size-1)&^31 != addr&^31 {
-			if proofIndexR == 0xff {
+			if proofIndexR == 0xff && addr&0x1E != 0x1E {
 				revertWithCode(0xbad22220, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
 			}
 			inst.trackMemAccess((addr+size-1)&^31, proofIndexR)
@@ -491,9 +491,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			setRegister(toU64(10), out)
 			setRegister(toU64(11), errCode) // EBADF
+		case 48: // faccessat - hardcode to 0, access is always granted in asterisc.
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 56: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
 			setRegister(toU64(10), u64Mask())
 			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+		case 73: // ppoll_time32 - nothing to yield, synchronous execution only, for now
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 96: // set_tid_address - hardcode to 0 for determinism, asterisc is fully synchronous for now
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 123: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))

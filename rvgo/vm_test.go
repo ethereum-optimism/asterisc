@@ -43,7 +43,7 @@ func runFastTestSuite(t *testing.T, path string) {
 	inState := fast.NewInstrumentedState(vmState, nil, os.Stdout, os.Stderr)
 
 	for i := 0; i < 10_000; i++ {
-		//fmt.Printf("pc: 0x%x\n", vmState.PC)
+		// fmt.Printf("pc: 0x%x\n", vmState.PC)
 		if _, err := inState.Step(false); err != nil {
 			t.Fatalf("VM err at step %d, PC %x: %v", i, vmState.PC, err)
 		}
@@ -69,7 +69,7 @@ func runSlowTestSuite(t *testing.T, path string) {
 	instState := fast.NewInstrumentedState(vmState, nil, nil, nil)
 
 	for i := 0; i < 10_000; i++ {
-		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
+		// t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
 		wit, err := instState.Step(true)
 		require.NoError(t, err)
@@ -102,7 +102,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 	contracts := testContracts(t)
 	addrs := testAddrs
 	env := newEVMEnv(t, contracts, addrs)
-	//addTracer(t, env, addrs, contracts)
+	// addTracer(t, env, addrs, contracts)
 
 	testSuiteELF, err := elf.Open(path)
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 	maxGasUsed := uint64(0)
 
 	for i := uint64(0); i < 10_000; i++ {
-		//t.Logf("next step - pc: 0x%x\n", vmState.PC)
+		// t.Logf("next step - pc: 0x%x\n", vmState.PC)
 
 		wit, err := instState.Step(true)
 		require.NoError(t, err)
@@ -157,7 +157,8 @@ func TestFastStep(t *testing.T) {
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
-	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
+	runTestCategory("rv64uc-p")
+	// runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 
 func TestSlowStep(t *testing.T) {
@@ -170,7 +171,7 @@ func TestSlowStep(t *testing.T) {
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
-	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
+	// runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }
 
 func TestEVMStep(t *testing.T) {
@@ -183,5 +184,5 @@ func TestEVMStep(t *testing.T) {
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
-	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
+	// runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
 }

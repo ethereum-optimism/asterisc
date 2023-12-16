@@ -1,0 +1,6 @@
+[build]
+xargo = false
+default-target = "riscv64gc-unknown-linux-gnu"
+
+[target.riscv64gc-unknown-linux-gnu.env]
+passthrough=["RUSTFLAGS"]

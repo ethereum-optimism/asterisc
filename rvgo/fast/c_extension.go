@@ -361,7 +361,18 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		}
 	// C.FSD (Unsupported) [OP: C0 | Funct3: 101 | Format: CS]
 	case 0x14:
-		panic("unsupported - C.FSD")
+		imm, reg1, reg2 := decodeCLCS(instr)
+		imm = and64(
+			or64(shl64(toU64(6), imm), shl64(toU64(1), imm)),
+			toU64(0xF8),
+		)
+		decompressedInstr = recodeSType(
+			0b0100111, // Float Store
+			0b011,     // FSD
+			reg2,      // rs1
+			reg1,      // rs2
+			imm,       // immediate
+		)
 	// C.J [OP: C1 | Funct3: 101 | Format: CR]
 	case 0x15:
 		imm := decodeCJ(instr)
