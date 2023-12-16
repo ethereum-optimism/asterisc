@@ -19,9 +19,6 @@ const (
 // DecompressInstruction decompresses a 16-bit `C` extension RISC-V instruction into its 32-bit standard counterpart.
 // For instructions passed that are not a part of the `C` extension, they are returned as-is. If an unknown compressed
 // instruction is passed, an error is returned.
-//
-// Supported instructions:
-// *todo*
 func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 	// If the instruction is not a `C` extension instruction, return it as-is.
 	if !isCompressed(instr) {
@@ -56,9 +53,9 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		)
 		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
+			reg,       // rd - reg
 			0,         // ADDI
-			reg,       // rs1
-			SP,        // rd - SP
+			SP,        // rs1 - SP
 			imm,       // immediate
 		)
 	// C.NOP, C.ADDI [OP: C1 | Funct3: 000 | Format: CI]
@@ -67,8 +64,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		imm = signExtend64(imm, toU64(5))
 		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
-			0,         // ADDI
 			reg,       // rd
+			0,         // ADDI
 			reg,       // rs1
 			imm,       // immediate
 		)
@@ -78,28 +75,28 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		imm = and64(imm, toU64(0x1F))
 		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
-			1,         // SLLI - funct3
 			reg,       // rd
+			1,         // SLLI - funct3
 			reg,       // rs1
 			imm,       // shamt
 		)
 	// C.FLD (Unsupported) [OP: C0 | Funct3: 001 | Format: CL]
 	case 0x4:
-		panic("unsupported")
+		panic("unsupported - C.FLD")
 	// C.ADDIW [OP: C1 | Funct3: 001 | Format: CI]
 	case 0x5:
 		imm, reg := decodeCI(instr)
 		imm = signExtend64(imm, toU64(5))
 		decompressedInstr = recodeIType(
 			0b0011011, // Arithmetic (RV64I)
-			0,         // ADDIW
 			reg,       // rd
+			0,         // ADDIW
 			reg,       // rs1
 			imm,       // immediate
 		)
 	// C.FLDSP (Unsupported) [OP: C2 | Funct3: 001 | Format: CI]
 	case 0x6:
-		panic("unsupported")
+		panic("unsupported - C.FLDSP")
 	// C.LW [OP: C0 | Funct3: 010 | Format: CL]
 	case 0x8:
 		imm, reg1, reg2 := decodeCLCS(instr)
@@ -109,8 +106,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		))
 		decompressedInstr = recodeIType(
 			0b0000011, // Load
-			0b010,     // LW
 			reg2,      // rd
+			0b010,     // LW
 			reg1,      // rs1
 			imm,       // immediate
 		)
@@ -120,8 +117,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		imm = signExtend64(imm, toU64(5))
 		decompressedInstr = recodeIType(
 			0b0010011, // Arithmetic
-			0,         // ADDI
 			reg,       // rd
+			0,         // ADDI
 			0,         // rs1
 			imm,       // immediate
 		)
@@ -134,8 +131,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		)
 		decompressedInstr = recodeIType(
 			0b0000011, // Load
-			0b010,     // LW
 			reg,       // rd
+			0b010,     // LW
 			SP,        // rs1 - SP
 			imm,       // immediate
 		)
@@ -148,8 +145,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		)
 		decompressedInstr = recodeIType(
 			0b0000011, // Load
-			0b011,     // LD
 			reg2,      // rd
+			0b011,     // LD
 			reg1,      // rs1
 			imm,       // immediate
 		)
@@ -174,8 +171,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			imm = signExtend64(imm, 9)
 			decompressedInstr = recodeIType(
 				0b0010011, // Arithmetic
-				0,         // ADDI
 				SP,        // rd - SP
+				0,         // ADDI
 				SP,        // rs1 - SP
 				imm,       // immediate
 			)
@@ -197,8 +194,8 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		)
 		decompressedInstr = recodeIType(
 			0b0000011, // Load
-			0b011,     // LD
 			reg,       // rd
+			0b011,     // LD
 			SP,        // rs1 - SP
 			imm,       // immediate
 		)
@@ -210,31 +207,104 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		switch instr >> 10 & 0x3 {
 		// C.SRLI
 		case 0x00:
+			imm, reg := decodeShiftCB(instr)
+			decompressedInstr = recodeRType(
+				0b0010011, // Arithmetic
+				reg,       // rd
+				0b101,     // SRLI
+				reg,       // rs1
+				imm,       // shamt
+				0,         // funct7 - SRLI
+			)
 		// C.SRAI
 		case 0x01:
+			imm, reg := decodeShiftCB(instr)
+			decompressedInstr = recodeRType(
+				0b0010011, // Arithmetic
+				reg,       // rd
+				0b101,     // SRAI
+				reg,       // rs1
+				imm,       // shamt
+				0b0100000, // SRAI
+			)
 		// C.ANDI
 		case 0x02:
+			imm, reg := decodeShiftCB(instr)
+			imm = signExtend64(imm, 5)
+			decompressedInstr = recodeIType(
+				0b0010011, // Arithmetic
+				reg,       // rd
+				0b111,     // ANDI
+				reg,       // rs1
+				imm,       // immediate
+			)
 		}
 
-		// _, reg1, reg2 := decodeCLCS(instr)
+		_, reg1, reg2 := decodeCLCS(instr)
 		switch (instr >> 8 & 0x1C) | (instr >> 5 & 0x03) {
 		// C.SUB
 		case 0x0C:
+			decompressedInstr = recodeRType(
+				0b0110011, // Arithmetic
+				reg1,      // rd
+				0b000,     // SUB
+				reg1,      // rs1
+				reg2,      // rs2
+				0b0100000, // SUB
+			)
 		// C.XOR
 		case 0x0D:
+			decompressedInstr = recodeRType(
+				0b0110011, // Arithmetic
+				reg1,      // rd
+				0b100,     // XOR
+				reg1,      // rs1
+				reg2,      // rs2
+				0,         // XOR
+			)
 		// C.OR
 		case 0x0E:
+			decompressedInstr = recodeRType(
+				0b0110011, // Arithmetic
+				reg1,      // rd
+				0b110,     // OR
+				reg1,      // rs1
+				reg2,      // rs2
+				0,         // OR
+			)
 		// C.AND
 		case 0x0F:
+			decompressedInstr = recodeRType(
+				0b0110011, // Arithmetic
+				reg1,      // rd
+				0b111,     // AND
+				reg1,      // rs1
+				reg2,      // rs2
+				0,         // OR
+			)
 		// C.SUBW
 		case 0x1C:
+			decompressedInstr = recodeRType(
+				0b0111011, // Arithmetic
+				reg1,      // rd
+				0b000,     // SUBW
+				reg1,      // rs1
+				reg2,      // rs2
+				0b0100000, // SUBW
+			)
 		// C.ADDW
 		case 0x1D:
+			decompressedInstr = recodeRType(
+				0b0111011, // Arithmetic
+				reg1,      // rd
+				0b000,     // ADDW
+				reg1,      // rs1
+				reg2,      // rs2
+				0,         // ADDW
+			)
 		// Reserved
-		case 0x1E:
-		case 0x1F:
+		case 0x1E, 0x1F:
 		}
-		panic("unsupported")
 	// C.JR, C.MV, C.EBREAK, C.JALR, C.ADD [OP: C2 | Funct3: 100 | Format: ?]
 	case 0x12:
 		reg1, reg2 := decodeCR(instr)
@@ -242,8 +312,13 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		switch {
 		// C.JR
 		case fnsel == 0 && reg2 == 0:
-			// TODO
-			panic("unimplemented")
+			decompressedInstr = recodeIType(
+				0b1100111, // JALR
+				0,         // rd
+				0,         // JALR funct3
+				reg1,      // rs1
+				0,         // immediate
+			)
 		// C.MV
 		case fnsel == 0:
 			decompressedInstr = recodeRType(
@@ -259,8 +334,13 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			decompressedInstr = 0b00000000000100000000000001110011
 		// C.JALR
 		case fnsel == 0x1000 && reg2 == 0:
-			// TODO
-			panic("unimplemented")
+			decompressedInstr = recodeIType(
+				0b1100111, // JALR
+				1,         // rd - RA register
+				0,         // JALR funct3
+				reg1,      // rs1
+				0,         // immediate
+			)
 		// C.ADD
 		default:
 			decompressedInstr = recodeRType(
@@ -274,7 +354,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		}
 	// C.FSD (Unsupported) [OP: C0 | Funct3: 101 | Format: CS]
 	case 0x14:
-		panic("unsupported")
+		panic("unsupported - C.FSD")
 	// C.J [OP: C1 | Funct3: 101 | Format: CR]
 	case 0x15:
 		imm := decodeCJ(instr)
@@ -295,11 +375,14 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			),
 		)
 		imm = signExtend64(imm, 11)
-		// TODO: Custom handler for C.J
-		panic("unimplemented")
+		decompressedInstr = recodeJType(
+			0b1101111, // JAL
+			0,         // rd
+			imm,       // immediate
+		)
 	// C.FSDSP (Unsupported) [OP: C2 | Funct3: 101 | Format: CSS]
 	case 0x16:
-		panic("unsupported")
+		panic("unsupported - C.FSDSP")
 	// C.SW [OP: C0 | Funct3: 110 | Format: CS]
 	case 0x18:
 		imm, reg1, reg2 := decodeCLCS(instr)
@@ -488,6 +571,16 @@ func decodeCB(instr U64) (immediate, reg U64) {
 	return immediate, reg
 }
 
+// decodeShiftCB
+func decodeShiftCB(instr U64) (shamt, reg U64) {
+	shamt = or64(
+		shr64(toU64(7), and64(instr, U64(0x1000))),
+		and64(toU64(0x1F), shr64(toU64(2), instr)),
+	)
+	reg = mapCompressedRegister(and64(shr64(toU64(7), instr), toU64(7)))
+	return shamt, reg
+}
+
 // decodeCI pulls the `immediate` and `reg` out of a CI formatted instruction from the RVC extension.
 func decodeCI(instr U64) (immediate, reg U64) {
 	immediate = or64(
@@ -554,7 +647,7 @@ func recodeIType(opcode, rd, funct3, rs1, immediate U64) (instr U64) {
 			),
 			or64(
 				shl64(toU64(15), and64(rs1, toU64(0x1F))),
-				shl64(toU64(20), and64(immediate, U64(0x7FF))),
+				shl64(toU64(20), and64(immediate, U64(0xFFF))),
 			),
 		),
 	)
