@@ -12,6 +12,13 @@ const (
 	// C_REGISTER_OFFSET is the offset of the register mapping from the `C` instructions to regular 32 bit instructions.
 	// In the `C` extension, register fields are only allotted 3 bits, allowing for 8 possible register designations.
 	C_REGISTER_OFFSET = U64(8)
+)
+
+const (
+	// ZERO is the index of the hard-wired zero register
+	ZERO = U64(0)
+	// RA is the index of the return address register
+	RA = U64(1)
 	// SP is the index of the stack pointer register defined in the RV32I/RV64I base ISA.
 	SP = U64(2)
 )
@@ -119,7 +126,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			0b0010011, // Arithmetic
 			reg,       // rd
 			0,         // ADDI
-			0,         // rs1
+			ZERO,      // rs1 - ZERO
 			imm,       // immediate
 		)
 	// C.LWSP [OP: C2 | Funct3: 010 | Format: CI]
@@ -314,7 +321,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		case fnsel == 0 && reg2 == 0:
 			decompressedInstr = recodeIType(
 				0b1100111, // JALR
-				0,         // rd
+				ZERO,      // rd - ZERO
 				0,         // JALR funct3
 				reg1,      // rs1
 				0,         // immediate
@@ -325,7 +332,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 				0b0110011, // Arithmetic
 				reg1,      // rd
 				0,         // funct3
-				0,         // rs1
+				ZERO,      // rs1 - ZERO
 				reg2,      // rs2
 				0,         // funct7 - ADD
 			)
@@ -336,7 +343,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		case fnsel == 0x1000 && reg2 == 0:
 			decompressedInstr = recodeIType(
 				0b1100111, // JALR
-				1,         // rd - RA register
+				RA,        // rd - RA
 				0,         // JALR funct3
 				reg1,      // rs1
 				0,         // immediate
@@ -377,7 +384,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 		imm = signExtend64(imm, 11)
 		decompressedInstr = recodeJType(
 			0b1101111, // JAL
-			0,         // rd
+			ZERO,      // rd - ZERO
 			imm,       // immediate
 		)
 	// C.FSDSP (Unsupported) [OP: C2 | Funct3: 101 | Format: CSS]
@@ -418,7 +425,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			0b1100011, // branch
 			0,         // BEQ
 			reg,       // rs1
-			0,         // rs2 - ZERO
+			ZERO,      // rs2 - ZERO
 			imm,       // immediate
 		)
 	// C.SWSP [OP: C2 | Funct3: 110 | Format: CSS]
@@ -473,7 +480,7 @@ func DecompressInstruction(instr U64) (instrOut U64, pcBump U64, err error) {
 			0b1100011, // Branch
 			1,         // BNE
 			reg,       // rs1
-			0,         // rs2 - ZERO
+			ZERO,      // rs2 - ZERO
 			imm,       // immediate
 		)
 	// C.SDSP [OP: C2 | Funct3: 111 | Format: CSS]
