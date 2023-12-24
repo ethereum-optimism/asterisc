@@ -1,0 +1,38 @@
+name: AsteriscCI
+on: [push]
+
+jobs:
+  go-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Install Golang
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21.x'
+      - name: Build rvsol
+        run: forge build
+        working-directory: rvsol
+      - name: Build rv64g test binaries
+        run: make bin bin/simple bin/minimal
+        working-directory: tests/go-tests
+      - name: Run tests
+        run: go test -v ./...
+        working-directory: rvgo
+  # go-lint:
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 20
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-go@v4
+  #       with:
+  #         go-version: '1.21.x'
+  #         cache: false
+  #     - name: golangci-lint
+  #       uses: golangci/golangci-lint-action@v3
+  #       with:
+  #         version: latest
