@@ -8,42 +8,12 @@ Asterisc proves execution of a RISC-V program with an interactive fraud-proof.
 
 This project is a work in progress. Maybe 80% complete.
 
-TODO
-- [ ] Go:
-  - [x] Implement yul opcodes in Go
-    - [x] fast/slow u256
-    - [x] fast u64
-    - [x] slow u64 (u256 backed)
-  - [x] Implement merkleized state loading/storing state-machine
-  - [x] Implement ALU + load/store parts of RISC-V
-  - [x] Implement state merkleization
-  - [x] Implement access-list collecter shim and db
-  - [ ] update state model to track multiple copies of registers state and PC
-  - [x] change Go step code to use uint256 words
-  - [x] split Go into fast and slow mode
-  - [ ] support syscalls
-    - [x] memory brk/mmap
-    - [x] exit
-    - [x] read/write/fcntl/openat
-    - [x] Go syscalls compat
-    - [ ] extend w/ threading clone/futex/gettid/tgkil/tkill
-    - [ ] extras
-  - [x] read/write syscall based pre-image oracle
-  - [x] Pass RISC-V test vectors (RV64 I, M, A)
-- [ ] Sol:
-  - [x] Forge solidity testing setup
-  - [ ] Forge solidity test VM step on snapshotted proof data
-  - [x] Complete port of Go slow-mode emu to solidity/Yul
-  - [x] Pass RISC-V test vectors
-  - [x] read/write syscall based pre-image oracle
-- [ ] Misc:
-  - [x] analyze Go runtime/compiler
-  - [ ] CLI command to build VM snapshot from ELF
-  - [ ] CLI command to transition VM snapshot N steps with interval snapshots
-  - [ ] CLI command to produce proof for snapshot
-  - [ ] CLI command to verify proof, in EVM and Go mode
-  - [ ] Go-Sol differential fuzzing
-  - [x] Test basic Go programs
+## Getting started
+
+- Read the [docs](./docs).
+- Build the smart-contracts with foundry.
+- Compile the `tests/go-tests` (see [`Makefile`](./tests/go-tests/Makefile)) for binaries used by Go tests.
+- Run the `rvgo` tests. All onchain and offchain execution is covered by standard RISC-V unit-tests
 
 ## How does it work?
 
@@ -60,7 +30,7 @@ Asterisc consists of two parts:
   - Tooling: merkleize VM state, collect access-list of a slow-mode step, diff VM merkle-trees
 - `rvsol`: Solidity/Yul mirror of Go Risc-V slow-mode step that runs with access-list as input
 
-All VM state is merkleized into a single big structured binary merkle-trie.
+All VM register state is compact enough to be proven as a single preimage, with a binary merkle-tree for 64-bit memory.
 
 ### Why use Yul in solidity?
 
@@ -73,11 +43,11 @@ The use of YUL / "solidity assembly" is very convenient because:
 
 ### Why fast and slow mode?
 
-Emulating a program on top of merkleized key-value backed memory is expensive.
+Emulating a program on top of a merkleized state structure is expensive.
 When bisecting a program trace, you only need to produce a commitment to a few intermediate states, not all of them.
 
-Note that slow mode and fast mode ALUs can be implemented exactly the same, just with different u64/u256 implementations.
-The slow mode matches the smart-contract behavior 1:1 and is useful for building the access-list
+Note that slow mode and fast mode ALUs can be implemented *exactly the same*, just with different u64/u256 implementations.
+The slow mode matches the smart-contract behavior 1:1 and is useful for building the memory merkle-proof
 and having a Go mirror of the smart-contract behavior for testing/debugging in general.
 
 ## RISC-V subset support
@@ -92,6 +62,7 @@ and having a Go mirror of the smart-contract behavior for testing/debugging in g
 - `Zifencei`: `FENCE.I` no-op: No need for `FENCE.I`
 - `Zicsr`: no-op: some support for Control-and-status registers may come later though.
 - `Ztso`: no-op: no need for Total Store Ordering
+- `RVC`: compact instructions - work-in-progress, to support Rust compiler output.
 - other: revert with error code on unrecognized instructions
 
 Where necessary, the non-supported operations are no-ops that allow execution of the standard Go runtime, with disabled GC.
@@ -112,13 +83,18 @@ but do not expect support if you diverge from the general design direction:
 Asterisc may be usable to fraud-proof Rust programs or bespoke execution-environments in the future,
 but doing so should stay stupid-simple & not negatively affect its primary purpose.
 
-## Asterisc status
+## Asterisc history
 
-This project is not (yet) a production-ready fault-proof system, and is developed during spare-time only.
+This project originally started as an experimental spare-time project by @protolambda, in January 2023.
+This started with support of proving single-threaded Go programs, offchain in Go and onchain in Yul.
+The project helped inform a multi-proof system, a critical step towards Stage 2 rollup security.
 
 The end-game (pre-ZK) is for Ethereum L2 optimistic rollups to embed multiple fraud-proof modules to function as a "committee":
 if one of the members is corrupted due to a bug/vulnerability, then the system as a whole stays stable without rollbacks or human intervention.
 So Asterisc aims to complement other fraud-proof systems, and not to replace them.
+
+Asterisc has been transferred to the Optimism GitHub org in January 2024,
+to push forward the multi-proof OP-Stack vision with collective Optimism engineering effort.
 
 ## Docs
 
@@ -156,4 +132,4 @@ Asterisc aims to be open for anyone to use with MIT license.
 
 ## License
 
-MIT, see [`LICENSE` file](./LICENSE)
+MIT, see [`LICENSE` file](./LICENSE).
