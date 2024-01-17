@@ -16,8 +16,8 @@ import (
 
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
 
-	"github.com/protolambda/asterisc/rvgo/fast"
-	"github.com/protolambda/asterisc/rvgo/slow"
+	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	"github.com/ethereum-optimism/asterisc/rvgo/slow"
 )
 
 type testOracle struct {

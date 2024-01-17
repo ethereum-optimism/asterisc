@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/protolambda/asterisc/rvgo/fast"
-	"github.com/protolambda/asterisc/rvgo/slow"
+	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	"github.com/ethereum-optimism/asterisc/rvgo/slow"
 )
 
 func forEachTestSuite(t *testing.T, path string, callItem func(t *testing.T, path string)) {

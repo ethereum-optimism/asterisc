@@ -22,7 +22,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/srcmap"
 
-	"github.com/protolambda/asterisc/rvgo/fast"
+	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
 
 type dummyChain struct {

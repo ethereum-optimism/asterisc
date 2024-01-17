@@ -1,4 +1,4 @@
-module github.com/protolambda/asterisc
+module github.com/ethereum-optimism/asterisc
 
 go 1.21
 
