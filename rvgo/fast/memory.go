@@ -20,6 +20,12 @@ const (
 	MaxPageCount = 1 << PageKeySize
 	PageKeyMask  = MaxPageCount - 1
 	ProofLen     = 64 - 4
+	branchDepth  = 4
+	branchMask   = (1 << branchDepth) - 1
+	branchFactor = 1 << branchDepth
+	halfBranch   = branchFactor >> 1
+	levels       = 13
+	// log2(16) * 13 = 4 * 13 = 52 = PageKeySize
 )
 
 func HashPair(left, right [32]byte) [32]byte {
@@ -36,6 +42,72 @@ var zeroHashes = func() [256][32]byte {
 	}
 	return out
 }()
+
+type MemLevel interface {
+	Invalidate(addr uint64)
+	MerkleRoot() [32]byte
+	ForEachPage(fn func(pageIndex uint64, page *Page) error) error
+	Prove(addr uint64) (proof [][32]byte)
+}
+
+type MemNode[C MemLevel] struct {
+	Radix  [branchFactor]C
+	Merkle [branchFactor][32]byte
+	Cache  uint16
+	Depth  uint8 // bits, from bottom to top
+}
+
+func (mn *MemNode[C]) Invalidate(addr uint64) {
+	i := (addr >> mn.Depth) & branchMask
+	mn.Radix[i].Invalidate(addr)
+	// TODO: replace this with constant lookup (since there are only 16 different i values)
+	gi := (1 << branchDepth) | i
+	for gi > 0 {
+		gi >>= 1
+		mn.Cache &^= 1 << gi
+	}
+}
+
+func (mn *MemNode[C]) MerkleRoot() [32]byte {
+	for i := 0; i < halfBranch; i++ {
+		if mn.Cache&(1<<(halfBranch|i)) == 0 {
+			mn.Merkle[halfBranch|i] = HashPair(mn.Radix[i<<1].MerkleRoot(), mn.Radix[(i<<1)|1].MerkleRoot())
+		}
+	}
+	for i := halfBranch; i > 0; i-- {
+		if mn.Cache&(1<<i) == 0 {
+			mn.Merkle[i] = HashPair(mn.Merkle[i<<1], mn.Merkle[(i<<1)|1])
+		}
+	}
+	return mn.Merkle[1]
+}
+
+func (mn *MemNode[C]) ForEachPage(fn func(pageIndex uint64, page *Page) error) error {
+	for i, c := range mn.Radix {
+		if err := c.ForEachPage(fn); err != nil {
+			return fmt.Errorf("node %d failed ForEachPage: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func (mn *MemNode[C]) Prove(addr uint64) (proof [][32]byte) {
+	i := (addr >> mn.Depth) & branchMask
+	proof = mn.Radix[i].Prove(addr) // sub-proof at the target sub-tree
+	_ = mn.MerkleRoot() // update cache
+	proof = append(proof, mn.Radix[i ^ 1].MerkleRoot()) // append sibling
+	gi := branchFactor | i
+	for gi > 1 { // add remaining nodes from cache
+		gi >>= 1
+		proof = append(proof, mn.Merkle[gi ^ 1])
+	}
+	return
+}
+
+type L1 = MemNode[*CachedPage]
+type L2 = MemNode[*L1]
+type L3 = MemNode[*L2]
+type L4 = MemNode[*L3]
 
 type Memory struct {
 	// generalized index -> merkle root or nil if invalidated
@@ -260,7 +332,7 @@ func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
 }
 
 func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
-	p := &CachedPage{Data: new(Page)}
+	p := &CachedPage{Data: new(Page), PageIndex: pageIndex}
 	m.pages[pageIndex] = p
 	// make nodes to root
 	k := (1 << PageKeySize) | uint64(pageIndex)

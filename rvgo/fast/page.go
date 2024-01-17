@@ -28,7 +28,8 @@ type CachedPage struct {
 	// intermediate nodes only
 	Cache [PageSize / 32][32]byte
 	// true if the intermediate node is valid
-	Ok [PageSize / 32]bool
+	Ok        [PageSize / 32]bool
+	PageIndex uint64
 }
 
 func (p *CachedPage) Invalidate(pageAddr uint64) {
@@ -84,4 +85,8 @@ func (p *CachedPage) MerkleizeSubtree(gindex uint64) [32]byte {
 		return *(*[32]byte)(p.Data[nodeIndex*32 : nodeIndex*32+32])
 	}
 	return p.Cache[gindex]
+}
+
+func (p *CachedPage) ForEachPage(fn func(pageIndex uint64, page *Page) error) error {
+	return fn(p.PageIndex, p.Data)
 }
