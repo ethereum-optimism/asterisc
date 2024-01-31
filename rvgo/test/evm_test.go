@@ -1,4 +1,4 @@
-package fast
+package test
 
 import (
 	"encoding/binary"
@@ -55,7 +55,7 @@ func fakeHeader(n uint64, parentHash common.Hash) *types.Header {
 }
 
 func loadStepContractCode(t *testing.T) *Contract {
-	dat, err := os.ReadFile("../rvsol/out/Step.sol/Step.json")
+	dat, err := os.ReadFile("../../rvsol/out/Step.sol/Step.json")
 	require.NoError(t, err)
 	var outDat Contract
 	err = json.Unmarshal(dat, &outDat)
@@ -64,7 +64,7 @@ func loadStepContractCode(t *testing.T) *Contract {
 }
 
 func loadPreimageOracleContractCode(t *testing.T) *Contract {
-	dat, err := os.ReadFile("../rvsol/out/PreimageOracle.sol/PreimageOracle.json")
+	dat, err := os.ReadFile("../../rvsol/out/PreimageOracle.sol/PreimageOracle.json")
 	require.NoError(t, err)
 	var outDat Contract
 	err = json.Unmarshal(dat, &outDat)
@@ -103,13 +103,13 @@ func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
 	statedb := state.NewDatabase(db)
 	state, err := state.New(types.EmptyRootHash, statedb, nil)
 	require.NoError(t, err)
-	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
+	blockContext := core.NewEVMBlockContext(header, bc, nil)
 	vmCfg := vm.Config{}
 
 	env := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
 	env.StateDB.SetCode(addrs.RISCV, contracts.RISCV.DeployedBytecode.Object)
 	env.StateDB.SetCode(addrs.Oracle, contracts.Oracle.DeployedBytecode.Object)
-	env.StateDB.SetState(addrs.RISCV, common.Hash{}, addrs.Oracle.Hash()) // set storage slot pointing to preimage oracle
+	env.StateDB.SetState(addrs.RISCV, common.Hash{}, common.BytesToHash(addrs.Oracle.Bytes())) // set storage slot pointing to preimage oracle
 
 	rules := env.ChainConfig().Rules(header.Number, true, header.Time)
 	env.StateDB.Prepare(rules, addrs.Sender, addrs.FeeRecipient, &addrs.RISCV, vm.ActivePrecompiles(rules), nil)
@@ -133,9 +133,9 @@ func testContracts(t *testing.T) *Contracts {
 func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts) {
 	//env.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
 
-	a, err := contracts.RISCV.SourceMap([]string{"../rvsol/src/Step.sol"})
+	a, err := contracts.RISCV.SourceMap([]string{"../../rvsol/src/Step.sol"})
 	require.NoError(t, err)
-	b, err := contracts.Oracle.SourceMap([]string{"../rvsol/src/PreimageOracle.sol"})
+	b, err := contracts.Oracle.SourceMap([]string{"../../rvsol/src/PreimageOracle.sol"})
 	require.NoError(t, err)
 	env.Config.Tracer = srcmap.NewSourceMapTracer(map[common.Address]*srcmap.SourceMap{
 		addrs.RISCV:  a,

@@ -1,4 +1,4 @@
-package fast
+package test
 
 import (
 	"debug/elf"

@@ -1,4 +1,4 @@
-package fast
+package test
 
 import (
 	"debug/elf"
@@ -142,7 +142,7 @@ func fullTest(t *testing.T, vmState *fast.VMState, po *testOracle, symbols fast.
 }
 
 func TestSimple(t *testing.T) {
-	programELF, err := elf.Open("../tests/go-tests/bin/simple")
+	programELF, err := elf.Open("../../tests/go-tests/bin/simple")
 	require.NoError(t, err)
 	defer programELF.Close()
 
@@ -211,7 +211,7 @@ func TestSimple(t *testing.T) {
 }
 
 func TestMinimal(t *testing.T) {
-	programELF, err := elf.Open("../tests/go-tests/bin/minimal")
+	programELF, err := elf.Open("../../tests/go-tests/bin/minimal")
 	require.NoError(t, err)
 	defer programELF.Close()
 
