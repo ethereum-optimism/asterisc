@@ -103,7 +103,7 @@ func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
 	statedb := state.NewDatabase(db)
 	state, err := state.New(types.EmptyRootHash, statedb, nil)
 	require.NoError(t, err)
-	blockContext := core.NewEVMBlockContext(header, bc, nil)
+	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
 	vmCfg := vm.Config{}
 
 	env := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
