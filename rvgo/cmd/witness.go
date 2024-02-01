@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
@@ -26,7 +27,7 @@ var (
 func Witness(ctx *cli.Context) error {
 	input := ctx.Path(WitnessInputFlag.Name)
 	output := ctx.Path(WitnessOutputFlag.Name)
-	state, err := loadJSON[fast.VMState](input)
+	state, err := cmd.LoadJSON[fast.VMState](input)
 	if err != nil {
 		return fmt.Errorf("invalid input state (%v): %w", input, err)
 	}

@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.1
 
 // dev
-replace github.com/ethereum-optimism/optimism v1.5.0-rc.3.0.20240131040122-c874ecc9f195 => github.com/testinprod-io/optimism v0.2.1-0.20240131095754-7dd88a772c74
+replace github.com/ethereum-optimism/optimism v1.5.0-rc.3.0.20240131040122-c874ecc9f195 => github.com/testinprod-io/optimism v0.2.1-0.20240201075727-ccefcbe9a895
 
 replace github.com/ethereum/go-ethereum v1.13.5 => github.com/ethereum-optimism/op-geth v1.101305.3-rc.2.0.20240130011842-33cb3315f498
 

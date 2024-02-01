@@ -15,7 +15,6 @@ import (
 	"github.com/pkg/profile"
 
 	"github.com/ethereum-optimism/optimism/cannon/cmd"
-	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
@@ -244,8 +243,8 @@ func Run(ctx *cli.Context) error {
 	}
 
 	l := cmd.Logger(os.Stderr, log.LvlInfo)
-	outLog := &mipsevm.LoggingWriter{Name: "program std-out", Log: l}
-	errLog := &mipsevm.LoggingWriter{Name: "program std-err", Log: l}
+	outLog := &cmd.LoggingWriter{Name: "program std-out", Log: l}
+	errLog := &cmd.LoggingWriter{Name: "program std-err", Log: l}
 
 	stopAtPreimageType := ctx.String(RunStopAtPreimageTypeFlag.Name)
 	if stopAtPreimageType != "" && stopAtPreimageType != "any" && stopAtPreimageType != "local" && stopAtPreimageType != "global" {
@@ -308,8 +307,8 @@ func Run(ctx *cli.Context) error {
 			delta := time.Since(start)
 			l.Info("processing",
 				"step", step,
-				"pc", mipsevm.HexU32(state.PC),
-				"insn", mipsevm.HexU32(state.Instr()),
+				"pc", cmd.HexU32(state.PC),
+				"insn", cmd.HexU32(state.Instr()),
 				"ips", float64(step-startStep)/(float64(delta)/float64(time.Second)),
 				"pages", state.Memory.PageCount(),
 				"mem", state.Memory.Usage(),

@@ -3,6 +3,8 @@ package cmd
 import (
 	"debug/elf"
 	"fmt"
+
+	"github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
@@ -36,7 +38,7 @@ func LoadELF(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load ELF data into VM state: %w", err)
 	}
-	return writeJSON[*fast.VMState](ctx.Path(LoadELFOutFlag.Name), state)
+	return cmd.WriteJSON[*fast.VMState](ctx.Path(LoadELFOutFlag.Name), state)
 }
 
 var LoadELFCommand = &cli.Command{
