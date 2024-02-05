@@ -33,8 +33,8 @@ func Witness(ctx *cli.Context) error {
 
 var WitnessCommand = &cli.Command{
 	Name:        "witness",
-	Usage:       "Convert a Asterisc JSON state into a binary witness",
-	Description: "Convert a Asterisc JSON state into a binary witness. The hash of the witness is written to stdout",
+	Usage:       "Convert an Asterisc JSON state into a binary witness",
+	Description: "Convert an Asterisc JSON state into a binary witness. The hash of the witness is written to stdout",
 	Action:      Witness,
 	Flags: []cli.Flag{
 		cannon.WitnessInputFlag,
