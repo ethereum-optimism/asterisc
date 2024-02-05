@@ -4,29 +4,14 @@ import (
 	"debug/elf"
 	"fmt"
 
-	"github.com/ethereum-optimism/optimism/cannon/cmd"
+	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
 
-var (
-	LoadELFPathFlag = &cli.PathFlag{
-		Name:      "path",
-		Usage:     "Path to RISC-V ELF file",
-		TakesFile: true,
-		Required:  true,
-	}
-	LoadELFOutFlag = &cli.PathFlag{
-		Name:     "out",
-		Usage:    "Output path to write JSON state to. State is dumped to stdout if set to -. Not written if empty.",
-		Value:    "state.json",
-		Required: false,
-	}
-)
-
 func LoadELF(ctx *cli.Context) error {
-	elfPath := ctx.Path(LoadELFPathFlag.Name)
+	elfPath := ctx.Path(cannon.LoadELFPathFlag.Name)
 	elfProgram, err := elf.Open(elfPath)
 	if err != nil {
 		return fmt.Errorf("failed to open ELF file %q: %w", elfPath, err)
@@ -38,16 +23,16 @@ func LoadELF(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load ELF data into VM state: %w", err)
 	}
-	return cmd.WriteJSON[*fast.VMState](ctx.Path(LoadELFOutFlag.Name), state)
+	return cannon.WriteJSON[*fast.VMState](ctx.Path(cannon.LoadELFOutFlag.Name), state)
 }
 
 var LoadELFCommand = &cli.Command{
 	Name:        "load-elf",
-	Usage:       "Load ELF file into Cannon JSON state",
-	Description: "Load ELF file into Cannon JSON state, optionally patch out functions",
+	Usage:       "Load ELF file into Asterisc JSON state",
+	Description: "Load ELF file into Asterisc JSON state, optionally patch out functions",
 	Action:      LoadELF,
 	Flags: []cli.Flag{
-		LoadELFPathFlag,
-		LoadELFOutFlag,
+		cannon.LoadELFPathFlag,
+		cannon.LoadELFOutFlag,
 	},
 }

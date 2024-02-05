@@ -4,30 +4,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ethereum-optimism/optimism/cannon/cmd"
+	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
 
-var (
-	WitnessInputFlag = &cli.PathFlag{
-		Name:      "input",
-		Usage:     "path of input JSON state.",
-		TakesFile: true,
-		Required:  true,
-	}
-	WitnessOutputFlag = &cli.PathFlag{
-		Name:      "output",
-		Usage:     "path to write binary witness.",
-		TakesFile: true,
-	}
-)
-
 func Witness(ctx *cli.Context) error {
-	input := ctx.Path(WitnessInputFlag.Name)
-	output := ctx.Path(WitnessOutputFlag.Name)
-	state, err := cmd.LoadJSON[fast.VMState](input)
+	input := ctx.Path(cannon.WitnessInputFlag.Name)
+	output := ctx.Path(cannon.WitnessOutputFlag.Name)
+	state, err := cannon.LoadJSON[fast.VMState](input)
 	if err != nil {
 		return fmt.Errorf("invalid input state (%v): %w", input, err)
 	}
@@ -47,11 +33,11 @@ func Witness(ctx *cli.Context) error {
 
 var WitnessCommand = &cli.Command{
 	Name:        "witness",
-	Usage:       "Convert a Cannon JSON state into a binary witness",
-	Description: "Convert a Cannon JSON state into a binary witness. The hash of the witness is written to stdout",
+	Usage:       "Convert a Asterisc JSON state into a binary witness",
+	Description: "Convert a Asterisc JSON state into a binary witness. The hash of the witness is written to stdout",
 	Action:      Witness,
 	Flags: []cli.Flag{
-		WitnessInputFlag,
-		WitnessOutputFlag,
+		cannon.WitnessInputFlag,
+		cannon.WitnessOutputFlag,
 	},
 }

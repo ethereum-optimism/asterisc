@@ -117,3 +117,7 @@ func (m *InstrumentedState) verifyMemChange(effAddr uint64, proofIndex uint8) {
 		panic(fmt.Errorf("mem access at %016x with mismatching prior proof verification for address %016x", effAddr, m.memAccess[proofIndex]))
 	}
 }
+
+func (m *InstrumentedState) LastPreimage() []byte {
+	return m.lastPreimage
+}
