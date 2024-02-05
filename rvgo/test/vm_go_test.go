@@ -21,23 +21,20 @@ import (
 )
 
 type testOracle struct {
-	hint        func(v []byte) error
-	getPreimage func(k [32]byte) ([]byte, error)
+	hint        func(v []byte)
+	getPreimage func(k [32]byte) []byte
 }
 
-func (t *testOracle) Hint(v []byte) error {
-	return t.hint(v)
+func (t *testOracle) Hint(v []byte) {
+	t.hint(v)
 }
 
-func (t *testOracle) GetPreimage(k [32]byte) ([]byte, error) {
+func (t *testOracle) GetPreimage(k [32]byte) []byte {
 	return t.getPreimage(k)
 }
 
 func (t *testOracle) ReadPreimagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error) {
-	v, err := t.getPreimage(key)
-	if err != nil {
-		return [32]byte{}, 0, fmt.Errorf("failed to get pre-image of %x: %w", key, err)
-	}
+	v := t.getPreimage(key)
 	if offset == uint64(len(v))+8 {
 		return [32]byte{}, 0, nil // datlen==0 signals EOF
 	}
@@ -165,16 +162,16 @@ func TestSimple(t *testing.T) {
 	addPreimage([]byte("world"))                          // input pre-image
 
 	po := &testOracle{
-		hint: func(v []byte) error {
+		hint: func(v []byte) {
 			t.Logf("received hint: %x", v)
-			return nil
 		},
-		getPreimage: func(k [32]byte) ([]byte, error) {
+		getPreimage: func(k [32]byte) []byte {
 			t.Logf("reading pre-image: %x", k)
 			if v, ok := preImages[k]; ok {
-				return v, nil
+				return v
 			} else {
-				return nil, fmt.Errorf("unknown pre-image %x", k)
+				t.Fatalf("unknown pre-image %x", k)
+				return nil
 			}
 		},
 	}
@@ -219,13 +216,12 @@ func TestMinimal(t *testing.T) {
 	require.NoError(t, err)
 
 	po := &testOracle{
-		hint: func(v []byte) error {
+		hint: func(v []byte) {
 			t.Fatalf("unexpected pre-image hint %x", v)
-			return nil
 		},
-		getPreimage: func(k [32]byte) ([]byte, error) {
+		getPreimage: func(k [32]byte) []byte {
 			t.Fatalf("unexpected pre-image request %x", k)
-			return nil, nil
+			return nil
 		},
 	}
 
