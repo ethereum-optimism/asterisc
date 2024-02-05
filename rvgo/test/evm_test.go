@@ -149,13 +149,13 @@ func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses,
 	snap := env.StateDB.Snapshot()
 
 	if wit.HasPreimage() {
-		input, err := wit.EncodePreimageOracleInput()
+		input, err := wit.EncodePreimageOracleInput(fast.LocalContext{})
 		require.NoError(t, err)
 		ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.Oracle, input, startingGas, big.NewInt(0))
 		require.NoError(t, err, "evm must not fail (ret: %x, gas: %d)", ret, startingGas-leftOverGas)
 	}
 
-	input := wit.EncodeStepInput()
+	input := wit.EncodeStepInput(fast.LocalContext{})
 
 	ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.RISCV, input, startingGas, big.NewInt(0))
 	require.NoError(t, err, "evm must not fail (ret: %x), at step %d", ret, step)

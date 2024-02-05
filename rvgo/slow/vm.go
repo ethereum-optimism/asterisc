@@ -3,6 +3,7 @@ package slow
 import (
 	"encoding/binary"
 	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -103,8 +104,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 	// TODO: validate abi offset values?
 
-	stateContentOffset := uint8(4 + 32 + 32 + 32)
-	if iszero(eq(b32asBEWord(calldataload(toU64(4+32*2))), shortToU256(stateSize))) {
+	stateContentOffset := uint8(4 + 32 + 32 + 32 + 32)
+	if iszero(eq(b32asBEWord(calldataload(toU64(4+32*3))), shortToU256(stateSize))) {
 		// user-provided state size must match expected state size
 		panic("invalid state size input")
 	}

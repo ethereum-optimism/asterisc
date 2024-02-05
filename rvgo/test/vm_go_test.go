@@ -108,7 +108,7 @@ func fullTest(t *testing.T, vmState *fast.VMState, po *testOracle, symbols fast.
 			require.NoError(t, err)
 
 			if runSlow {
-				slowPostHash, err := slow.Step(wit.EncodeStepInput(), po)
+				slowPostHash, err := slow.Step(wit.EncodeStepInput(fast.LocalContext{}), po)
 				require.NoErrorf(t, err, "slow VM err at step %d, PC %08x: %v", i, vmState.PC, err)
 				require.Equal(t, fastStateHash, slowPostHash, "fast post-state must match slow post-state")
 			}
