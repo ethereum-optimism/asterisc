@@ -23,6 +23,10 @@ func LoadELF(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load ELF data into VM state: %w", err)
 	}
+	err = fast.PatchVM(elfProgram, state)
+	if err != nil {
+		return fmt.Errorf("failed to patch VM")
+	}
 	return cannon.WriteJSON[*fast.VMState](ctx.Path(cannon.LoadELFOutFlag.Name), state)
 }
 
