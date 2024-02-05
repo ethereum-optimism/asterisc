@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.1
 
 // dev
-replace github.com/ethereum-optimism/optimism v1.5.0-rc.3.0.20240131040122-c874ecc9f195 => github.com/testinprod-io/optimism v0.2.1-0.20240201075727-ccefcbe9a895
+replace github.com/ethereum-optimism/optimism v1.5.0-rc.3.0.20240131040122-c874ecc9f195 => github.com/testinprod-io/optimism v0.2.1-0.20240205073531-4904d6a711dc
 
 replace github.com/ethereum/go-ethereum v1.13.5 => github.com/ethereum-optimism/op-geth v1.101305.3-rc.2.0.20240130011842-33cb3315f498
 
@@ -38,7 +38,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deckarep/golang-set/v2 v2.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
-	github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240129235549-0a582d7654ee // indirect
+	github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240131175747-1300b1825140 // indirect
 	github.com/ethereum/c-kzg-4844 v0.4.0 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect

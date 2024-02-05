@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -108,112 +106,6 @@ type Proof struct {
 	OracleOffset uint64        `json:"oracle-offset,omitempty"`
 }
 
-type rawHint string
-
-func (rh rawHint) Hint() string {
-	return string(rh)
-}
-
-type rawKey [32]byte
-
-func (rk rawKey) PreimageKey() [32]byte {
-	return rk
-}
-
-type ProcessPreimageOracle struct {
-	pCl      *preimage.OracleClient
-	hCl      *preimage.HintWriter
-	cmd      *exec.Cmd
-	waitErr  chan error
-	cancelIO context.CancelCauseFunc
-}
-
-const clientPollTimeout = time.Second * 15
-
-func NewProcessPreimageOracle(name string, args []string) (*ProcessPreimageOracle, error) {
-	if name == "" {
-		return &ProcessPreimageOracle{}, nil
-	}
-
-	pClientRW, pOracleRW, err := preimage.CreateBidirectionalChannel()
-	if err != nil {
-		return nil, err
-	}
-	hClientRW, hOracleRW, err := preimage.CreateBidirectionalChannel()
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := exec.Command(name, args...) // nosemgrep
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.ExtraFiles = []*os.File{
-		hOracleRW.Reader(),
-		hOracleRW.Writer(),
-		pOracleRW.Reader(),
-		pOracleRW.Writer(),
-	}
-
-	// Note that the client file descriptors are not closed when the pre-image server exits.
-	// So we use the FilePoller to ensure that we don't get stuck in a blocking read/write.
-	ctx, cancelIO := context.WithCancelCause(context.Background())
-	preimageClientIO := preimage.NewFilePoller(ctx, pClientRW, clientPollTimeout)
-	hostClientIO := preimage.NewFilePoller(ctx, hClientRW, clientPollTimeout)
-	out := &ProcessPreimageOracle{
-		pCl:      preimage.NewOracleClient(preimageClientIO),
-		hCl:      preimage.NewHintWriter(hostClientIO),
-		cmd:      cmd,
-		waitErr:  make(chan error),
-		cancelIO: cancelIO,
-	}
-	return out, nil
-}
-
-func (p *ProcessPreimageOracle) Hint(v []byte) error {
-	if p.hCl == nil { // no hint processor
-		return nil
-	}
-	p.hCl.Hint(rawHint(v))
-	return nil
-}
-
-func (p *ProcessPreimageOracle) GetPreimage(k [32]byte) ([]byte, error) {
-	if p.pCl == nil {
-		panic("no pre-image retriever available")
-	}
-	return p.pCl.Get(rawKey(k)), nil
-}
-
-func (p *ProcessPreimageOracle) Start() error {
-	if p.cmd == nil {
-		return nil
-	}
-	err := p.cmd.Start()
-	go p.wait()
-	return err
-}
-
-func (p *ProcessPreimageOracle) Close() error {
-	if p.cmd == nil {
-		return nil
-	}
-	// Give the pre-image server time to exit cleanly before killing it.
-	time.Sleep(time.Second * 1)
-	_ = p.cmd.Process.Signal(os.Interrupt)
-	return <-p.waitErr
-}
-
-func (p *ProcessPreimageOracle) wait() {
-	err := p.cmd.Wait()
-	var waitErr error
-	if err, ok := err.(*exec.ExitError); !ok || !err.Success() {
-		waitErr = err
-	}
-	p.cancelIO(fmt.Errorf("%w: pre-image server has exited", waitErr))
-	p.waitErr <- waitErr
-	close(p.waitErr)
-}
-
 type StepFn func(proof bool) (*fast.StepWitness, error)
 
 func Guard(proc *os.ProcessState, fn StepFn) StepFn {
@@ -230,7 +122,7 @@ func Guard(proc *os.ProcessState, fn StepFn) StepFn {
 	}
 }
 
-var _ fast.PreimageOracle = (*ProcessPreimageOracle)(nil)
+var _ fast.PreimageOracle = (*cmd.ProcessPreimageOracle)(nil)
 
 func Run(ctx *cli.Context) error {
 	if ctx.Bool(RunPProfCPU.Name) {
@@ -264,7 +156,7 @@ func Run(ctx *cli.Context) error {
 		args = []string{""}
 	}
 
-	po, err := NewProcessPreimageOracle(args[0], args[1:])
+	po, err := cmd.NewProcessPreimageOracle(args[0], args[1:])
 	if err != nil {
 		return fmt.Errorf("failed to create pre-image oracle process: %w", err)
 	}
@@ -287,8 +179,9 @@ func Run(ctx *cli.Context) error {
 	snapshotFmt := ctx.String(RunSnapshotFmtFlag.Name)
 
 	stepFn := us.Step
-	if po.cmd != nil {
-		stepFn = Guard(po.cmd.ProcessState, stepFn)
+	poCmd := po.GetCmd()
+	if poCmd != nil {
+		stepFn = Guard(poCmd.ProcessState, stepFn)
 	}
 
 	start := time.Now()

@@ -55,8 +55,8 @@ github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 h1:8UrgZ3GkP4i/CLijOJx79Yu+etly
 github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0/go.mod h1:v57UDF4pDQJcEfFUCRop3lJL149eHGSe9Jvczhzjo/0=
 github.com/ethereum-optimism/op-geth v1.101305.3-rc.2.0.20240130011842-33cb3315f498 h1://rSBcCLKS9lz9fs9q8aLKgjLp7AgQQVlAV7JHF7v1k=
 github.com/ethereum-optimism/op-geth v1.101305.3-rc.2.0.20240130011842-33cb3315f498/go.mod h1:dQVCa+D5zi0oJJyrP3nwWciio0BJLZ2urH8OU7RJ2qs=
-github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240129235549-0a582d7654ee h1:1a7ZvkuPhLJ6uAAsAAfaD7K0wYr45l9eH3TdIMpYl+M=
-github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240129235549-0a582d7654ee/go.mod h1:7xh2awFQqsiZxFrHKTgEd+InVfDRrkKVUIuK8SAFHp0=
+github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240131175747-1300b1825140 h1:F2Q+Gj4+W67CKZpVR+MEDL+EiIpgbx6VtwtdsPR4mbQ=
+github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240131175747-1300b1825140/go.mod h1:7xh2awFQqsiZxFrHKTgEd+InVfDRrkKVUIuK8SAFHp0=
 github.com/ethereum/c-kzg-4844 v0.4.0 h1:3MS1s4JtA868KpJxroZoepdV0ZKBp3u/O5HcZ7R3nlY=
 github.com/ethereum/c-kzg-4844 v0.4.0/go.mod h1:VewdlzQmpT5QSrVhbBuGoCdFJkpaJlO1aQputP83wc0=
 github.com/felixge/fgprof v0.9.3 h1:VvyZxILNuCiUCSXtPtYmmtGvb65nqXh2QFWc0Wpf2/g=
@@ -198,8 +198,8 @@ github.com/supranational/blst v0.3.11 h1:LyU6FolezeWAhvQk0k6O/d49jqgO52MSDDfYgbe
 github.com/supranational/blst v0.3.11/go.mod h1:jZJtfjgudtNl4en1tzwPIV3KjUnQUvG3/j+w+fVonLw=
 github.com/syndtr/goleveldb v1.0.1-0.20220614013038-64ee5596c38a h1:1ur3QoCqvE5fl+nylMaIr9PVV1w343YRDtsy+Rwu7XI=
 github.com/syndtr/goleveldb v1.0.1-0.20220614013038-64ee5596c38a/go.mod h1:RRCYJbIwD5jmqPI9XoAFR0OcDxqUctll6zUj/+B4S48=
-github.com/testinprod-io/optimism v0.2.1-0.20240201075727-ccefcbe9a895 h1:C6tciPdq48jYseCqdM+NFhCSs/6h8qRB+2ggkN5LQ+s=
-github.com/testinprod-io/optimism v0.2.1-0.20240201075727-ccefcbe9a895/go.mod h1:ZzHgkhz1NBvaFACB/Vmcbb//h1/7nTdgtZfFv+0G76M=
+github.com/testinprod-io/optimism v0.2.1-0.20240205073531-4904d6a711dc h1:XSeA1e7AozzChNWEImuHmYY0UgAGFmsOU9wFUhbfAjA=
+github.com/testinprod-io/optimism v0.2.1-0.20240205073531-4904d6a711dc/go.mod h1:oYNJlRzj4BcANKRyYDfvEWdM3b+X/9nOfx6/KlWP0yg=
 github.com/tklauser/go-sysconf v0.3.12 h1:0QaGUFOdQaIVdPgfITYzaTegZvdCjmYO52cSFAEVmqU=
 github.com/tklauser/go-sysconf v0.3.12/go.mod h1:Ho14jnntGE1fpdOqQEEaiKRpvIavV0hSfmBq8nJbHYI=
 github.com/tklauser/numcpus v0.6.1 h1:ng9scYS7az0Bk4OZLvrNXNSAO2Pxr1XXRAPyjhIx+Fk=
