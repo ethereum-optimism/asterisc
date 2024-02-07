@@ -14,6 +14,7 @@ import (
 
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
@@ -48,21 +49,23 @@ func Guard(proc *os.ProcessState, fn StepFn) StepFn {
 	}
 }
 
-var _ fast.PreimageOracle = (*cannon.ProcessPreimageOracle)(nil)
+var _ fast.PreimageOracle = (*ProcessPreimageOracle)(nil)
+
+var OutFilePerm = os.FileMode(0o755)
 
 func Run(ctx *cli.Context) error {
 	if ctx.Bool(cannon.RunPProfCPU.Name) {
 		defer profile.Start(profile.NoShutdownHook, profile.ProfilePath("."), profile.CPUProfile).Stop()
 	}
 
-	state, err := cannon.LoadJSON[fast.VMState](ctx.Path(cannon.RunInputFlag.Name))
+	state, err := jsonutil.LoadJSON[fast.VMState](ctx.Path(cannon.RunInputFlag.Name))
 	if err != nil {
 		return err
 	}
 
-	l := cannon.Logger(os.Stderr, log.LvlInfo)
-	outLog := &cannon.LoggingWriter{Name: "program std-out", Log: l}
-	errLog := &cannon.LoggingWriter{Name: "program std-err", Log: l}
+	l := Logger(os.Stderr, log.LvlInfo)
+	outLog := &LoggingWriter{Name: "program std-out", Log: l}
+	errLog := &LoggingWriter{Name: "program std-err", Log: l}
 
 	stopAtPreimageType := ctx.String(cannon.RunStopAtPreimageTypeFlag.Name)
 	if stopAtPreimageType != "" && stopAtPreimageType != "any" && stopAtPreimageType != "local" && stopAtPreimageType != "global" {
@@ -82,7 +85,7 @@ func Run(ctx *cli.Context) error {
 		args = []string{""}
 	}
 
-	po, err := cannon.NewProcessPreimageOracle(args[0], args[1:])
+	po, err := NewProcessPreimageOracle(args[0], args[1:])
 	if err != nil {
 		return fmt.Errorf("failed to create pre-image oracle process: %w", err)
 	}
@@ -126,8 +129,8 @@ func Run(ctx *cli.Context) error {
 			delta := time.Since(start)
 			l.Info("processing",
 				"step", step,
-				"pc", cannon.HexU32(state.PC),
-				"insn", cannon.HexU32(state.Instr()),
+				"pc", HexU32(state.PC),
+				"insn", HexU32(state.Instr()),
 				"ips", float64(step-startStep)/(float64(delta)/float64(time.Second)),
 				"pages", state.Memory.PageCount(),
 				"mem", state.Memory.Usage(),
@@ -139,7 +142,7 @@ func Run(ctx *cli.Context) error {
 		}
 
 		if snapshotAt(state) {
-			if err := cannon.WriteJSON(fmt.Sprintf(snapshotFmt, step), state); err != nil {
+			if err := jsonutil.WriteJSON(fmt.Sprintf(snapshotFmt, step), state, OutFilePerm); err != nil {
 				return fmt.Errorf("failed to write state snapshot: %w", err)
 			}
 		}
@@ -171,7 +174,7 @@ func Run(ctx *cli.Context) error {
 				proof.OracleValue = witness.PreimageValue
 				proof.OracleOffset = witness.PreimageOffset
 			}
-			if err := cannon.WriteJSON(fmt.Sprintf(proofFmt, step), proof); err != nil {
+			if err := jsonutil.WriteJSON(fmt.Sprintf(proofFmt, step), proof, OutFilePerm); err != nil {
 				return fmt.Errorf("failed to write proof data: %w", err)
 			}
 		} else {
@@ -200,7 +203,7 @@ func Run(ctx *cli.Context) error {
 		}
 	}
 
-	if err := cannon.WriteJSON(ctx.Path(cannon.RunOutputFlag.Name), state); err != nil {
+	if err := jsonutil.WriteJSON(ctx.Path(cannon.RunOutputFlag.Name), state, OutFilePerm); err != nil {
 		return fmt.Errorf("failed to write state output: %w", err)
 	}
 	return nil

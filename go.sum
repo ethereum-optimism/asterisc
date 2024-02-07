@@ -198,8 +198,8 @@ github.com/supranational/blst v0.3.11 h1:LyU6FolezeWAhvQk0k6O/d49jqgO52MSDDfYgbe
 github.com/supranational/blst v0.3.11/go.mod h1:jZJtfjgudtNl4en1tzwPIV3KjUnQUvG3/j+w+fVonLw=
 github.com/syndtr/goleveldb v1.0.1-0.20220614013038-64ee5596c38a h1:1ur3QoCqvE5fl+nylMaIr9PVV1w343YRDtsy+Rwu7XI=
 github.com/syndtr/goleveldb v1.0.1-0.20220614013038-64ee5596c38a/go.mod h1:RRCYJbIwD5jmqPI9XoAFR0OcDxqUctll6zUj/+B4S48=
-github.com/testinprod-io/optimism v0.2.1-0.20240205073531-4904d6a711dc h1:XSeA1e7AozzChNWEImuHmYY0UgAGFmsOU9wFUhbfAjA=
-github.com/testinprod-io/optimism v0.2.1-0.20240205073531-4904d6a711dc/go.mod h1:oYNJlRzj4BcANKRyYDfvEWdM3b+X/9nOfx6/KlWP0yg=
+github.com/testinprod-io/optimism v0.2.1-0.20240207052458-cb3cb29a1a0b h1:n0gf6QU3PBSNqfHR+ZqAm5FqHPDouIvdCJQdG6Djdto=
+github.com/testinprod-io/optimism v0.2.1-0.20240207052458-cb3cb29a1a0b/go.mod h1:oYNJlRzj4BcANKRyYDfvEWdM3b+X/9nOfx6/KlWP0yg=
 github.com/tklauser/go-sysconf v0.3.12 h1:0QaGUFOdQaIVdPgfITYzaTegZvdCjmYO52cSFAEVmqU=
 github.com/tklauser/go-sysconf v0.3.12/go.mod h1:Ho14jnntGE1fpdOqQEEaiKRpvIavV0hSfmBq8nJbHYI=
 github.com/tklauser/numcpus v0.6.1 h1:ng9scYS7az0Bk4OZLvrNXNSAO2Pxr1XXRAPyjhIx+Fk=

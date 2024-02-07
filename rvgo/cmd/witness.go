@@ -5,6 +5,7 @@ import (
 	"os"
 
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
@@ -13,7 +14,7 @@ import (
 func Witness(ctx *cli.Context) error {
 	input := ctx.Path(cannon.WitnessInputFlag.Name)
 	output := ctx.Path(cannon.WitnessOutputFlag.Name)
-	state, err := cannon.LoadJSON[fast.VMState](input)
+	state, err := jsonutil.LoadJSON[fast.VMState](input)
 	if err != nil {
 		return fmt.Errorf("invalid input state (%v): %w", input, err)
 	}

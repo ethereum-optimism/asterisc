@@ -3,8 +3,8 @@ package cmd
 import (
 	"debug/elf"
 	"fmt"
-
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
@@ -27,7 +27,7 @@ func LoadELF(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to patch VM")
 	}
-	return cannon.WriteJSON[*fast.VMState](ctx.Path(cannon.LoadELFOutFlag.Name), state)
+	return jsonutil.WriteJSON[*fast.VMState](ctx.Path(cannon.LoadELFOutFlag.Name), state, OutFilePerm)
 }
 
 var LoadELFCommand = &cli.Command{
