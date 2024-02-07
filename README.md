@@ -1,6 +1,8 @@
 # Asterisc
 
-Asterisc proves execution of a RISC-V program with an interactive fraud-proof.
+Asterisc is an alternative fault-proof VM for OP Stack that proves execution of a RISC-V program with an interactive fraud-proof.
+
+The interface of the Asterisk binary is essentially the same as Cannon for op-challenger compatibility; therefore, the binary commands implementation is based on [Cannon](https://github.com/ethereum-optimism/optimism/tree/develop/cannon).
 
 *Deploy/run this at your own risk, this is highly experimental software*
 
