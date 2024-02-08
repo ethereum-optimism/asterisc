@@ -67,9 +67,23 @@ func Run(ctx *cli.Context) error {
 	outLog := &LoggingWriter{Name: "program std-out", Log: l}
 	errLog := &LoggingWriter{Name: "program std-err", Log: l}
 
-	stopAtPreimageType := ctx.String(cannon.RunStopAtPreimageTypeFlag.Name)
-	if stopAtPreimageType != "" && stopAtPreimageType != "any" && stopAtPreimageType != "local" && stopAtPreimageType != "global" {
-		return fmt.Errorf("invalid preimage type %q, must be either 'any', 'local' or 'global'", stopAtPreimageType)
+	stopAtAnyPreimage := false
+	var stopAtPreimageTypeByte preimage.KeyType
+	switch ctx.String(cannon.RunStopAtPreimageTypeFlag.Name) {
+	case "local":
+		stopAtPreimageTypeByte = preimage.LocalKeyType
+	case "keccak":
+		stopAtPreimageTypeByte = preimage.Keccak256KeyType
+	case "sha256":
+		stopAtPreimageTypeByte = preimage.Sha256KeyType
+	case "blob":
+		stopAtPreimageTypeByte = preimage.BlobKeyType
+	case "any":
+		stopAtAnyPreimage = true
+	case "":
+		// 0 preimage type is forbidden so will not stop at any preimage
+	default:
+		return fmt.Errorf("invalid preimage type %q", ctx.String(cannon.RunStopAtPreimageTypeFlag.Name))
 	}
 	stopAtPreimageLargerThan := ctx.Int(cannon.RunStopAtPreimageLargerThanFlag.Name)
 
@@ -185,17 +199,11 @@ func Run(ctx *cli.Context) error {
 		}
 
 		if preimageRead := state.PreimageOffset > prevPreimageOffset; preimageRead {
-			if stopAtPreimageType == "any" {
+			if stopAtAnyPreimage {
 				break
 			}
-			if stopAtPreimageType != "" {
-				keyType := byte(preimage.LocalKeyType)
-				if stopAtPreimageType == "global" {
-					keyType = byte(preimage.Keccak256KeyType)
-				}
-				if state.PreimageKey[0] == keyType {
-					break
-				}
+			if state.PreimageKey[0] == byte(stopAtPreimageTypeByte) {
+				break
 			}
 			if stopAtPreimageLargerThan != 0 && len(us.LastPreimage()) > stopAtPreimageLargerThan {
 				break
