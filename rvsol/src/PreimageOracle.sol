@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-contract PreimageOracle {
+import {IPreimageOracle} from "./interfaces/IPreimageOracle.sol";
+import {PreimageKeyLib} from "./PreimageKeyLib.sol";
+
+contract PreimageOracle is IPreimageOracle {
     mapping(bytes32 => uint256) public preimageLengths;
     mapping(bytes32 => mapping(uint256 => bytes32)) public preimageParts;
     mapping(bytes32 => mapping(uint256 => bool)) public preimagePartOk;
@@ -49,14 +52,23 @@ contract PreimageOracle {
     }
 
     // temporary method for localization. Will be removed to PreimageKeyLib.sol
-    function cheatLocalKey(uint256 partOffset, bytes32 key, bytes32 part, uint256 size, bytes32 localContext) external {
+    function cheatLocalKey(uint256 partOffset, bytes32 key, bytes32 part, uint256 size, bytes32 localContext)
+        external
+    {
         // sanity check key is local key using prefix
         require(uint8(key[0]) == 1, "must be used for local key");
-        
-        bytes32 localizedKey = localize(key, localContext);
+
+        bytes32 localizedKey = PreimageKeyLib.localize(key, localContext);
         preimagePartOk[localizedKey][partOffset] = true;
         preimageParts[localizedKey][partOffset] = part;
         preimageLengths[localizedKey] = size;
+    }
+
+    function loadLocalData(uint256 _ident, bytes32 _localContext, bytes32 _word, uint256 _size, uint256 _partOffset)
+        external
+        returns (bytes32 key_)
+    {
+        // TODO: implement me
     }
 
     // loadKeccak256PreimagePart prepares the pre-image to be read by keccak256 key,
@@ -94,5 +106,9 @@ contract PreimageOracle {
         preimagePartOk[key][_partOffset] = true;
         preimageParts[key][_partOffset] = part;
         preimageLengths[key] = size;
+    }
+
+    function loadSha256PreimagePart(uint256 _partOffset, bytes calldata _preimage) external {
+        // TODO: fetch diff from cannon. Currently for only satisfying interface
     }
 }
