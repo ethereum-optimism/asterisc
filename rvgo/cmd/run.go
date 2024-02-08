@@ -63,7 +63,7 @@ func Run(ctx *cli.Context) error {
 		return err
 	}
 
-	l := Logger(os.Stderr, log.LvlInfo)
+	l := Logger(os.Stderr, log.LevelInfo)
 	outLog := &LoggingWriter{Name: "program std-out", Log: l}
 	errLog := &LoggingWriter{Name: "program std-err", Log: l}
 
