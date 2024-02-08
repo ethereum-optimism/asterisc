@@ -7,8 +7,8 @@ import (
 )
 
 type PreimageOracle interface {
-	Hint(v []byte) error
-	GetPreimage(k [32]byte) ([]byte, error)
+	Hint(v []byte)
+	GetPreimage(k [32]byte) []byte
 }
 
 const memProofSize = (64 - 5 + 1) * 32
@@ -77,10 +77,7 @@ func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]b
 	preimage := m.lastPreimage
 	if key != m.lastPreimageKey {
 		m.lastPreimageKey = key
-		data, err := m.preimageOracle.GetPreimage(key)
-		if err != nil {
-			return [32]byte{}, 0, fmt.Errorf("failed to read preimage %x at offset %d: %w", key, offset, err)
-		}
+		data := m.preimageOracle.GetPreimage(key)
 		// add the length prefix
 		preimage = make([]byte, 0, 8+len(data))
 		preimage = binary.BigEndian.AppendUint64(preimage, uint64(len(data)))
@@ -119,4 +116,8 @@ func (m *InstrumentedState) verifyMemChange(effAddr uint64, proofIndex uint8) {
 	if effAddr != m.memAccess[proofIndex] {
 		panic(fmt.Errorf("mem access at %016x with mismatching prior proof verification for address %016x", effAddr, m.memAccess[proofIndex]))
 	}
+}
+
+func (m *InstrumentedState) LastPreimage() []byte {
+	return m.lastPreimage
 }

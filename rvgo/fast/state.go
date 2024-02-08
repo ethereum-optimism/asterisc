@@ -58,6 +58,8 @@ func NewVMState() *VMState {
 	}
 }
 
+func (state *VMState) GetStep() uint64 { return state.Step }
+
 func (state *VMState) EncodeWitness() StateWitness {
 	out := make([]byte, 0)
 	memRoot := state.Memory.MerkleRoot()
