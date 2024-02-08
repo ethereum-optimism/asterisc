@@ -24,22 +24,6 @@ contract PreimageOracle is IPreimageOracle {
         dat_ = preimageParts[_key][_offset];
     }
 
-    // temporary method for localization. Will be removed to PreimageKeyLib.sol
-    function localize(bytes32 _key, bytes32 _localContext) internal view returns (bytes32 localizedKey_) {
-        assembly {
-            // Grab the current free memory pointer to restore later.
-            let ptr := mload(0x40)
-            // Store the local data key and caller next to each other in memory for hashing.
-            mstore(0, _key)
-            mstore(0x20, caller())
-            mstore(0x40, _localContext)
-            // Localize the key with the above `localize` operation.
-            localizedKey_ := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
-            // Restore the free memory pointer.
-            mstore(0x40, ptr)
-        }
-    }
-
     function loadLocalData(uint256 _ident, bytes32 _localContext, bytes32 _word, uint256 _size, uint256 _partOffset)
         external
         returns (bytes32 key_)
