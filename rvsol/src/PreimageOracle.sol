@@ -24,17 +24,6 @@ contract PreimageOracle is IPreimageOracle {
         dat_ = preimageParts[_key][_offset];
     }
 
-    // TODO(CLI-4104):
-    // we need to mix-in the ID of the dispute for local-type keys to avoid collisions,
-    // and restrict local pre-image insertion to the dispute-managing contract.
-    // For now we permit anyone to write any pre-image unchecked, to make testing easy.
-    // This method is DANGEROUS. And NOT FOR PRODUCTION.
-    function cheat(uint256 partOffset, bytes32 key, bytes32 part, uint256 size) external {
-        preimagePartOk[key][partOffset] = true;
-        preimageParts[key][partOffset] = part;
-        preimageLengths[key] = size;
-    }
-
     // temporary method for localization. Will be removed to PreimageKeyLib.sol
     function localize(bytes32 _key, bytes32 _localContext) internal view returns (bytes32 localizedKey_) {
         assembly {
@@ -49,19 +38,6 @@ contract PreimageOracle is IPreimageOracle {
             // Restore the free memory pointer.
             mstore(0x40, ptr)
         }
-    }
-
-    // temporary method for localization. Will be removed to PreimageKeyLib.sol
-    function cheatLocalKey(uint256 partOffset, bytes32 key, bytes32 part, uint256 size, bytes32 localContext)
-        external
-    {
-        // sanity check key is local key using prefix
-        require(uint8(key[0]) == 1, "must be used for local key");
-
-        bytes32 localizedKey = PreimageKeyLib.localize(key, localContext);
-        preimagePartOk[localizedKey][partOffset] = true;
-        preimageParts[localizedKey][partOffset] = part;
-        preimageLengths[localizedKey] = size;
     }
 
     function loadLocalData(uint256 _ident, bytes32 _localContext, bytes32 _word, uint256 _size, uint256 _partOffset)
