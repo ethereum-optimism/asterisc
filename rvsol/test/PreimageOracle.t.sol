@@ -133,6 +133,16 @@ contract PreimageOracle_Test is Test {
         assertTrue(ok);
     }
 
+    /// @notice Tests that adding a global keccak256 pre-image at the part boundary reverts.
+    function test_loadKeccak256PreimagePart_partBoundary_reverts() public {
+        bytes memory preimage = hex"deadbeef";
+        uint256 offset = preimage.length + 8;
+
+        // TODO: remove magic errors
+        vm.expectRevert(0xfe254987);
+        oracle.loadKeccak256PreimagePart(offset, preimage);
+    }
+
     /// @notice Tests that a pre-image cannot be set with an out-of-bounds offset.
     function test_loadLocalData_outOfBoundsOffset_reverts() public {
         bytes32 preimage = bytes32(uint256(0xdeadbeef));
