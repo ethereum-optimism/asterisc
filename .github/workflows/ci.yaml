@@ -2,7 +2,7 @@ name: AsteriscCI
 on: [push]
 
 jobs:
-  go-tests:
+  rvgo-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -23,6 +23,18 @@ jobs:
       - name: Run tests
         run: go test -v ./...
         working-directory: rvgo
+  rvsol-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Run foundry tests
+        run: forge test -vvv
+        working-directory: rvsol
+
   # go-lint:
   #   runs-on: ubuntu-latest
   #   timeout-minutes: 20

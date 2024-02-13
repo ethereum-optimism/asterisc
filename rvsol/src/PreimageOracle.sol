@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-contract PreimageOracle {
+import {IPreimageOracle} from "./interfaces/IPreimageOracle.sol";
+import {PreimageKeyLib} from "./PreimageKeyLib.sol";
+
+contract PreimageOracle is IPreimageOracle {
     mapping(bytes32 => uint256) public preimageLengths;
     mapping(bytes32 => mapping(uint256 => bytes32)) public preimageParts;
     mapping(bytes32 => mapping(uint256 => bool)) public preimagePartOk;
@@ -21,42 +24,44 @@ contract PreimageOracle {
         dat_ = preimageParts[_key][_offset];
     }
 
-    // TODO(CLI-4104):
-    // we need to mix-in the ID of the dispute for local-type keys to avoid collisions,
-    // and restrict local pre-image insertion to the dispute-managing contract.
-    // For now we permit anyone to write any pre-image unchecked, to make testing easy.
-    // This method is DANGEROUS. And NOT FOR PRODUCTION.
-    function cheat(uint256 partOffset, bytes32 key, bytes32 part, uint256 size) external {
-        preimagePartOk[key][partOffset] = true;
-        preimageParts[key][partOffset] = part;
-        preimageLengths[key] = size;
-    }
+    function loadLocalData(uint256 _ident, bytes32 _localContext, bytes32 _word, uint256 _size, uint256 _partOffset)
+        external
+        returns (bytes32 key_)
+    {
+        // Compute the localized key from the given local identifier.
+        key_ = PreimageKeyLib.localizeIdent(_ident, _localContext);
 
-    // temporary method for localization. Will be removed to PreimageKeyLib.sol
-    function localize(bytes32 _key, bytes32 _localContext) internal view returns (bytes32 localizedKey_) {
-        assembly {
-            // Grab the current free memory pointer to restore later.
-            let ptr := mload(0x40)
-            // Store the local data key and caller next to each other in memory for hashing.
-            mstore(0, _key)
-            mstore(0x20, caller())
-            mstore(0x40, _localContext)
-            // Localize the key with the above `localize` operation.
-            localizedKey_ := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
-            // Restore the free memory pointer.
-            mstore(0x40, ptr)
+        // Revert if the given part offset is not within bounds.
+        if (_partOffset > _size + 8 || _size > 32) {
+            // Revert with "PartOffsetOOB()"
+            assembly {
+                // Store "PartOffsetOOB()"
+                mstore(0, 0xfe254987)
+                // Revert with "PartOffsetOOB()"
+                revert(0x1c, 4)
+            }
+            // TODO: remove with revert PartOffsetOOB();
         }
-    }
 
-    // temporary method for localization. Will be removed to PreimageKeyLib.sol
-    function cheatLocalKey(uint256 partOffset, bytes32 key, bytes32 part, uint256 size, bytes32 localContext) external {
-        // sanity check key is local key using prefix
-        require(uint8(key[0]) == 1, "must be used for local key");
-        
-        bytes32 localizedKey = localize(key, localContext);
-        preimagePartOk[localizedKey][partOffset] = true;
-        preimageParts[localizedKey][partOffset] = part;
-        preimageLengths[localizedKey] = size;
+        // Prepare the local data part at the given offset
+        bytes32 part;
+        assembly {
+            // Clean the memory in [0x20, 0x40)
+            mstore(0x20, 0x00)
+
+            // Store the full local data in scratch space.
+            mstore(0x00, shl(192, _size))
+            mstore(0x08, _word)
+
+            // Prepare the local data part at the requested offset.
+            part := mload(_partOffset)
+        }
+
+        // Store the first part with `_partOffset`.
+        preimagePartOk[key_][_partOffset] = true;
+        preimageParts[key_][_partOffset] = part;
+        // Assign the length of the preimage at the localized key.
+        preimageLengths[key_] = _size;
     }
 
     // loadKeccak256PreimagePart prepares the pre-image to be read by keccak256 key,
@@ -94,5 +99,9 @@ contract PreimageOracle {
         preimagePartOk[key][_partOffset] = true;
         preimageParts[key][_partOffset] = part;
         preimageLengths[key] = size;
+    }
+
+    function loadSha256PreimagePart(uint256 _partOffset, bytes calldata _preimage) external {
+        // TODO: fetch diff from cannon. Currently for only satisfying interface
     }
 }
