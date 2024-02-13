@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ethereum-optimism/optimism/op-preimage"
+	preimage "github.com/ethereum-optimism/optimism/op-preimage"
+	"github.com/ethereum/go-ethereum/common"
 )
+
+type LocalContext common.Hash
 
 type StepWitness struct {
 	// encoded state witness
@@ -25,21 +28,27 @@ func uint64ToBytes32(v uint64) []byte {
 	return out[:]
 }
 
-func (wit *StepWitness) EncodeStepInput() []byte {
+func (wit *StepWitness) EncodeStepInput(localContext LocalContext) []byte {
 	abiStatePadding := (32 - (uint64(len(wit.State)) % 32)) % 32
+	abiProofPadding := (32 - (uint64(len(wit.MemProof)) % 32)) % 32
 
 	var input []byte
 	input = append(input, StepBytes4...)
-	input = append(input, uint64ToBytes32(32*2)...)                                           // state data offset in bytes
-	input = append(input, uint64ToBytes32(32*2+32+uint64(len(wit.State))+abiStatePadding)...) // proof data offset in bytes
-	// TODO pad state data to multiple of 32 bytes
-	// TODO also pad proof data
-
-	input = append(input, uint64ToBytes32(uint64(len(wit.State)))...) // state data length in bytes
+	// state data offset in bytes
+	input = append(input, uint64ToBytes32(32*3)...)
+	// proof data offset in bytes
+	input = append(input, uint64ToBytes32(32*3+32+uint64(len(wit.State))+abiStatePadding)...)
+	// local context in bytes
+	input = append(input, common.Hash(localContext).Bytes()...)
+	
+	// state data length in bytes
+	input = append(input, uint64ToBytes32(uint64(len(wit.State)))...)
 	input = append(input, wit.State[:]...)
 	input = append(input, make([]byte, abiStatePadding)...)
-	input = append(input, uint64ToBytes32(uint64(len(wit.MemProof)))...) // proof data length in bytes
+	// proof data length in bytes
+	input = append(input, uint64ToBytes32(uint64(len(wit.MemProof)))...)
 	input = append(input, wit.MemProof[:]...)
+	input = append(input, make([]byte, abiProofPadding)...)
 	return input
 }
 
@@ -47,7 +56,7 @@ func (wit *StepWitness) HasPreimage() bool {
 	return wit.PreimageKey != ([32]byte{})
 }
 
-func (wit *StepWitness) EncodePreimageOracleInput() ([]byte, error) {
+func (wit *StepWitness) EncodePreimageOracleInput(localContext LocalContext) ([]byte, error) {
 	if wit.PreimageKey == ([32]byte{}) {
 		return nil, errors.New("cannot encode pre-image oracle input, witness has no pre-image to proof")
 	}
@@ -59,13 +68,14 @@ func (wit *StepWitness) EncodePreimageOracleInput() ([]byte, error) {
 		// In production usage there should be an on-chain contract that exposes this,
 		// rather than going through the global keccak256 oracle.
 		var input []byte
-		input = append(input, CheatBytes4...)
+		input = append(input, CheatLocalKeyBytes4...)
 		input = append(input, uint64ToBytes32(wit.PreimageOffset)...)
 		input = append(input, wit.PreimageKey[:]...)
 		var tmp [32]byte
 		copy(tmp[:], wit.PreimageValue[wit.PreimageOffset:])
 		input = append(input, tmp[:]...)
 		input = append(input, uint64ToBytes32(uint64(len(wit.PreimageValue))-8)...)
+		input = append(input, common.Hash(localContext).Bytes()...)
 		// Note: we can pad calldata to 32 byte multiple, but don't strictly have to
 		return input, nil
 	case preimage.Keccak256KeyType:

@@ -11,7 +11,7 @@ contract Step {
     }
 
     // Executes a single RISC-V instruction, starting from
-    function step(bytes calldata stateData, bytes calldata proof) public returns (bytes32) {
+    function step(bytes calldata stateData, bytes calldata proof, bytes32 localContext) public returns (bytes32) {
         assembly {
             function revertWithCode(code) {
                 mstore(0, code)
@@ -270,8 +270,8 @@ contract Step {
                 // expected memory check: no allocated memory (start after scratch + free-mem-ptr + zero slot = 0x80)
                 revert(0, 0)
             }
-            if iszero(eq(stateData.offset, 100)) {
-                // 32*3+4 = 100 expected state data offset
+            if iszero(eq(stateData.offset, 132)) {
+                // 32*4+4 = 132 expected state data offset
                 revert(0, 0)
             }
             if iszero(eq(calldataload(sub(stateData.offset, 32)), stateSize())) {
@@ -283,11 +283,12 @@ contract Step {
                 out := add(v, padding)
             }
             if iszero(eq(proof.offset, add(add(stateData.offset, paddedLen(stateSize())), 32))) {
-                // 100+stateSize+padding+32 = expected proof offset
+                // 132+stateSize+padding+32 = expected proof offset
                 revert(0, 0)
             }
             function proofContentOffset() -> out { // since we can't reference proof.offset in functions, blame Yul
-                out := 516
+                // 132+362+(32-362%32)+32=548
+                out := 548
             }
             if iszero(eq(proof.offset, proofContentOffset())) {
                 revert(0, 0)
@@ -772,10 +773,28 @@ contract Step {
                 revertWithCode(0xbadf00d0)
             }
 
-            function readPreimageValue(addr, count) -> out {
+            function localize(preImageKey, localContext_) -> localizedKey {
+                // TODO: deduplicate definition of localize using lib
+                // Grab the current free memory pointer to restore later.
+                let ptr := mload(0x40)
+                // Store the local data key and caller next to each other in memory for hashing.
+                mstore(0, preImageKey)
+                mstore(0x20, caller())
+                mstore(0x40, localContext_)
+                // Localize the key with the above `localize` operation.
+                localizedKey := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
+                // Restore the free memory pointer.
+                mstore(0x40, ptr)
+            }
+
+            function readPreimageValue(addr, count, localContext_) -> out {
                 let preImageKey := getPreimageKey()
                 let offset := getPreimageOffset()
-
+                // If the preimage key is a local key, localize it in the context of the caller.
+                let preImageKeyPrefix := shr(248, preImageKey) // 256-8=248
+                if eq(preImageKeyPrefix, 1) {
+                    preImageKey := localize(preImageKey, localContext_)
+                }
                 // make call to pre-image oracle contract
                 let pdatB32, pdatlen := readPreimagePart(preImageKey, offset)
                 if iszero64(pdatlen) { // EOF
@@ -811,7 +830,7 @@ contract Step {
             //
             // Syscall handling
             //
-            function sysCall() {
+            function sysCall(localContext_) {
                 let a7 := getRegister(toU64(17))
                 switch a7
                 case 93 { // exit the calling thread. No multi-thread support yet, so just exit.
@@ -872,7 +891,7 @@ contract Step {
                         n := count
                         errCode := toU64(0)
                     } case 5 { // preimage read
-                        n := readPreimageValue(addr, count)
+                        n := readPreimageValue(addr, count, localContext_)
                         errCode := toU64(0)
                     } default {
                         n := u64Mask()         //  -1 (reading error)
@@ -1275,7 +1294,7 @@ contract Step {
                 case 0 { // 000 = ECALL/EBREAK
                     switch shr64(toU64(20), instr) // I-type, top 12 bits
                     case 0 { // imm12 = 000000000000 ECALL
-                        sysCall()
+                        sysCall(localContext)
                         setPC(add64(_pc, toU64(4)))
                     } default { // imm12 = 000000000001 EBREAK
                         setPC(add64(_pc, toU64(4))) // ignore breakpoint
