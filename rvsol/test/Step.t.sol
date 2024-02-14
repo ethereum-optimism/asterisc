@@ -2,7 +2,7 @@ pragma solidity 0.8.15;
 
 import {Test} from "forge-std/Test.sol";
 import {Step} from "src/Step.sol";
-import {PreimageOracle} from "@optimism/packages/contracts-bedrock/src/cannon/PreimageOracle.sol";
+import {PreimageOracle} from "@optimism/src/cannon/PreimageOracle.sol";
 
 contract Step_Test is Test {
     PreimageOracle internal oracle;
