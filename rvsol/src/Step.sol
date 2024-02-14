@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {IPreimageOracle} from "@optimism/packages/contracts-bedrock/src/cannon/interfaces/IPreimageOracle.sol";
 
 contract Step {
 
-    address public preimageOracle;
+    IPreimageOracle public preimageOracle;
 
-    constructor(address _preimageOracle) {
+    constructor(IPreimageOracle _preimageOracle) {
         preimageOracle = _preimageOracle;
     }
 
