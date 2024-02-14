@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {IPreimageOracle} from "@optimism/packages/contracts-bedrock/src/cannon/interfaces/IPreimageOracle.sol";
+import {PreimageKeyLib} from "@optimism/packages/contracts-bedrock/src/cannon/PreimageKeyLib.sol";
 
 contract Step {
 
@@ -9,6 +10,11 @@ contract Step {
 
     constructor(IPreimageOracle _preimageOracle) {
         preimageOracle = _preimageOracle;
+    }
+
+    // Use public method because compiler optimizes out if not
+    function localize(bytes32 _key, bytes32 _localContext) public view returns (bytes32 localizedKey_) {
+        return PreimageKeyLib.localize(_key, _localContext);
     }
 
     // Executes a single RISC-V instruction, starting from
@@ -775,17 +781,22 @@ contract Step {
             }
 
             function localize(preImageKey, localContext_) -> localizedKey {
-                // TODO: deduplicate definition of localize using lib
-                // Grab the current free memory pointer to restore later.
-                let ptr := mload(0x40)
-                // Store the local data key and caller next to each other in memory for hashing.
-                mstore(0, preImageKey)
-                mstore(0x20, caller())
-                mstore(0x40, localContext_)
-                // Localize the key with the above `localize` operation.
-                localizedKey := or(and(keccak256(0, 0x60), not(shl(248, 0xFF))), shl(248, 1))
-                // Restore the free memory pointer.
-                mstore(0x40, ptr)
+                // calling address(this).localize(bytes32,bytes32)
+                // eventually calling PreimageKeyLib.localize(bytes32,bytes32)
+                let memPtr := mload(0x40) // get pointer to free memory for preimage interactions
+                mstore(memPtr, shl(224, 0x1aae47f0)) // (32-4)*8=224: right-pad the function selector, and then store it as prefix
+                mstore(add(memPtr, 0x04), preImageKey)
+                mstore(add(memPtr, 0x24), localContext_)
+                let cgas := 100000 // TODO change call gas
+
+                // use delegatecall to follow same behavior with library method call
+                let res := delegatecall(cgas, address(), memPtr, 0x44, 0x00, 0x20) // output into scratch space
+                if res {
+                    // 1 on success
+                    localizedKey := mload(0x00)
+                    leave
+                }
+                revertWithCode(0xbadf00d0)
             }
 
             function readPreimageValue(addr, count, localContext_) -> out {
