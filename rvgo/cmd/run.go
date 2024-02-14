@@ -134,9 +134,8 @@ func Run(ctx *cli.Context) error {
 	snapshotFmt := ctx.String(cannon.RunSnapshotFmtFlag.Name)
 
 	stepFn := us.Step
-	poCmd := po.GetCmd()
-	if poCmd != nil {
-		stepFn = Guard(poCmd.ProcessState, stepFn)
+	if po.cmd != nil {
+		stepFn = Guard(po.cmd.ProcessState, stepFn)
 	}
 
 	start := time.Now()

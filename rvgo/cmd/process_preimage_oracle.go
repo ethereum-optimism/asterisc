@@ -85,10 +85,6 @@ func (p *ProcessPreimageOracle) GetPreimage(k [32]byte) []byte {
 	return p.pCl.Get(rawKey(k))
 }
 
-func (p *ProcessPreimageOracle) GetCmd() *exec.Cmd {
-	return p.cmd
-}
-
 func (p *ProcessPreimageOracle) Start() error {
 	if p.cmd == nil {
 		return nil
