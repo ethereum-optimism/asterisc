@@ -1,18 +1,18 @@
 pragma solidity 0.8.15;
 
 import {Test} from "forge-std/Test.sol";
-import {Step} from "src/Step.sol";
+import {RISCV} from "src/RISCV.sol";
 import {PreimageOracle} from "@optimism/src/cannon/PreimageOracle.sol";
 
-contract Step_Test is Test {
+contract RISCV_Test is Test {
+    RISCV internal riscv;
     PreimageOracle internal oracle;
-    Step internal step;
 
     function setUp() public {
         oracle = new PreimageOracle(0, 0, 0);
-        step = new Step(oracle);
-        vm.store(address(step), 0x0, bytes32(abi.encode(address(oracle))));
+        riscv = new RISCV(oracle);
+        vm.store(address(riscv), 0x0, bytes32(abi.encode(address(oracle))));
         vm.label(address(oracle), "PreimageOracle");
-        vm.label(address(step), "Step");
+        vm.label(address(riscv), "RISCV");
     }
 }
