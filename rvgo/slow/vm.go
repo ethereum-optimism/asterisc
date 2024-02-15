@@ -734,6 +734,9 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case 160: // newuname - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
+		case 215: // munmap - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 278: // getrandom - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
