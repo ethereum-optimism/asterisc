@@ -117,14 +117,25 @@ func Run(ctx *cli.Context) error {
 	snapshotAt := ctx.Generic(cannon.RunSnapshotAtFlag.Name).(*cannon.StepMatcherFlag).Matcher()
 	infoAt := ctx.Generic(cannon.RunInfoAtFlag.Name).(*cannon.StepMatcherFlag).Matcher()
 
+	var meta *Metadata
+	if metaPath := ctx.Path(cannon.RunMetaFlag.Name); metaPath == "" {
+		l.Info("no metadata file specified, defaulting to empty metadata")
+		meta = &Metadata{Symbols: nil} // provide empty metadata by default
+	} else {
+		if m, err := jsonutil.LoadJSON[Metadata](metaPath); err != nil {
+			return fmt.Errorf("failed to load metadata: %w", err)
+		} else {
+			meta = m
+		}
+	}
+
 	us := fast.NewInstrumentedState(state, po, outLog, errLog)
 	proofFmt := ctx.String(cannon.RunProofFmtFlag.Name)
 	snapshotFmt := ctx.String(cannon.RunSnapshotFmtFlag.Name)
 
 	stepFn := us.Step
-	poCmd := po.GetCmd()
-	if poCmd != nil {
-		stepFn = Guard(poCmd.ProcessState, stepFn)
+	if po.cmd != nil {
+		stepFn = Guard(po.cmd.ProcessState, stepFn)
 	}
 
 	start := time.Now()
@@ -148,6 +159,7 @@ func Run(ctx *cli.Context) error {
 				"ips", float64(step-startStep)/(float64(delta)/float64(time.Second)),
 				"pages", state.Memory.PageCount(),
 				"mem", state.Memory.Usage(),
+				"name", meta.LookupSymbol(state.PC),
 			)
 		}
 
