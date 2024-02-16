@@ -54,8 +54,8 @@ func fakeHeader(n uint64, parentHash common.Hash) *types.Header {
 	return &header
 }
 
-func loadStepContractCode(t *testing.T) *Contract {
-	dat, err := os.ReadFile("../../rvsol/out/Step.sol/Step.json")
+func loadRISCVContractCode(t *testing.T) *Contract {
+	dat, err := os.ReadFile("../../rvsol/out/RISCV.sol/RISCV.json")
 	require.NoError(t, err)
 	var outDat Contract
 	err = json.Unmarshal(dat, &outDat)
@@ -125,7 +125,7 @@ var testAddrs = &Addresses{
 
 func testContracts(t *testing.T) *Contracts {
 	return &Contracts{
-		RISCV:  loadStepContractCode(t),
+		RISCV:  loadRISCVContractCode(t),
 		Oracle: loadPreimageOracleContractCode(t),
 	}
 }
@@ -133,7 +133,7 @@ func testContracts(t *testing.T) *Contracts {
 func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts) {
 	//env.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
 
-	a, err := contracts.RISCV.SourceMap([]string{"../../rvsol/src/Step.sol"})
+	a, err := contracts.RISCV.SourceMap([]string{"../../rvsol/src/RISCV.sol"})
 	require.NoError(t, err)
 	b, err := contracts.Oracle.SourceMap([]string{"../../rvsol/src/PreimageOracle.sol"})
 	require.NoError(t, err)

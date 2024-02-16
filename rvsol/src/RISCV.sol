@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IPreimageOracle} from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 
-contract Step {
+contract RISCV {
 
     IPreimageOracle public preimageOracle;
 
