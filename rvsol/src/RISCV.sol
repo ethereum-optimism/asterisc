@@ -4,6 +4,22 @@ pragma solidity ^0.8.13;
 import {IPreimageOracle} from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 
 contract RISCV {
+    /// @notice Stores the VM state.
+    ///         Total state size: 32 + 32 + 8 * 2 + 1 * 2 + 8 * 3 + 32 * 8 = 362 bytes
+    ///         Note that struct is not used for step execution and used only for testing
+    //          Struct size may be larger than total state size due to memory layouts
+    struct State {
+        bytes32 memRoot;
+        bytes32 preimageKey;
+        uint64 preimageOffset;
+        uint64 pc;
+        uint8 exitCode;
+        bool exited;
+        uint64 step;
+        uint64 heap;
+        uint64 loadReservation;
+        uint64[32] registers;
+    }
 
     IPreimageOracle public preimageOracle;
 
