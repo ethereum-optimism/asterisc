@@ -5,6 +5,23 @@ import {RISCV} from "src/RISCV.sol";
 import {PreimageOracle} from "@optimism/src/cannon/PreimageOracle.sol";
 
 contract RISCV_Test is Test {
+    /// @notice Stores the VM state.
+    ///         Total state size: 32 + 32 + 8 * 2 + 1 * 2 + 8 * 3 + 32 * 8 = 362 bytes
+    ///         Note that struct is not used for step execution and used only for testing
+    //          Struct size may be larger than total state size due to memory layouts
+    struct State {
+        bytes32 memRoot;
+        bytes32 preimageKey;
+        uint64 preimageOffset;
+        uint64 pc;
+        uint8 exitCode;
+        bool exited;
+        uint64 step;
+        uint64 heap;
+        uint64 loadReservation;
+        uint64[32] registers;
+    }
+
     RISCV internal riscv;
     PreimageOracle internal oracle;
 
@@ -20,7 +37,7 @@ contract RISCV_Test is Test {
         // state and proof from first step of `simple` binary
         uint64[32] memory registers;
         registers[2] = 0x1000000000000000;
-        RISCV.State memory state = RISCV.State({
+        State memory state = State({
             memRoot: hex"f0df7f266aed88bde90ed121f0de6865f3fa88bf67d3a4657dad876038393b2c",
             preimageKey: bytes32(0),
             preimageOffset: 0,
@@ -38,7 +55,7 @@ contract RISCV_Test is Test {
         assertTrue(postState != bytes32(0));
     }
 
-    function encodeState(RISCV.State memory state) internal pure returns (bytes memory) {
+    function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
             registers = bytes.concat(registers, abi.encodePacked(state.registers[i]));
