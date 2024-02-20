@@ -29,10 +29,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Install Golang
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21.x'
+      - name: Build FFI
+        run: go build
+        working-directory: rvgo/scripts/go-ffi
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run foundry tests
-        run: forge test -vvv
+        run: forge test -vvv --ffi
         working-directory: rvsol
 
   # go-lint:
