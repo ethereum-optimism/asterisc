@@ -716,6 +716,30 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case 233: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
+		case 20: // epoll_create1 - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 21: // epoll_ctl - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 59: // pipe2 - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 78: // readlinkat - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 79: // newfstatat - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 160: // newuname - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 215: // munmap - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
+		case 278: // getrandom - ignored
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		case 261: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
 			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
 		case 422: // futex - not supported, for now
