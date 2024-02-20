@@ -46,16 +46,25 @@ const (
 	FdPreimageWrite = 6
 )
 
+type UnsupportedSyscallErr struct {
+	SyscallNum U64
+}
+
+func (e *UnsupportedSyscallErr) Error() string {
+	return fmt.Sprintf("unsupported system call: %d", e.SyscallNum)
+}
+
 // riscvStep runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
 func (inst *InstrumentedState) riscvStep() (outErr error) {
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
-			outErr = fmt.Errorf("revert: %v", err)
-		}
-		if revertCode != 0 {
-			outErr = fmt.Errorf("revert %x: %w", revertCode, outErr)
+			if revertCode == 0 {
+				outErr = fmt.Errorf("revert: %v", err)
+			} else {
+				outErr = fmt.Errorf("revert %x: %w", revertCode, err)
+			}
 		}
 	}()
 
@@ -591,11 +600,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
-			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		case SysFutex: // futex - not supported, for now
-			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		case SysNanosleep: // nanosleep - not supported, for now
-			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
