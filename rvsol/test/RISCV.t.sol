@@ -79,6 +79,25 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    function test_and_succeeds() public {
+        uint32 insn = encodeRType(0x33, 1, 7, 2, 3, 0); // and x1, x2, x3
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, 0x4, 0);
+        state.registers[2] = 0x3030;
+        state.registers[3] = 0x3132;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[1] = state.registers[2] & state.registers[3];
+        expect.registers[2] = state.registers[2];
+        expect.registers[3] = state.registers[3];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
