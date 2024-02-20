@@ -60,11 +60,15 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	var revertCode uint64
 	defer func() {
 		if err := recover(); err != nil {
-			if revertCode == 0 {
-				outErr = fmt.Errorf("revert: %v", err)
+			if err, ok := err.(error); ok {
+				outErr = fmt.Errorf("revert: %w", err)
 			} else {
-				outErr = fmt.Errorf("revert %x: %w", revertCode, err)
+				outErr = fmt.Errorf("revert: %v", err)
 			}
+
+		}
+		if revertCode != 0 {
+			outErr = fmt.Errorf("revert %x: %w", revertCode, outErr)
 		}
 	}()
 
