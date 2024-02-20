@@ -141,6 +141,21 @@ SYS_sched_getaffinity	123
 # program advises kernel how to use memory, can be no-op
 SYS_madvise		233
 
+# NOOP - To not support, but needed to run op-program
+# May need more investigation
+# -----------------------
+# file memory mapping
+SYS_munmap		215
+
+# interprocess communication
+SYS_pipe2		59
+
+SYS_epoll_create1       20
+SYS_epoll_ctl           21
+SYS_readlinkat          78
+SYS_newfstatat          79
+SYS_newuname            160
+SYS_getrandom           278
 
 # To not support
 # -----------------------
@@ -152,12 +167,6 @@ SYS_socket		198
 SYS_close		57
 SYS_openat		56
 SYS_faccessat		48
-
-# file memory mapping
-SYS_munmap		215
-
-# interprocess communication
-SYS_pipe2		59
 
 # send a signal to another process
 SYS_kill		129
