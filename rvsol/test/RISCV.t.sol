@@ -592,7 +592,7 @@ contract RISCV_Test is CommonTest {
         uint16 imm = (0x10 << 5) | shamt;
         uint32 insn = encodeIType(0x1b, 30, 5, 28, imm); // sraiw x30, x28, 0x4
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
-          // intentionally set MSB to 1 to check sign preservation
+        // intentionally set MSB to 1 to check sign preservation
         state.registers[28] = 0xF6F7_1234;
         bytes memory encodedState = encodeState(state);
         
