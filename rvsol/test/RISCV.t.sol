@@ -62,7 +62,7 @@ contract RISCV_Test is CommonTest {
 
     function test_add_succeeds() public {
         uint32 insn = encodeRType(0x33, 1, 0, 2, 3, 0); // add x1, x2, x3
-        (State memory state, bytes memory proof) = constructRISCVState(0, insn, 0x4, 0);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         state.registers[2] = 0x3030;
         state.registers[3] = 0x3131;
         bytes memory encodedState = encodeState(state);
@@ -131,6 +131,11 @@ contract RISCV_Test is CommonTest {
         returns (State memory state, bytes memory proof)
     {
         (state.memRoot, proof) = ffi.getAsteriscMemoryProof(pc, insn, addr, val);
+        state.pc = pc;
+    }
+
+    function constructRISCVState(uint64 pc, uint32 insn) internal returns (State memory state, bytes memory proof) {
+        (state.memRoot, proof) = ffi.getAsteriscMemoryProof(pc, insn);
         state.pc = pc;
     }
 
