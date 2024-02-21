@@ -210,8 +210,8 @@ contract RISCV_Test is CommonTest {
         expect.registers[14] = state.registers[23] >> state.registers[2];
         bool signBit = (1 << 63) & state.registers[23] > 0;
         if (signBit) {
-            uint64 sign_extension = uint64(((1 << state.registers[2]) - 1) << (64 - state.registers[2]));
-            expect.registers[14] |= sign_extension;
+            uint64 signExtension = uint64(((1 << state.registers[2]) - 1) << (64 - state.registers[2]));
+            expect.registers[14] |= signExtension;
         }
         expect.registers[23] = state.registers[23];
         expect.registers[2] = state.registers[2];
@@ -349,8 +349,8 @@ contract RISCV_Test is CommonTest {
         expect.registers[17] = state.registers[11] >> state.registers[4];
         bool signBit = (1 << 31) & state.registers[11] > 0;
         if (signBit) {
-            uint64 sign_extension = uint64(((1 << (32 + state.registers[4])) - 1) << (32 - state.registers[4]));
-            expect.registers[17] |= sign_extension;
+            uint64 signExtension = uint64(((1 << (32 + state.registers[4])) - 1) << (32 - state.registers[4]));
+            expect.registers[17] |= signExtension;
         }
 
         expect.registers[11] = state.registers[11];
@@ -486,8 +486,8 @@ contract RISCV_Test is CommonTest {
         expect.registers[19] = state.registers[12] >> shamt;
         bool signBit = (1 << 63) & (state.registers[12]) > 0;
         if (signBit) {
-            uint64 sign_extension = uint64(((1 << shamt) - 1) << (64 - shamt));
-            expect.registers[19] |= sign_extension;
+            uint64 signExtension = uint64(((1 << shamt) - 1) << (64 - shamt));
+            expect.registers[19] |= signExtension;
         }
         expect.registers[12] = state.registers[12];
 
@@ -603,8 +603,8 @@ contract RISCV_Test is CommonTest {
         expect.registers[30] = (state.registers[28] >> shamt) & ((1 << 32) - 1);
         bool signBit = (1 << 31) & state.registers[28] > 0;
         if (signBit) {
-            uint64 sign_extension = uint64(((1 << (32 + shamt)) - 1) << (32 - shamt));
-            expect.registers[30] |= sign_extension;
+            uint64 signExtension = uint64(((1 << (32 + shamt)) - 1) << (32 - shamt));
+            expect.registers[30] |= signExtension;
         }
 
         expect.registers[28] = state.registers[28];
