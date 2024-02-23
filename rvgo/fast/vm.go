@@ -59,8 +59,8 @@ func (e *UnsupportedSyscallErr) Error() string {
 func (inst *InstrumentedState) riscvStep() (outErr error) {
 	var revertCode uint64
 	defer func() {
-		if err := recover(); err != nil {
-			if err, ok := err.(error); ok {
+		if errInterface := recover(); errInterface != nil {
+			if err, ok := errInterface.(error); ok {
 				outErr = fmt.Errorf("revert: %w", err)
 			} else {
 				outErr = fmt.Errorf("revert: %v", err)
