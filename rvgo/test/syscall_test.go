@@ -81,9 +81,8 @@ func FuzzStateSyscallExit(f *testing.F) {
 
 	syscalls := []int{fast.SysExit, fast.SysExitGroup}
 
-	f.Fuzz(func(t *testing.T, syscallIdx uint, exitCode uint8, pc uint64, step uint64) {
+	testExit := func(t *testing.T, syscall int, exitCode uint8, pc uint64, step uint64) {
 		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
-		syscall := syscalls[syscallIdx%uint(len(syscalls))]
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
@@ -118,6 +117,12 @@ func FuzzStateSyscallExit(f *testing.F) {
 		fastPost := state.EncodeWitness()
 		runEVM(t, contracts, addrs, stepWitness, fastPost)
 		runSlow(t, stepWitness, fastPost, nil)
+	}
+
+	f.Fuzz(func(t *testing.T, exitCode uint8, pc uint64, step uint64) {
+		for _, syscall := range syscalls {
+			testExit(t, syscall, exitCode, pc, step)
+		}
 	})
 }
 
@@ -143,9 +148,8 @@ func FuzzStateSyscallNoop(f *testing.F) {
 		fast.SysGetRandom,
 	}
 
-	f.Fuzz(func(t *testing.T, syscallIdx uint, arg uint64, pc uint64, step uint64) {
+	testNoop := func(t *testing.T, syscall int, arg uint64, pc uint64, step uint64) {
 		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
-		syscall := syscalls[syscallIdx%uint(len(syscalls))]
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
@@ -182,6 +186,12 @@ func FuzzStateSyscallNoop(f *testing.F) {
 		fastPost := state.EncodeWitness()
 		runEVM(t, contracts, addrs, stepWitness, fastPost)
 		runSlow(t, stepWitness, fastPost, nil)
+	}
+
+	f.Fuzz(func(t *testing.T, arg uint64, pc uint64, step uint64) {
+		for _, syscall := range syscalls {
+			testNoop(t, syscall, arg, pc, step)
+		}
 	})
 }
 
