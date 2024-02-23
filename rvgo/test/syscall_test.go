@@ -262,15 +262,19 @@ func FuzzStatePreimageRead(f *testing.F) {
 		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
+		expectedRegisters := state.Registers
 		writeLen := count
-		if writeLen > 4 {
-			writeLen = 4
+		maxData := 32 - addr&31
+		if writeLen > maxData {
+			writeLen = maxData
 		}
 		if preimageOffset+writeLen > uint64(8+len(preimageData)) {
 			writeLen = uint64(8+len(preimageData)) - preimageOffset
 		}
-		oracle := staticOracle(t, preimageData)
+		expectedRegisters[10] = writeLen
+		expectedRegisters[11] = 0
 
+		oracle := staticOracle(t, preimageData)
 		fastState := fast.NewInstrumentedState(state, oracle, os.Stdout, os.Stderr)
 		stepWitness, err := fastState.Step(true)
 		require.NoError(t, err)
@@ -291,6 +295,7 @@ func FuzzStatePreimageRead(f *testing.F) {
 		}
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, preStatePreimageKey, state.PreimageKey)
+		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
 		runEVM(t, contracts, addrs, stepWitness, fastPost)
