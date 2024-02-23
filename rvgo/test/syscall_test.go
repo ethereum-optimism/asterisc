@@ -1,7 +1,6 @@
 package test
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"testing"
@@ -15,7 +14,7 @@ import (
 	"github.com/ethereum-optimism/asterisc/rvgo/slow"
 )
 
-var syscallInsn = uint64(0x73_00_00_00_00_00_00_00)
+var syscallInsn = []byte{0x73}
 
 func staticOracle(t *testing.T, preimageData []byte) *testOracle {
 	return &testOracle{
@@ -64,9 +63,7 @@ func TestStateSyscallUnsupported(t *testing.T) {
 				Registers:       [32]uint64{17: uint64(syscall)},
 				Step:            0,
 			}
-			buf := make([]byte, 8)
-			binary.BigEndian.PutUint64(buf, syscallInsn)
-			state.Memory.SetUnaligned(pc, buf)
+			state.Memory.SetUnaligned(pc, syscallInsn)
 
 			fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 			_, err := fastState.Step(true)
@@ -97,9 +94,7 @@ func FuzzStateSyscallExit(f *testing.F) {
 			Registers:       [32]uint64{17: uint64(syscall), 10: uint64(exitCode)},
 			Step:            step,
 		}
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, syscallInsn)
-		state.Memory.SetUnaligned(pc, buf)
+		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		preStateRegisters := state.Registers
 
@@ -161,9 +156,7 @@ func FuzzStateSyscallNoop(f *testing.F) {
 			Registers:       [32]uint64{17: uint64(syscall), 10: arg},
 			Step:            step,
 		}
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, syscallInsn)
-		state.Memory.SetUnaligned(pc, buf)
+		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = 0
@@ -196,12 +189,12 @@ func FuzzStateHintRead(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64) {
+	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64) {
+		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
 		preimageData := []byte("hello world")
 		if preimageOffset >= uint64(len(preimageData)) {
 			t.SkipNow()
 		}
-		pc := uint64(0)
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
@@ -210,13 +203,11 @@ func FuzzStateHintRead(f *testing.F) {
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
 			Registers:       [32]uint64{17: fast.SysRead, 10: fast.FdHintRead, 11: addr, 12: count},
-			Step:            0,
+			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 		}
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, syscallInsn)
-		state.Memory.SetUnaligned(pc, buf)
+		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
@@ -230,13 +221,13 @@ func FuzzStateHintRead(f *testing.F) {
 		require.NoError(t, err)
 		require.False(t, stepWitness.HasPreimage())
 
-		require.Equal(t, uint64(4), state.PC)
+		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode)
 		require.Equal(t, false, state.Exited)
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
-		require.Equal(t, uint64(1), state.Step)
+		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, preStatePreimageKey, state.PreimageKey)
 		require.Equal(t, expectedRegisters, state.Registers)
 
@@ -250,12 +241,12 @@ func FuzzStatePreimageRead(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64) {
+	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64) {
+		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
 		preimageData := []byte("hello world")
 		if preimageOffset >= uint64(len(preimageData)) {
 			t.SkipNow()
 		}
-		pc := uint64(0)
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
@@ -264,13 +255,11 @@ func FuzzStatePreimageRead(f *testing.F) {
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
 			Registers:       [32]uint64{17: fast.SysRead, 10: fast.FdPreimageRead, 11: addr, 12: count},
-			Step:            0,
+			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 		}
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, syscallInsn)
-		state.Memory.SetUnaligned(pc, buf)
+		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
 		writeLen := count
@@ -287,7 +276,7 @@ func FuzzStatePreimageRead(f *testing.F) {
 		require.NoError(t, err)
 		require.True(t, stepWitness.HasPreimage())
 
-		require.Equal(t, uint64(4), state.PC)
+		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode)
@@ -300,7 +289,7 @@ func FuzzStatePreimageRead(f *testing.F) {
 			require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 			require.Equal(t, state.PreimageOffset, preimageOffset)
 		}
-		require.Equal(t, uint64(1), state.Step)
+		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, preStatePreimageKey, state.PreimageKey)
 
 		fastPost := state.EncodeWitness()
@@ -313,12 +302,12 @@ func FuzzStateHintWrite(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64) {
+	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64) {
+		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
 		preimageData := []byte("hello world")
 		if preimageOffset >= uint64(len(preimageData)) {
 			t.SkipNow()
 		}
-		pc := uint64(0)
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
@@ -327,7 +316,7 @@ func FuzzStateHintWrite(f *testing.F) {
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
 			Registers:       [32]uint64{17: fast.SysWrite, 10: fast.FdHintWrite, 11: addr, 12: count},
-			Step:            0,
+			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 
@@ -335,9 +324,7 @@ func FuzzStateHintWrite(f *testing.F) {
 			// We pre-allocate a buffer for the read hint data to be copied into.
 			LastHint: make(hexutil.Bytes, fast.PageSize),
 		}
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, syscallInsn)
-		state.Memory.SetUnaligned(pc, buf)
+		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
@@ -351,13 +338,13 @@ func FuzzStateHintWrite(f *testing.F) {
 		require.NoError(t, err)
 		require.False(t, stepWitness.HasPreimage())
 
-		require.Equal(t, uint64(4), state.PC)
+		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode)
 		require.Equal(t, false, state.Exited)
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
-		require.Equal(t, uint64(1), state.Step)
+		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, preStatePreimageKey, state.PreimageKey)
 		require.Equal(t, expectedRegisters, state.Registers)
 
@@ -371,12 +358,12 @@ func FuzzStatePreimageWrite(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64) {
+	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64) {
+		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
 		preimageData := []byte("hello world")
 		if preimageOffset >= uint64(len(preimageData)) {
 			t.SkipNow()
 		}
-		pc := uint64(0)
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
@@ -385,13 +372,11 @@ func FuzzStatePreimageWrite(f *testing.F) {
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
 			Registers:       [32]uint64{17: fast.SysWrite, 10: fast.FdPreimageWrite, 11: addr, 12: count},
-			Step:            0,
+			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 		}
-		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, syscallInsn)
-		state.Memory.SetUnaligned(pc, buf)
+		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		maxData := 32 - (addr & 31)
@@ -408,13 +393,13 @@ func FuzzStatePreimageWrite(f *testing.F) {
 		require.NoError(t, err)
 		require.False(t, stepWitness.HasPreimage())
 
-		require.Equal(t, uint64(4), state.PC)
+		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode)
 		require.Equal(t, false, state.Exited)
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
-		require.Equal(t, uint64(1), state.Step)
+		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, uint64(0), state.PreimageOffset)
 		require.Equal(t, expectedRegisters, state.Registers)
 
