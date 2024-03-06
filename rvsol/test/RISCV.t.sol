@@ -635,7 +635,6 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
-    // not working
     function test_ecall_succeeds() public {
         // some syscalls are not supported
         // lets choose unsupported syscall clone just for testing functionality
@@ -675,67 +674,90 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
-    // TODO: not confirmed/ need to fix
+    function test_lb_succeeds() public {
+        bytes32 value = hex"f9d9c609ec075104";
+        uint16 offset = 0x376;
+        uint64 addr = 0x98be + offset;
+        uint8 funct3 = 0;
+        uint32 insn = encodeIType(0x3, 3, funct3, 5, offset); // lb x3, offset(x5)
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
+        state.registers[5] = 0x98be;
+        bytes memory encodedState = encodeState(state);
 
-    // function test_lb_succeeds() public {
-    //     bytes32 value = hex"f9d9c609ec075104";
-    //     uint16 offset = 0x376;
-    //     uint64 addr = 0x98be + offset;
-    //     uint32 insn = encodeIType(0x3, 3, 0, 5, offset); // lb x3, offset(x5)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[5] = 0x98be;
-    //     bytes memory encodedState = encodeState(state);
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[3] = uint8(value[0]);
+        bool signBit = (1 << 7) & expect.registers[3] > 0;
+        if (signBit) {
+            uint64 size = uint64(1 << (funct3 & 0x3)) * 8;
+            uint64 signExtension = uint64(((1 << 64 - size)) - 1) << size;
+            expect.registers[3] |= signExtension;
+        }
+        expect.registers[5] = state.registers[5];
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[3] = uint8(value[0]);
-    //     expect.registers[5] = state.registers[5];
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+    function test_lh_succeeds() public {
+        bytes32 value = hex"d7ffe3d2157e8954";
+        uint16 offset = 0x358;
+        uint64 addr = 0xc9b + offset;
+        uint8 funct3 = 1;
+        uint32 insn = encodeIType(0x3, 17, funct3, 15, offset); // lh x17, offset(x15)
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
+        state.registers[15] = 0xc9b;
+        bytes memory encodedState = encodeState(state);
 
-    // function test_lh_succeeds() public {
-    //     bytes32 value = hex"d75fe3d2157e8954";
-    //     uint16 offset = 0x358;
-    //     uint64 addr = 0xc9b + offset;
-    //     uint32 insn = encodeIType(0x3, 17, 1, 15, offset); // lh x17, offset(x15)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[15] = 0xc9b;
-    //     bytes memory encodedState = encodeState(state);
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[17] = uint8(value[0]);
+        expect.registers[17] += uint8(value[1]) * (1 << 8);
+        bool signBit = (1 << 15) & expect.registers[17] > 0;
+        if (signBit) {
+            uint64 size = uint64(1 << (funct3 & 0x3)) * 8;
+            uint64 signExtension = uint64(((1 << 64 - size)) - 1) << size;
+            expect.registers[17] |= signExtension;
+        }
+        expect.registers[15] = state.registers[15];
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[17] = uint8(value[0]);
-    //     expect.registers[15] = state.registers[15];
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+    function test_lw_succeeds() public {
+        bytes32 value = hex"dcd20df1dbcda033";
+        uint16 offset = 0x358; // 0x76b does not work
+        uint64 addr = 0xc9b + offset;
+        uint8 funct3 = 2;
+        uint32 insn = encodeIType(0x3, 27, funct3, 28, offset); // lw x27, offset(x28)
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
+        state.registers[28] = 0xc9b; // 0xa673 does not work
+        bytes memory encodedState = encodeState(state);
 
-    // function test_lw_succeeds() public {
-    //     bytes32 value = hex"dcd20df1dbcda033";
-    //     uint16 offset = 0x76b;
-    //     uint64 addr = 0xa673 + offset;
-    //     uint32 insn = encodeIType(0x3, 27, 2, 28, offset); // lw x27, offset(x28)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[28] = 0xa673;
-    //     bytes memory encodedState = encodeState(state);
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[27] = uint8(value[0]);
+        expect.registers[27] += uint8(value[1]) * (1 << 8);
+        expect.registers[27] += uint8(value[2]) * (1 << 16);
+        expect.registers[27] += uint8(value[3]) * (1 << 24);
+        bool signBit = (1 << 31) & expect.registers[27] > 0;
+        if (signBit) {
+            uint64 size = uint64(1 << (funct3 & 0x3)) * 8;
+            uint64 signExtension = uint64(((1 << 64 - size)) - 1) << size;
+            expect.registers[27] |= signExtension;
+        }
+        expect.registers[28] = state.registers[28];
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[27] = uint8(value[0]);
-    //     expect.registers[28] = state.registers[28];
-
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
     // function test_ld_succeeds() public {
     //     bytes32 value = hex"196faeb2a761c3a7";
