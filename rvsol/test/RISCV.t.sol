@@ -850,6 +850,160 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* S Type instructions */
+
+    function test_sb_succeeds() public {
+        uint16 imm = 0xe64;
+        uint64 rs1Value = 0x6b856cf8;
+        uint8 funct3 = 0;
+        uint64 size = uint64(1 << (funct3 & 0x3));
+        bytes32 value = hex"ce9a61c0068bd030";
+        uint64 rs2Value = 0;
+        for (uint8 i = 0; i < 8; i++) {
+            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
+        }
+        uint256 targetValue = 0;
+        for (uint8 i = 0; i < size; i++) {
+            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
+        }
+        bytes32 target = bytes32(targetValue);
+        bool signBit = (1 << 11) & imm > 0;
+        uint64 addr = rs1Value + imm;
+        if (signBit) {
+            addr -= 1 << 12;
+        }
+        uint32 insn = encodeSType(0x23, funct3, 6, 3, imm); // sb x3, offset(x6)
+        // note. asterisc memory is zero-initalized.
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
+        state.registers[6] = rs1Value;
+        state.registers[3] = rs2Value;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, target);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[6] = state.registers[6];
+        expect.registers[3] = state.registers[3];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sh_succeeds() public {
+        uint16 imm = 0xb51;
+        uint64 rs1Value = 0x7ce31e7a;
+        uint8 funct3 = 1;
+        uint64 size = uint64(1 << (funct3 & 0x3));
+        bytes32 value = hex"4f045df3ef2c2817";
+        uint64 rs2Value = 0;
+        for (uint8 i = 0; i < 8; i++) {
+            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
+        }
+        uint256 targetValue = 0;
+        for (uint8 i = 0; i < size; i++) {
+            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
+        }
+        bytes32 target = bytes32(targetValue);
+        bool signBit = (1 << 11) & imm > 0;
+        uint64 addr = rs1Value + imm;
+        if (signBit) {
+            addr -= 1 << 12;
+        }
+        uint32 insn = encodeSType(0x23, funct3, 19, 25, imm); // sh x25, offset(x19)
+        // note. asterisc memory is zero-initalized.
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
+        state.registers[19] = rs1Value;
+        state.registers[25] = rs2Value;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, target);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[19] = state.registers[19];
+        expect.registers[25] = state.registers[25];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sw_succeeds() public {
+        uint16 imm = 0xc04;
+        uint64 rs1Value = 0xcb3053d5;
+        uint8 funct3 = 2;
+        uint64 size = uint64(1 << (funct3 & 0x3));
+        bytes32 value = hex"43c10f060b84afdf";
+        uint64 rs2Value = 0;
+        for (uint8 i = 0; i < 8; i++) {
+            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
+        }
+        uint256 targetValue = 0;
+        for (uint8 i = 0; i < size; i++) {
+            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
+        }
+        bytes32 target = bytes32(targetValue);
+        bool signBit = (1 << 11) & imm > 0;
+        uint64 addr = rs1Value + imm;
+        if (signBit) {
+            addr -= 1 << 12;
+        }
+        uint32 insn = encodeSType(0x23, funct3, 12, 29, imm); // sw x29, offset(x12)
+        // note. asterisc memory is zero-initalized.
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
+        state.registers[12] = rs1Value;
+        state.registers[29] = rs2Value;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, target);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[12] = state.registers[12];
+        expect.registers[29] = state.registers[29];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sd_succeeds() public {
+        uint16 imm = 0x431;
+        uint64 rs1Value = 0x9ab94a99;
+        uint8 funct3 = 3;
+        uint64 size = uint64(1 << (funct3 & 0x3));
+        bytes32 value = hex"5298cefada934bc7";
+        uint64 rs2Value = 0;
+        for (uint8 i = 0; i < 8; i++) {
+            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
+        }
+        uint256 targetValue = 0;
+        for (uint8 i = 0; i < size; i++) {
+            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
+        }
+        bytes32 target = bytes32(targetValue);
+        bool signBit = (1 << 11) & imm > 0;
+        uint64 addr = rs1Value + imm;
+        if (signBit) {
+            addr -= 1 << 12;
+        }
+        uint32 insn = encodeSType(0x23, funct3, 1, 2, imm); // sd x2, offset(x1)
+        // note. asterisc memory is zero-initalized.
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
+        state.registers[1] = rs1Value;
+        state.registers[2] = rs2Value;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, target);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[1] = state.registers[1];
+        expect.registers[2] = state.registers[2];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -936,6 +1090,21 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
         insn |= uint32(funct3 & 0x7) << (7 + 5);
         insn |= uint32(rd & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeSType(uint8 opcode, uint8 funct3, uint8 rs1, uint8 rs2, uint16 imm)
+        internal
+        pure
+        returns (uint32 insn)
+    {
+        // insn   := [imm[11:5]]| [rs2] | [rs1] | [funct3] | [imm[4:0]] | [opcode]
+        // example:  0001010    | 01011 | 00001 | 000      | 11011      | 0100011
+        insn = uint32((imm >> 5) & 0x7F) << (7 + 5 + 3 + 5 + 5);
+        insn |= uint32(rs2 & 0x1F) << (7 + 5 + 3 + 5);
+        insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
+        insn |= uint32(funct3 & 0x7) << (7 + 5);
+        insn |= uint32(imm & 0x1F) << 7;
         insn |= uint32(opcode & 0x7F);
     }
 }
