@@ -99,9 +99,6 @@ func FuzzStateSyscallExit(f *testing.F) {
 
 		fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 		stepWitness, err := fastState.Step(true)
-		if err != nil {
-			require.Equal(t, pc, err)
-		}
 		require.NoError(t, err)
 		require.False(t, stepWitness.HasPreimage())
 
@@ -168,9 +165,6 @@ func FuzzStateSyscallNoop(f *testing.F) {
 
 		fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 		stepWitness, err := fastState.Step(true)
-		if err != nil {
-			require.Equal(t, pc, err)
-		}
 		require.NoError(t, err)
 		require.False(t, stepWitness.HasPreimage())
 
