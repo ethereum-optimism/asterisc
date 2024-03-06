@@ -435,8 +435,8 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
 		expectedRegisters := state.Registers
-		//expectedRegisters[10] = 0
-		//expectedRegisters[11] = 0
+		expectedRegisters[10] = 0
+		expectedRegisters[11] = 0
 
 		fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 		stepWitness, err := fastState.Step(true)
