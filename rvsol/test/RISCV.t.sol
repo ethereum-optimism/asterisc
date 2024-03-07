@@ -8,8 +8,6 @@ import {CommonTest} from "./CommonTest.sol";
 // This import is for the VMStatus
 // import "@optimism/src/libraries/DisputeTypes.sol";
 
-import "forge-std/console.sol";
-
 contract RISCV_Test is CommonTest {
     /// @notice Stores the VM state.
     ///         Total state size: 32 + 32 + 8 * 2 + 1 * 2 + 8 * 3 + 32 * 8 = 362 bytes
@@ -517,6 +515,116 @@ contract RISCV_Test is CommonTest {
         expect.registers[3] = uint64(temp & ((1 << 64) - 1));
         expect.registers[14] = state.registers[14];
         expect.registers[1] = state.registers[1];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_mulw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 18, 0, 21, 7, 1); // mulw x18, x21, x7
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[21] = 0x485b637df7d02127;
+        state.registers[7] = 0xc2a29e37cd8ffdae;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        int256 temp = int256(int64(state.registers[21])) * int256(int64(state.registers[7]));
+        expect.registers[18] = uint64(uint256(temp & ((1 << 32) - 1)));
+        bool signBit = (1 << 31) & expect.registers[18] > 0;
+        if (signBit) {
+            expect.registers[18] |= ((1 << 32) - 1) << 32;
+        }
+        expect.registers[21] = state.registers[21];
+        expect.registers[7] = state.registers[7];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_divw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 2, 4, 30, 20, 1); // divw x2, x30, x20
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[30] = 0x265b398efecfbcb0;
+        state.registers[20] = 0x43175ecbdf9bbd84;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 temp1 = mask32Signed64(state.registers[30]);
+        uint64 temp2 = mask32Signed64(state.registers[20]);
+        uint64 temp = uint64(int64(temp1) / int64(temp2));
+        expect.registers[2] = mask32Signed64(temp);
+        expect.registers[30] = state.registers[30];
+        expect.registers[20] = state.registers[20];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_divuw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 3, 5, 21, 7, 1); // divuw x3, x21, x7
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[21] = 0x6f2caeeb7e4e97b3;
+        state.registers[7] = 0x51cf2e551f6a5e0;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 temp1 = mask32Unsigned64(state.registers[21]);
+        uint64 temp2 = mask32Unsigned64(state.registers[7]);
+        expect.registers[3] = mask32Unsigned64(temp1 / temp2);
+        expect.registers[21] = state.registers[21];
+        expect.registers[7] = state.registers[7];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_remw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 27, 6, 22, 21, 1); // remw x27, x22, x21
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[22] = 0x9f0ebf8dfc2febe0;
+        state.registers[21] = 0xb704babb86c919bf;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 temp1 = mask32Signed64(state.registers[22]);
+        uint64 temp2 = mask32Signed64(state.registers[21]);
+        uint64 temp = uint64(int64(temp1) % int64(temp2));
+        expect.registers[27] = mask32Signed64(temp);
+        expect.registers[22] = state.registers[22];
+        expect.registers[21] = state.registers[21];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_remuw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 30, 7, 27, 9, 1); // remuw x30, x27, x9
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[27] = 0x1ccfe2acc3d2fa50;
+        state.registers[9] = 0xeb03331a300718a5;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 temp1 = mask32Unsigned64(state.registers[27]);
+        uint64 temp2 = mask32Unsigned64(state.registers[9]);
+        expect.registers[30] = mask32Unsigned64(temp1 % temp2);
+        expect.registers[27] = state.registers[27];
+        expect.registers[9] = state.registers[9];
 
         bytes32 postState = riscv.step(encodedState, proof, 0);
         assertEq(postState, outputState(expect), "unexpected post state");
@@ -1542,5 +1650,17 @@ contract RISCV_Test is CommonTest {
         insn |= uint32((imm >> 12) & 0xFF) << (7 + 5);
         insn |= uint32(rd & 0x1F) << 7;
         insn |= uint32(opcode & 0x7F);
+    }
+
+    function mask32Signed64(uint64 val) internal pure returns (uint64) {
+        uint64 result = mask32Unsigned64(val);
+        if ((1 << 31) & result > 0) {
+            result |= uint64(((1 << 32) - 1) << 32);
+        }
+        return result;
+    }
+
+    function mask32Unsigned64(uint64 val) internal pure returns (uint64) {
+        return uint64(val & ((1 << 32) - 1));
     }
 }
