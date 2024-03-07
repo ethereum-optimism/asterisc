@@ -1004,6 +1004,176 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* B Type instructions */
+
+    function test_beq_succeeds() public {
+        uint16 imm = 0x19cd;
+        uint32 insn = encodeBType(0x63, 0, 23, 20, imm); // beq x23, x20, offset
+        (State memory state, bytes memory proof) = constructRISCVState(0x139a, insn);
+        state.registers[23] = 0x2152;
+        state.registers[20] = 0x2152;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc;
+        if (state.registers[23] == state.registers[20]) {
+            expect.pc += imm - (imm & 1);
+            bool signBit = (1 << 12) & imm > 0;
+            if (signBit) {
+                expect.pc -= 1 << 13;
+            }
+        } else {
+            expect.pc += 4;
+        }
+        expect.step = state.step + 1;
+        expect.registers[23] = state.registers[23];
+        expect.registers[20] = state.registers[20];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_bne_succeeds() public {
+        uint16 imm = 0x1d7e;
+        uint32 insn = encodeBType(0x63, 1, 20, 26, imm); // bne x20, x26, offset
+        (State memory state, bytes memory proof) = constructRISCVState(0x1afc, insn);
+        state.registers[20] = 0x14b6;
+        state.registers[26] = 0x4156;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc;
+        if (state.registers[20] != state.registers[26]) {
+            expect.pc += imm - (imm & 1);
+            bool signBit = (1 << 12) & imm > 0;
+            if (signBit) {
+                expect.pc -= 1 << 13;
+            }
+        } else {
+            expect.pc += 4;
+        }
+        expect.step = state.step + 1;
+        expect.registers[20] = state.registers[20];
+        expect.registers[26] = state.registers[26];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_blt_succeeds() public {
+        uint16 imm = 0x664;
+        uint32 insn = encodeBType(0x63, 4, 9, 19, imm); // blt x9, x19, offset
+        (State memory state, bytes memory proof) = constructRISCVState(0xcc8, insn);
+        state.registers[9] = 0xffffffff_ffff18af;
+        state.registers[19] = 0x8e5e;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc;
+        if (int64(state.registers[9]) < int64(state.registers[19])) {
+            expect.pc += imm - (imm & 1);
+            bool signBit = (1 << 12) & imm > 0;
+            if (signBit) {
+                expect.pc -= 1 << 13;
+            }
+        } else {
+            expect.pc += 4;
+        }
+        expect.step = state.step + 1;
+        expect.registers[9] = state.registers[9];
+        expect.registers[19] = state.registers[19];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_bge_succeeds() public {
+        uint16 imm = 0x1350;
+        uint32 insn = encodeBType(0x63, 5, 27, 11, imm); // bge x27, x11, offset
+        (State memory state, bytes memory proof) = constructRISCVState(0x26a0, insn);
+        state.registers[27] = 0xbad7;
+        state.registers[11] = 0xffffffff_ffff5c1f;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc;
+        if (int64(state.registers[27]) >= int64(state.registers[11])) {
+            expect.pc += imm - (imm & 1);
+            bool signBit = (1 << 12) & imm > 0;
+            if (signBit) {
+                expect.pc -= 1 << 13;
+            }
+        } else {
+            expect.pc += 4;
+        }
+        expect.step = state.step + 1;
+        expect.registers[27] = state.registers[27];
+        expect.registers[11] = state.registers[11];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_bltu_succeeds() public {
+        uint16 imm = 0x171d;
+        uint32 insn = encodeBType(0x63, 6, 13, 22, imm); // bltu x13, x22, offset
+        (State memory state, bytes memory proof) = constructRISCVState(0x2e3a, insn);
+        state.registers[13] = 0xa0cc;
+        state.registers[22] = 0xffffffff_ffff795c;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc;
+        if (state.registers[13] < state.registers[22]) {
+            expect.pc += imm - (imm & 1);
+            bool signBit = (1 << 12) & imm > 0;
+            if (signBit) {
+                expect.pc -= 1 << 13;
+            }
+        } else {
+            expect.pc += 4;
+        }
+        expect.step = state.step + 1;
+        expect.registers[13] = state.registers[13];
+        expect.registers[22] = state.registers[22];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_bgeu_succeeds() public {
+        uint16 imm = 0x14b5;
+        uint32 insn = encodeBType(0x63, 7, 7, 16, imm); // bgeu x7, x16, offset
+        (State memory state, bytes memory proof) = constructRISCVState(0x296a, insn);
+        state.registers[7] = 0xffffffff_ffff35e5;
+        state.registers[16] = 0x7c3c;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc;
+        if (state.registers[7] >= state.registers[16]) {
+            expect.pc += imm - (imm & 1);
+            bool signBit = (1 << 12) & imm > 0;
+            if (signBit) {
+                expect.pc -= 1 << 13;
+            }
+        } else {
+            expect.pc += 4;
+        }
+        expect.step = state.step + 1;
+        expect.registers[7] = state.registers[7];
+        expect.registers[16] = state.registers[16];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -1105,6 +1275,24 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
         insn |= uint32(funct3 & 0x7) << (7 + 5);
         insn |= uint32(imm & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeBType(uint8 opcode, uint8 funct3, uint8 rs1, uint8 rs2, uint16 imm)
+        internal
+        pure
+        returns (uint32 insn)
+    {
+        // we lose information of lsb of imm, assuming always zero
+        // isn    := [imm[12]] | [imm[10:5]] | [rs2] | [rs1] | [funct3] | [imm[4:1]] | imm[11] | [opcode]
+        // example:  0         | 010101      | 01100 | 00100 | 000      | 0010       | 1       | 1100011
+        insn = uint32((imm >> 12) & 0x1) << (6 + 7 + 1 + 4 + 3 + 5 + 5);
+        insn |= uint32((imm >> 5) & 0x3f) << (7 + 1 + 4 + 3 + 5 + 5);
+        insn |= uint32(rs2 & 0x1F) << (7 + 1 + 4 + 3 + 5);
+        insn |= uint32(rs1 & 0x1F) << (7 + 1 + 4 + 3);
+        insn |= uint32(funct3 & 0x7) << (7 + 1 + 4);
+        insn |= uint32((imm >> 1) & 0xF) << (7 + 1);
+        insn |= uint32((imm >> 11) & 0x1) << 7;
         insn |= uint32(opcode & 0x7F);
     }
 }
