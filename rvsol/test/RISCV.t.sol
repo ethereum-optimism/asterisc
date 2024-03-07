@@ -1218,6 +1218,29 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* J Type instructions */
+
+    function test_jal_succeeds() public {
+        uint32 imm = 0xbef054ae;
+        uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.step = state.step + 1;
+        uint64 offsetSignExtended = (imm & ((1 << 21) - 1)) - (imm & 1);
+        bool signBit = (1 << 20) & imm > 0;
+        if (signBit) {
+            offsetSignExtended |= ((1 << (64 - 21)) - 1) << 21;
+        }
+        expect.registers[5] = state.pc + 4;
+        expect.pc = uint64((uint128(offsetSignExtended) + state.pc) & ((1 << 64) - 1));
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -1344,6 +1367,17 @@ contract RISCV_Test is CommonTest {
         // insn   := [imm[31:12]]         | [rd]  | [opcode]
         // example:  00110010101010000001 | 01011 | 0110111
         insn = uint32((imm >> 12) & 0xFFFFF) << (7 + 5);
+        insn |= uint32(rd & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeJType(uint8 opcode, uint8 rd, uint32 imm) internal pure returns (uint32 insn) {
+        // insn   := [imm[20|10:1|11|19:12]] | [rd]  | [opcode]
+        // example:  00110010101010000001    | 00101 | 1101111
+        insn = uint32((imm >> 20) & 0x1) << (7 + 5 + 8 + 1 + 10);
+        insn |= uint32((imm >> 1) & 0x3ff) << (7 + 5 + 8 + 1);
+        insn |= uint32((imm >> 11) & 0x1) << (7 + 5 + 8);
+        insn |= uint32((imm >> 12) & 0xFF) << (7 + 5);
         insn |= uint32(rd & 0x1F) << 7;
         insn |= uint32(opcode & 0x7F);
     }
