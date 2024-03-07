@@ -1760,6 +1760,14 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(opcode & 0x7F);
     }
 
+    function encodeFunct7(uint8 funct5, uint8 aq, uint8 rl) internal pure returns (uint8 funct7) {
+        // funct7  := [funct5] | [aq] | [rl]
+        // example :  01100    | 0    | 0
+        funct7 = (funct5 & 0x1f) << 2;
+        funct7 |= (aq & 0x1) << 1;
+        funct7 |= rl & 0x1;
+    }
+
     function mask32Signed64(uint64 val) internal pure returns (uint64) {
         uint64 result = mask32Unsigned64(val);
         if ((1 << 31) & result > 0) {
