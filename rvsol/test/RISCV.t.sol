@@ -1174,6 +1174,50 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* U Type instructions */
+
+    function test_lui_succeeds() public {
+        uint32 imm = 0xd4638aaa;
+        uint32 insn = encodeUType(0x37, 2, imm); // lui x2, imm
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 immSignExtended = (imm >> 12) << 12;
+        bool signBit = (1 << 31) & imm > 0;
+        if (signBit) {
+            immSignExtended |= ((1 << 32) - 1) << 32;
+        }
+        expect.registers[2] = immSignExtended;
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_auipc_succeeds() public {
+        uint32 imm = 0xf00dcd79;
+        uint32 insn = encodeUType(0x17, 7, imm); // auipc x7, imm
+        uint64 pc = 0x9fbdc310; // 0x9fbdc319 fails
+        (State memory state, bytes memory proof) = constructRISCVState(pc, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 immSignExtended = (imm >> 12) << 12;
+        bool signBit = (1 << 31) & imm > 0;
+        if (signBit) {
+            immSignExtended |= ((1 << 32) - 1) << 32;
+        }
+        expect.registers[7] = uint64((uint128(immSignExtended) + pc) & ((1 << 64) - 1));
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -1254,7 +1298,7 @@ contract RISCV_Test is CommonTest {
         pure
         returns (uint32 insn)
     {
-        // insn   := [imm]        | [rs1] | [funct3] | [rd]  | [opcode]
+        // insn   := [imm[11:0]]  | [rs1] | [funct3] | [rd]  | [opcode]
         // example:  000000000111 | 00101 | 000      | 00110 | 0010011
         insn = uint32(imm & 0xFFF) << (7 + 5 + 3 + 5);
         insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
@@ -1284,15 +1328,23 @@ contract RISCV_Test is CommonTest {
         returns (uint32 insn)
     {
         // we lose information of lsb of imm, assuming always zero
-        // isn    := [imm[12]] | [imm[10:5]] | [rs2] | [rs1] | [funct3] | [imm[4:1]] | imm[11] | [opcode]
+        // insn   := [imm[12]] | [imm[10:5]] | [rs2] | [rs1] | [funct3] | [imm[4:1]] | imm[11] | [opcode]
         // example:  0         | 010101      | 01100 | 00100 | 000      | 0010       | 1       | 1100011
-        insn = uint32((imm >> 12) & 0x1) << (6 + 7 + 1 + 4 + 3 + 5 + 5);
+        insn = uint32((imm >> 12) & 0x1) << (7 + 1 + 4 + 3 + 5 + 5 + 6);
         insn |= uint32((imm >> 5) & 0x3f) << (7 + 1 + 4 + 3 + 5 + 5);
         insn |= uint32(rs2 & 0x1F) << (7 + 1 + 4 + 3 + 5);
         insn |= uint32(rs1 & 0x1F) << (7 + 1 + 4 + 3);
         insn |= uint32(funct3 & 0x7) << (7 + 1 + 4);
         insn |= uint32((imm >> 1) & 0xF) << (7 + 1);
         insn |= uint32((imm >> 11) & 0x1) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeUType(uint8 opcode, uint8 rd, uint32 imm) internal pure returns (uint32 insn) {
+        // insn   := [imm[31:12]]         | [rd]  | [opcode]
+        // example:  00110010101010000001 | 01011 | 0110111
+        insn = uint32((imm >> 12) & 0xFFFFF) << (7 + 5);
+        insn |= uint32(rd & 0x1F) << 7;
         insn |= uint32(opcode & 0x7F);
     }
 }
