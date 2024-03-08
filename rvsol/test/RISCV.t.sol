@@ -994,8 +994,6 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
-    // until here
-
     function test_lrd_succeeds() public {
         bytes32 value = hex"a0b1df92a49eec39";
         uint64 addr = 0xb86a394544c084ef;
