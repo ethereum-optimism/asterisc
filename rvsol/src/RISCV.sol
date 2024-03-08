@@ -1324,7 +1324,7 @@ contract RISCV {
                 // 0b010 == RV32A W variants
                 // 0b011 == RV64A D variants
                 let size := shl64(funct3, toU64(1))
-                if lt64(size, toU64(4)) {
+                if or(lt64(size, toU64(4)), gt64(size, toU64(8))) {
                     revertWithCode(0xbada70) // bad AMO size
                 }
                 let addr := getRegister(rs1)
