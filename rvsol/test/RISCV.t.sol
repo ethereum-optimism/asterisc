@@ -2270,6 +2270,16 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* Syscalls */
+
+    function test_preimage_read_succeeds() public {
+    
+    }
+
+    function test_preimage_write_succeeds() public {
+    
+    }
+
     /* Helper functions */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
