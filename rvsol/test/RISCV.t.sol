@@ -2488,6 +2488,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function uint256ToBytes32(uint256 val) internal pure returns (bytes32) {
+        // we cannot use direct casting using bytes32 because of endianess
         uint256 temp = 0;
         for (uint8 i = 0; i < 32; i++) {
             temp += uint256((val >> (8 * i)) & 0xFF) << (256 - 8 - 8 * i);
