@@ -8,6 +8,8 @@ import {CommonTest} from "./CommonTest.sol";
 // This import is for the VMStatus
 // import "@optimism/src/libraries/DisputeTypes.sol";
 
+import "forge-std/console.sol";
+
 contract RISCV_Test is CommonTest {
     /// @notice Stores the VM state.
     ///         Total state size: 32 + 32 + 8 * 2 + 1 * 2 + 8 * 3 + 32 * 8 = 362 bytes
@@ -994,280 +996,344 @@ contract RISCV_Test is CommonTest {
 
     // until here
 
-    // function test_lrd_succeeds() public {
-    //     bytes32 value = hex"a0b1df92a49eec39";
-    //     uint64 addr = 0xb86a394544c084ef;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x2, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 14, funct3, 7, 13, funct7); // lrd x14, x13, (x7)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[7] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_lrd_succeeds() public {
+        bytes32 value = hex"a0b1df92a49eec39";
+        uint64 addr = 0xb86a394544c084ef;
+        uint8 funct3 = 0x3;
+        uint8 funct7 = encodeFunct7(0x2, 0x0, 0x0);
+        uint8 size = uint8(1 << (funct3 & 0x3));
+        uint32 insn = encodeRType(0x2f, 14, funct3, 7, 13, funct7); // lrd x14, x13, (x7)
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
+        state.registers[7] = addr;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[14] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[14] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[7] = state.registers[7];
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.loadReservation = addr;
+        expect.registers[14] = 0;
+        for (uint8 i = 0; i < size; i++) {
+            expect.registers[14] += uint8(value[i]) * uint64(1 << 8 * i);
+        }
+        expect.registers[14] = expect.registers[14];
+        expect.registers[7] = state.registers[7];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_scd_succeeds() public {
-    //     bytes32 value = hex"3186582d2a2adf7d";
-    //     uint64 addr = 0x7d118f395f2decdc;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x3, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 4, funct3, 13, 24, funct7); // scd x4, x13, x24
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[13] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_scd_succeeds() public {
+        uint64 addr = 0x7d118f395f2decd0; // 0x7d118f395f2decdc does not work
+        uint8 funct3 = 0x3;
+        uint8 funct7 = encodeFunct7(0x3, 0x0, 0x0);
+        uint8 size = uint8(1 << (funct3 & 0x3));
+        uint32 insn = encodeRType(0x2f, 4, funct3, 13, 24, funct7); // scd x4, x13, x24
+        (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"3186582d2a2adf7d", size);
+        // note. asterisc memory is zero-initalized.
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
+        state.loadReservation = addr;
+        state.registers[13] = addr;
+        state.registers[24] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[4] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[4] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[13] = state.registers[13];
+        State memory expect;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, rs2ValueBytes32);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[4] = 0; // sc succeeded
+        expect.registers[13] = state.registers[13];
+        expect.registers[24] = state.registers[24];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amoswapd_succeeds() public {
-    //     bytes32 value = hex"c30495901566e553";
-    //     uint64 addr = 0x15f4716cd3aa7306;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x1, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 23, funct3, 30, 3, funct7); // amoswapd x23, x3, (x30)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[30] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amoswapd_succeeds() public {
+        uint64 addr = 0x15f4716cd3aa7306;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x1, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 23, funct3, 30, 3, funct7); // amoswapd x23, x3, (x30)
+        }
+        (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"c30495901566e553", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"ee2a2e31e99971ad", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[30] = addr;
+        state.registers[3] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[23] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[23] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[30] = state.registers[30];
+        State memory expect;
+        // check memory stores value of rs2
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, rs2ValueBytes32);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[23] = memValueU64;
+        expect.registers[30] = state.registers[30];
+        expect.registers[3] = state.registers[3];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amoaddd_succeeds() public {
-    //     bytes32 value = hex"a0821b98f6c0d237";
-    //     uint64 addr = 0xeae426a36ff2bb67;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x0, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 14, funct3, 8, 28, funct7); // amoaddd x14, x28, (x8)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[8] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amoaddd_succeeds() public {
+        uint64 addr = 0xeae426a36ff2bb67;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x0, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 14, funct3, 8, 28, funct7); // amoaddd x14, x28, (x8)
+        }
+        (, uint64 rs2ValueU64) = truncate(hex"a0821b98f6c0d237", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"f47daefa285404dc", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[8] = addr;
+        state.registers[28] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[14] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[14] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[8] = state.registers[8];
+        State memory expect;
+        // check memory stores value of M[x[rs1]] + x[rs2]
+        bytes32 result = uint256ToBytes32(uint256(uint128(int128(int64(rs2ValueU64)) + int128(int64(memValueU64)))));
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[14] = memValueU64;
+        expect.registers[8] = state.registers[8];
+        expect.registers[28] = state.registers[28];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amoxord_succeeds() public {
-    //     bytes32 value = hex"b06c4508fa00a643";
-    //     uint64 addr = 0x2d5ba68f57f1c564;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x4, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 9, funct3, 16, 19, funct7); // amoxord x9, x19, (x16)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[16] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amoxord_succeeds() public {
+        uint64 addr = 0x2d5ba68f57f1c564;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x4, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 9, funct3, 16, 19, funct7); // amoxord x9, x19, (x16)
+        }
+        (, uint64 rs2ValueU64) = truncate(hex"cee6d3e92e42e68d", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"a95b29ec1d9bc7d6", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[16] = addr;
+        state.registers[19] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[9] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[9] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[16] = state.registers[16];
+        State memory expect;
+        // check memory stores value of M[x[rs1]] ^ x[rs2]
+        bytes32 result = uint256ToBytes32(uint256(rs2ValueU64 ^ memValueU64));
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[9] = memValueU64;
+        expect.registers[16] = state.registers[16];
+        expect.registers[19] = state.registers[19];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amoandd_succeeds() public {
-    //     bytes32 value = hex"ad5ec3eef5264cb6";
-    //     uint64 addr = 0xd273284a99c807e;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0xc, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 9, funct3, 17, 13, funct7); // amoandd x9, x13, (x17)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[17] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amoandd_succeeds() public {
+        uint64 addr = 0xd273284a99c8070; // 0xd273284a99c807e does not work
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0xc, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 9, funct3, 17, 13, funct7); // amoandd x9, x13, (x17)
+        }
+        (, uint64 rs2ValueU64) = truncate(hex"ad5ec3eef5264cb6", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"50bd66fb27a4ec4c", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[17] = addr;
+        state.registers[13] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[9] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[9] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[17] = state.registers[17];
+        State memory expect;
+        // check memory stores value of M[x[rs1]] & x[rs2]
+        bytes32 result = uint256ToBytes32(uint256(rs2ValueU64 & memValueU64));
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[9] = memValueU64;
+        expect.registers[17] = state.registers[17];
+        expect.registers[13] = state.registers[13];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amoord_succeeds() public {
-    //     bytes32 value = hex"7acf784b9e7764d3";
-    //     uint64 addr = 0xa0d7a5ea65b35666;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x8, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 24, funct3, 5, 3, funct7); // amoord x24, x3, (x5)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[5] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amoord_succeeds() public {
+        uint64 addr = 0xa0d7a5ea65b35666;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x8, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 24, funct3, 5, 3, funct7); // amoord x24, x3, (x5)
+        }
+        (, uint64 rs2ValueU64) = truncate(hex"7acf784b9e7764d3", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"bcb6e898d4635f81", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[5] = addr;
+        state.registers[3] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[24] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[24] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[5] = state.registers[5];
+        State memory expect;
+        // check memory stores value of M[x[rs1]] | x[rs2]
+        bytes32 result = uint256ToBytes32(uint256(rs2ValueU64 | memValueU64));
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[24] = memValueU64;
+        expect.registers[5] = state.registers[5];
+        expect.registers[3] = state.registers[3];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amomind_succeeds() public {
-    //     bytes32 value = hex"67451a124eddc883";
-    //     uint64 addr = 0x1f817b9eab194b3;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x10, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 23, funct3, 22, 26, funct7); // amomind x23, x26, (x22)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[22] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amomind_succeeds() public {
+        uint64 addr = 0x1f817b9eab194b3;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x10, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 23, funct3, 22, 26, funct7); // amomind x23, x26, (x22)
+        }
+        (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"7516bf1e13664902", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"67451a124eddc883", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[22] = addr;
+        state.registers[26] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[23] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[23] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[22] = state.registers[22];
+        State memory expect;
+        // check memory stores value of min(M[x[rs1]], x[rs2])
+        bytes32 result = int64(rs2ValueU64) < int64(memValueU64) ? rs2ValueBytes32 : memValueBytes32;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[23] = memValueU64;
+        expect.registers[22] = state.registers[22];
+        expect.registers[26] = state.registers[26];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amomaxd_succeeds() public {
-    //     bytes32 value = hex"197e18ac13e5ccab";
-    //     uint64 addr = 0xf41e050aeffd9dba;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x14, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 11, funct3, 14, 5, funct7); // amomaxd x11, x5, (x14)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[14] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amomaxd_succeeds() public {
+        uint64 addr = 0xf41e050aeffd9db0; // 0xf41e050aeffd9dba does not work
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x14, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 11, funct3, 14, 5, funct7); // amomaxd x11, x5, (x14)
+        }
+        (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"492c4fe3bf27bf82", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"95066b4c26a3e36c", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[14] = addr;
+        state.registers[5] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[11] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[11] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[14] = state.registers[14];
+        State memory expect;
+        // check memory stores value of max(M[x[rs1]], x[rs2])
+        bytes32 result = int64(rs2ValueU64) > int64(memValueU64) ? rs2ValueBytes32 : memValueBytes32;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[11] = memValueU64;
+        expect.registers[14] = state.registers[14];
+        expect.registers[5] = state.registers[5];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amominud_succeeds() public {
-    //     bytes32 value = hex"18b0d1bf989c1b15";
-    //     uint64 addr = 0xe094be571f4baca6;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x18, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 31, funct3, 27, 30, funct7); // amominud x31, x30, (x27)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[27] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amominud_succeeds() public {
+        uint64 addr = 0xe094be571f4baca6;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x18, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 31, funct3, 27, 30, funct7); // amominud x31, x30, (x27)
+        }
+        (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"18b0d1bf989c1b15", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"7ef1928fb292c2dd", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[27] = addr;
+        state.registers[30] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[31] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[31] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[27] = state.registers[27];
+        State memory expect;
+        // check memory stores value of min(unsigned M[x[rs1]], unsigned x[rs2])
+        bytes32 result = rs2ValueU64 < memValueU64 ? rs2ValueBytes32 : memValueBytes32;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[31] = memValueU64;
+        expect.registers[27] = state.registers[27];
+        expect.registers[30] = state.registers[30];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
-    // function test_amomaxud_succeeds() public {
-    //     bytes32 value = hex"d679169ee3efcd97";
-    //     uint64 addr = 0x2bcfe03b376a17e2;
-    //     uint8 funct3 = 0x3;
-    //     uint8 funct7 = encodeFunct7(0x1c, 0x0, 0x0);
-    //     uint8 size = uint8(1 << (funct3 & 0x3));
-    //     uint32 insn = encodeRType(0x2f, 26, funct3, 27, 6, funct7); // amomaxud x26, x6, (x27)
-    //     (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
-    //     state.registers[27] = addr;
-    //     bytes memory encodedState = encodeState(state);
+    function test_amomaxud_succeeds() public {
+        uint64 addr = 0x2bcfe03b376a17e2;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x1c, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 26, funct3, 27, 6, funct7); // amomaxud x26, x6, (x27)
+        }
+        (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"d679169ee3efcd97", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"5004c91ce741d398", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[27] = addr;
+        state.registers[6] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
 
-    //     State memory expect;
-    //     expect.memRoot = state.memRoot;
-    //     expect.pc = state.pc + 4;
-    //     expect.step = state.step + 1;
-    //     expect.registers[26] = 0;
-    //     for (uint8 i = 0; i < size; i++) {
-    //         expect.registers[26] += uint8(value[i]) * uint64(1 << 8 * i);
-    //     }
-    //     expect.registers[27] = state.registers[27];
+        State memory expect;
+        // check memory stores value of max(unsigned M[x[rs1]], unsigned x[rs2])
+        bytes32 result = rs2ValueU64 > memValueU64 ? rs2ValueBytes32 : memValueBytes32;
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[26] = memValueU64;
+        expect.registers[27] = state.registers[27];
+        expect.registers[6] = state.registers[6];
 
-    //     bytes32 postState = riscv.step(encodedState, proof, 0);
-    //     assertEq(postState, outputState(expect), "unexpected post state");
-    // }
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
 
     /* I Type instructions */
 
