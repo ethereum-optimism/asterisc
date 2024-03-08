@@ -1311,7 +1311,7 @@ contract RISCV {
                     setRegister(rd, rdValue)
                     setPC(add64(_pc, toU64(4)))
                 }
-            } case 0x2F { // 010_1111: RV32A and RV32A atomic operations extension
+            } case 0x2F { // 010_1111: RV{32,64}A and RV{32,64}A atomic operations extension
                 // acquire and release bits:
                 //   aq := and64(shr64(toU64(1), funct7), toU64(1))
                 //   rl := and64(funct7, toU64(1))
