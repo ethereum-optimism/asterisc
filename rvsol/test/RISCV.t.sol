@@ -372,7 +372,7 @@ contract RISCV_Test is CommonTest {
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
         int256 temp = int256(int64(state.registers[26])) * int256(int64(state.registers[22]));
-        expect.registers[24] = uint64(uint256(temp & 0xFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF));
+        expect.registers[24] = uint64(uint256(temp & ((1 << 64) - 1)));
         expect.registers[26] = state.registers[26];
         expect.registers[22] = state.registers[22];
 
