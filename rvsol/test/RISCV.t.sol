@@ -1619,6 +1619,8 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* Helper functions */
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -1778,5 +1780,16 @@ contract RISCV_Test is CommonTest {
 
     function mask32Unsigned64(uint64 val) internal pure returns (uint64) {
         return uint64(val & ((1 << 32) - 1));
+    }
+
+    function truncate(bytes32 value, uint8 size) internal pure returns (bytes32 valueBytes32, uint64 valueU64) {
+        for (uint8 i = 0; i < size; i++) {
+            valueU64 += uint8(value[i]) * uint64(1 << 8 * i);
+        }
+        uint256 temp = 0;
+        for (uint8 i = 0; i < size; i++) {
+            temp += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
+        }
+        valueBytes32 = bytes32(temp);
     }
 }
