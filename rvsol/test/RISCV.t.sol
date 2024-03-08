@@ -648,10 +648,7 @@ contract RISCV_Test is CommonTest {
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
         expect.loadReservation = addr;
-        expect.registers[24] = 0;
-        for (uint8 i = 0; i < size; i++) {
-            expect.registers[24] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[24] = bytes32ToUint64(value, size);
         expect.registers[24] = mask32Signed64(expect.registers[24]);
         expect.registers[28] = state.registers[28];
 
@@ -1010,10 +1007,7 @@ contract RISCV_Test is CommonTest {
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
         expect.loadReservation = addr;
-        expect.registers[14] = 0;
-        for (uint8 i = 0; i < size; i++) {
-            expect.registers[14] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[14] = bytes32ToUint64(value, size);
         expect.registers[14] = expect.registers[14];
         expect.registers[7] = state.registers[7];
 
@@ -1688,10 +1682,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        expect.registers[17] = 0;
-        for (uint8 i = 0; i < 2; i++) {
-            expect.registers[17] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[17] = bytes32ToUint64(value, 2);
         bool signBit = (1 << 15) & expect.registers[17] > 0;
         if (signBit) {
             uint64 size = uint64(1 << (funct3 & 0x3)) * 8;
@@ -1718,10 +1709,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        expect.registers[27] = 0;
-        for (uint8 i = 0; i < 4; i++) {
-            expect.registers[27] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[27] = bytes32ToUint64(value, 4);
         bool signBit = (1 << 31) & expect.registers[27] > 0;
         if (signBit) {
             uint64 size = uint64(1 << (funct3 & 0x3)) * 8;
@@ -1748,10 +1736,7 @@ contract RISCV_Test is CommonTest {
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
         // no need to sign extend
-        expect.registers[3] = 0;
-        for (uint8 i = 0; i < 8; i++) {
-            expect.registers[3] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[3] = bytes32ToUint64(value, 8);
         expect.registers[15] = state.registers[15];
 
         bytes32 postState = riscv.step(encodedState, proof, 0);
@@ -1791,9 +1776,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        for (uint8 i = 0; i < 2; i++) {
-            expect.registers[21] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[21] = bytes32ToUint64(value, 2);
         expect.registers[4] = state.registers[4];
 
         bytes32 postState = riscv.step(encodedState, proof, 0);
@@ -1813,10 +1796,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        expect.registers[3] = 0;
-        for (uint8 i = 0; i < 4; i++) {
-            expect.registers[3] += uint8(value[i]) * uint64(1 << 8 * i);
-        }
+        expect.registers[3] = bytes32ToUint64(value, 4);
         expect.registers[23] = state.registers[23];
 
         bytes32 postState = riscv.step(encodedState, proof, 0);
@@ -1937,17 +1917,9 @@ contract RISCV_Test is CommonTest {
         uint16 imm = 0xe64;
         uint64 rs1Value = 0x6b856cf8;
         uint8 funct3 = 0;
-        uint64 size = uint64(1 << (funct3 & 0x3));
+        uint8 size = uint8(1 << (funct3 & 0x3));
         bytes32 value = hex"ce9a61c0068bd030";
-        uint64 rs2Value = 0;
-        for (uint8 i = 0; i < 8; i++) {
-            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
-        }
-        uint256 targetValue = 0;
-        for (uint8 i = 0; i < size; i++) {
-            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
-        }
-        bytes32 target = bytes32(targetValue);
+        (bytes32 target, uint64 rs2Value) = truncate(value, size);
         bool signBit = (1 << 11) & imm > 0;
         uint64 addr = rs1Value + imm;
         if (signBit) {
@@ -1975,17 +1947,9 @@ contract RISCV_Test is CommonTest {
         uint16 imm = 0xb51;
         uint64 rs1Value = 0x7ce31e7a;
         uint8 funct3 = 1;
-        uint64 size = uint64(1 << (funct3 & 0x3));
+        uint8 size = uint8(1 << (funct3 & 0x3));
         bytes32 value = hex"4f045df3ef2c2817";
-        uint64 rs2Value = 0;
-        for (uint8 i = 0; i < 8; i++) {
-            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
-        }
-        uint256 targetValue = 0;
-        for (uint8 i = 0; i < size; i++) {
-            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
-        }
-        bytes32 target = bytes32(targetValue);
+        (bytes32 target, uint64 rs2Value) = truncate(value, size);
         bool signBit = (1 << 11) & imm > 0;
         uint64 addr = rs1Value + imm;
         if (signBit) {
@@ -2013,17 +1977,9 @@ contract RISCV_Test is CommonTest {
         uint16 imm = 0xc04;
         uint64 rs1Value = 0xcb3053d5;
         uint8 funct3 = 2;
-        uint64 size = uint64(1 << (funct3 & 0x3));
+        uint8 size = uint8(1 << (funct3 & 0x3));
         bytes32 value = hex"43c10f060b84afdf";
-        uint64 rs2Value = 0;
-        for (uint8 i = 0; i < 8; i++) {
-            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
-        }
-        uint256 targetValue = 0;
-        for (uint8 i = 0; i < size; i++) {
-            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
-        }
-        bytes32 target = bytes32(targetValue);
+        (bytes32 target, uint64 rs2Value) = truncate(value, size);
         bool signBit = (1 << 11) & imm > 0;
         uint64 addr = rs1Value + imm;
         if (signBit) {
@@ -2051,17 +2007,9 @@ contract RISCV_Test is CommonTest {
         uint16 imm = 0x431;
         uint64 rs1Value = 0x9ab94a99;
         uint8 funct3 = 3;
-        uint64 size = uint64(1 << (funct3 & 0x3));
+        uint8 size = uint8(1 << (funct3 & 0x3));
         bytes32 value = hex"5298cefada934bc7";
-        uint64 rs2Value = 0;
-        for (uint8 i = 0; i < 8; i++) {
-            rs2Value += uint8(value[i]) * uint64(1 << 8 * i);
-        }
-        uint256 targetValue = 0;
-        for (uint8 i = 0; i < size; i++) {
-            targetValue += uint8(value[i]) * uint256(1 << (256 - 8 - 8 * i));
-        }
-        bytes32 target = bytes32(targetValue);
+        (bytes32 target, uint64 rs2Value) = truncate(value, size);
         bool signBit = (1 << 11) & imm > 0;
         uint64 addr = rs1Value + imm;
         if (signBit) {
@@ -2495,13 +2443,17 @@ contract RISCV_Test is CommonTest {
     }
 
     function truncate(bytes32 val, uint8 size) internal pure returns (bytes32 valueBytes32, uint64 valueU64) {
-        for (uint8 i = 0; i < size; i++) {
-            valueU64 += uint8(val[i]) * uint64(1 << 8 * i);
-        }
+        valueU64 = bytes32ToUint64(val, size);
         uint256 temp = 0;
         for (uint8 i = 0; i < size; i++) {
             temp += uint8(val[i]) * uint256(1 << (256 - 8 - 8 * i));
         }
         valueBytes32 = bytes32(temp);
+    }
+
+    function bytes32ToUint64(bytes32 val, uint8 size) internal pure returns (uint64 result) {
+        for (uint8 i = 0; i < size; i++) {
+            result += uint8(val[i]) * uint64(1 << 8 * i);
+        }
     }
 }
