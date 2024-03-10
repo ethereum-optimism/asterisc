@@ -661,7 +661,7 @@ contract RISCV_Test is CommonTest {
         uint8 funct3 = 0x2;
         uint8 funct7 = encodeFunct7(0x3, 0x0, 0x0);
         uint8 size = uint8(1 << (funct3 & 0x3));
-        uint32 insn = encodeRType(0x2f, 23, funct3, 27, 30, funct7); // scw x23, x27, x30
+        uint32 insn = encodeRType(0x2f, 23, funct3, 27, 30, funct7); // scw x23, x30, (x27)
         (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"3ee07aaba5c04760", size);
         // note. asterisc memory is zero-initalized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
@@ -1020,7 +1020,7 @@ contract RISCV_Test is CommonTest {
         uint8 funct3 = 0x3;
         uint8 funct7 = encodeFunct7(0x3, 0x0, 0x0);
         uint8 size = uint8(1 << (funct3 & 0x3));
-        uint32 insn = encodeRType(0x2f, 4, funct3, 13, 24, funct7); // scd x4, x13, x24
+        uint32 insn = encodeRType(0x2f, 4, funct3, 13, 24, funct7); // scd x4, x24, (x13)
         (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"3186582d2a2adf7d", size);
         // note. asterisc memory is zero-initalized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
