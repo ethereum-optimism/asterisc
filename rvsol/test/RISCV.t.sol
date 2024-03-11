@@ -1801,6 +1801,114 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    function test_csrrw_succeeds() public {
+        uint16 imm = 0x29a;
+        uint32 insn = encodeIType(0x73, 13, 1, 2, imm); // csrrw x13, 0x29a, x2
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[2] = 0x4797;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[13] = 0; // CSR is not supported
+        expect.registers[2] = state.registers[2];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_csrrs_succeeds() public {
+        uint16 imm = 0x7cc;
+        uint32 insn = encodeIType(0x73, 7, 2, 10, imm); // csrrs x7, 0x7cc, x10
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[10] = 0x8cdc;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[7] = 0; // CSR is not supported
+        expect.registers[10] = state.registers[10];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_csrrc_succeeds() public {
+        uint16 imm = 0x567;
+        uint32 insn = encodeIType(0x73, 1, 3, 25, imm); // csrrc x1, 0x567, x25
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[25] = 0xd088;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[1] = 0; // CSR is not supported
+        expect.registers[25] = state.registers[25];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_csrrwi_succeeds() public {
+        uint16 imm = 0x3d;
+        uint32 insn = encodeIType(0x73, 31, 5, 29, imm); // csrrwi x31, 0x3d, x29
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[29] = 0x398d;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[31] = 0; // CSR is not supported
+        expect.registers[29] = state.registers[29];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_csrrsi_succeeds() public {
+        uint16 imm = 0x1;
+        uint32 insn = encodeIType(0x73, 17, 6, 22, imm); // csrrsi x17, 0x1, x22
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[22] = 0x856a;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[17] = 0; // CSR is not supported
+        expect.registers[22] = state.registers[22];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_csrrci_succeeds() public {
+        uint16 imm = 0x2ca;
+        uint32 insn = encodeIType(0x73, 23, 7, 18, imm); // csrrci x23, 0x2ca, x18
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[18] = 0xbeb3;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[23] = 0; // CSR is not supported
+        expect.registers[18] = state.registers[18];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
