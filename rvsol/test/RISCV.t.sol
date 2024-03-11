@@ -2245,6 +2245,29 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* J Type instructions */
+
+    function test_jal_succeeds() public {
+        uint32 imm = 0xbef054ae;
+        uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.step = state.step + 1;
+        uint64 offsetSignExtended = (imm & ((1 << 21) - 1)) - (imm & 1);
+        bool signBit = (1 << 20) & imm > 0;
+        if (signBit) {
+            offsetSignExtended |= ((1 << (64 - 21)) - 1) << 21;
+        }
+        expect.registers[5] = state.pc + 4;
+        expect.pc = uint64((uint128(offsetSignExtended) + state.pc) & ((1 << 64) - 1));
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
