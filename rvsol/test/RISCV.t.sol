@@ -31,7 +31,7 @@ contract RISCV_Test is CommonTest {
 
     function setUp() public virtual override {
         super.setUp();
-        oracle = new PreimageOracle(0, 0, 0);
+        oracle = new PreimageOracle(0, 0);
         riscv = new RISCV(oracle);
         vm.store(address(riscv), 0x0, bytes32(abi.encode(address(oracle))));
         vm.label(address(oracle), "PreimageOracle");

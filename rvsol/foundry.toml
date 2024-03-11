@@ -1,6 +1,7 @@
 [profile.default]
 src = 'src'
 out = 'out'
+script = 'scripts'
 libs = ['lib']
 optimizer = true
 optimizer_runs = 999999
@@ -13,10 +14,18 @@ remappings = [
   '@lib-keccak/=lib/optimism/packages/contracts-bedrock/lib/lib-keccak/contracts/lib',
   'safe-contracts/=lib/optimism/packages/contracts-bedrock/lib/safe-contracts/contracts',
   'kontrol-cheatcodes/=lib/optimism/packages/contracts-bedrock/lib/kontrol-cheatcodes/src',
-  'solady/=lib/optimism/packages/contracts-bedrock/lib/solady/src',  
+  'solady/=lib/optimism/packages/contracts-bedrock/lib/solady/src',
+  'src/dispute=lib/optimism/packages/contracts-bedrock/src/dispute',
+  'src/libraries=lib/optimism/packages/contracts-bedrock/src/libraries',
   
   'forge-std/=lib/forge-std/src',
   'ds-test/=lib/forge-std/lib/ds-test/src',
+]
+
+ffi = true
+fs_permissions = [
+  { access='read-write', path='./deployments' },
+  { access='read', path='./' }
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
