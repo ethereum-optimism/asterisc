@@ -2268,6 +2268,100 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* Syscalls */
+
+    function test_preimage_read_succeeds() public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+        uint64 pc = 0x1337;
+        bytes32 value = hex"576b9d12b141a35a";
+        uint64 addr = 0xd20ec023b82c68b2;
+        (bytes32 memRoot, bytes memory proof) = ffi.getAsteriscMemoryProof(pc, insn, addr, value);
+
+        uint64 size = 8;
+        uint64[32] memory registers;
+        registers[17] = 63; // syscall number of read
+        registers[10] = 5; // A0 = fd: preimage read
+        registers[11] = addr; // A1 = *buf addr
+        registers[12] = size; // A2 = count
+
+        State memory state = State({
+            memRoot: memRoot,
+            preimageKey: bytes32(uint256(1) << 248 | 0x01), // local key
+            preimageOffset: 8, // start reading past the pre-image length prefix
+            pc: pc,
+            exitCode: 0,
+            exited: false,
+            step: 1,
+            heap: 0,
+            loadReservation: 0,
+            registers: registers
+        });
+        bytes memory encodedState = encodeState(state);
+
+        // prime the pre-image oracle
+        bytes32 word = bytes32(uint256(0xdeadbeefcafebebe) << (256 - 32 * 2));
+        uint8 partOffset = 8;
+        oracle.loadLocalData(uint256(state.preimageKey), 0, word, size, partOffset);
+
+        State memory expect = state;
+        expect.preimageOffset += size;
+        expect.pc += 4;
+        expect.step += 1;
+        expect.registers[10] = size; // return
+        expect.registers[11] = 0; // error code
+        // recompute merkle root of written pre-image
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(pc, insn, addr, word);
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_preimage_write_succeeds() public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+        uint64 pc = 0x1337;
+        bytes32 value = hex"000056deb0bd0018";
+        uint64 addr = 0xe3e356dce663a260;
+        (bytes32 memRoot, bytes memory proof) = ffi.getAsteriscMemoryProof(pc, insn, addr, value);
+
+        uint64 size = 7;
+        uint64[32] memory registers;
+        registers[17] = 64; // syscall number of write
+        registers[10] = 6; // A0 = fd: preimage write
+        registers[11] = addr; // A1 = *buf addr
+        registers[12] = size; // A2 = count
+
+        State memory state = State({
+            memRoot: memRoot,
+            preimageKey: bytes32(0),
+            preimageOffset: 0x7331,
+            pc: pc,
+            exitCode: 0,
+            exited: false,
+            step: 1,
+            heap: 0,
+            loadReservation: 0,
+            registers: registers
+        });
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect = state;
+        expect.preimageOffset = 0; // preimage write resets offset
+        expect.pc += 4;
+        expect.step += 1;
+        // vm memory layout: [LSB -> MSB]
+        // [0x00, 0x00, 0x56, 0xde, 0xb0, 0xbd, 0x00, 0x18]
+        // pre-image request size = 7 bytes
+        // preimage key: [right padding with null] + [0x00, 0x00, 0x56, 0xde, 0xb0, 0xbd, 0x00]
+        expect.preimageKey = hex"00000000000000000000000000000000000000000000000000000056deb0bd00";
+        expect.registers[10] = size; // return
+        expect.registers[11] = 0; // error code
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
