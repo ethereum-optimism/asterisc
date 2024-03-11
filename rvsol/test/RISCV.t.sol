@@ -3,8 +3,12 @@ pragma solidity 0.8.15;
 import {Test} from "forge-std/Test.sol";
 import {RISCV} from "src/RISCV.sol";
 import {PreimageOracle} from "@optimism/src/cannon/PreimageOracle.sol";
+import {CommonTest} from "./CommonTest.sol";
+// FIXME: somehow this import gives a multiple declaration error
+// This import is for the VMStatus
+// import "@optimism/src/libraries/DisputeTypes.sol";
 
-contract RISCV_Test is Test {
+contract RISCV_Test is CommonTest {
     /// @notice Stores the VM state.
     ///         Total state size: 32 + 32 + 8 * 2 + 1 * 2 + 8 * 3 + 32 * 8 = 362 bytes
     ///         Note that struct is not used for step execution and used only for testing
@@ -25,7 +29,8 @@ contract RISCV_Test is Test {
     RISCV internal riscv;
     PreimageOracle internal oracle;
 
-    function setUp() public {
+    function setUp() public virtual override {
+        super.setUp();
         oracle = new PreimageOracle(0, 0, 0);
         riscv = new RISCV(oracle);
         vm.store(address(riscv), 0x0, bytes32(abi.encode(address(oracle))));
@@ -55,6 +60,25 @@ contract RISCV_Test is Test {
         assertTrue(postState != bytes32(0));
     }
 
+    function test_add_succeeds() public {
+        uint32 insn = encodeRType(0x33, 1, 0, 2, 3, 0); // add x1, x2, x3
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[2] = 0x3030;
+        state.registers[3] = 0x3131;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[1] = state.registers[2] + state.registers[3];
+        expect.registers[2] = state.registers[2];
+        expect.registers[3] = state.registers[3];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -73,5 +97,60 @@ contract RISCV_Test is Test {
             registers
         );
         return stateData;
+    }
+
+    /// @dev RISCV VM status codes:
+    ///      0. Exited with success (Valid)
+    ///      1. Exited with success (Invalid)
+    ///      2. Exited with failure (Panic)
+    ///      3. Unfinished
+    // TODO: import DisputeTypes.sol. For some reason, import is not working
+    function vmStatus(State memory state) internal pure returns (uint8 out_) {
+        if (!state.exited) {
+            return 3; // VMStatuses.UNFINISHED
+        } else if (state.exitCode == 0) {
+            return 0; // VMStatuses.VALID
+        } else if (state.exitCode == 1) {
+            return 1; // VMStatuses.INVALID
+        } else {
+            return 2; // VMStatuses.PANIC
+        }
+    }
+
+    function outputState(State memory state) internal pure returns (bytes32 out_) {
+        bytes memory enc = encodeState(state);
+        uint8 status = vmStatus(state);
+        assembly {
+            out_ := keccak256(add(enc, 0x20), 362)
+            out_ := or(and(not(shl(248, 0xFF)), out_), shl(248, status))
+        }
+    }
+
+    function constructRISCVState(uint64 pc, uint32 insn, uint64 addr, bytes32 val)
+        internal
+        returns (State memory state, bytes memory proof)
+    {
+        (state.memRoot, proof) = ffi.getAsteriscMemoryProof(pc, insn, addr, val);
+        state.pc = pc;
+    }
+
+    function constructRISCVState(uint64 pc, uint32 insn) internal returns (State memory state, bytes memory proof) {
+        (state.memRoot, proof) = ffi.getAsteriscMemoryProof(pc, insn);
+        state.pc = pc;
+    }
+
+    function encodeRType(uint8 opcode, uint8 rd, uint8 funct3, uint8 rs1, uint8 rs2, uint8 funct7)
+        internal
+        pure
+        returns (uint32 insn)
+    {
+        // insn := [funct7] | [rs2] | [rs1] | [funct3] | [rd]  | [opcode]
+        // example: 0000000 | 00011 | 00010 | 000      | 00001 | 0110011
+        insn = uint32(funct7 & 0x7F) << (7 + 5 + 3 + 5 + 5);
+        insn |= uint32(rs2 & 0x1F) << (7 + 5 + 3 + 5);
+        insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
+        insn |= uint32(funct3 & 0x7) << (7 + 5);
+        insn |= uint32(rd & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
     }
 }
