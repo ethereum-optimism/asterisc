@@ -60,20 +60,301 @@ contract RISCV_Test is CommonTest {
         assertTrue(postState != bytes32(0));
     }
 
+    /* R Type instructions */
+
     function test_add_succeeds() public {
-        uint32 insn = encodeRType(0x33, 1, 0, 2, 3, 0); // add x1, x2, x3
+        uint32 insn = encodeRType(0x33, 18, 0, 5, 14, 0); // add x18, x5, x14
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
-        state.registers[2] = 0x3030;
-        state.registers[3] = 0x3131;
+        state.registers[5] = 0xe2f9;
+        state.registers[14] = 0x6c13;
         bytes memory encodedState = encodeState(state);
 
         State memory expect;
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        expect.registers[1] = state.registers[2] + state.registers[3];
+        expect.registers[18] = state.registers[5] + state.registers[14];
+        expect.registers[5] = state.registers[5];
+        expect.registers[14] = state.registers[14];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sub_succeeds() public {
+        uint32 insn = encodeRType(0x33, 8, 0, 16, 18, 32); // sub x8, x16, x18
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[16] = 0xe0ba;
+        state.registers[18] = 0xda71;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[8] = state.registers[16] - state.registers[18];
+        expect.registers[16] = state.registers[16];
+        expect.registers[18] = state.registers[18];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sll_succeeds() public {
+        uint32 insn = encodeRType(0x33, 12, 1, 22, 26, 0); // sll x12, x22, x26
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[22] = 0x576a;
+        state.registers[26] = 0x3;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[12] = state.registers[22] << state.registers[26];
+        expect.registers[22] = state.registers[22];
+        expect.registers[26] = state.registers[26];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_slt_succeeds() public {
+        uint32 insn = encodeRType(0x33, 13, 2, 1, 23, 0); // slt x13, x1, x23
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[1] = 0xf17a;
+        state.registers[23] = 0x2a22;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[13] = state.registers[1] < state.registers[23] ? 1 : 0;
+        expect.registers[1] = state.registers[1];
+        expect.registers[23] = state.registers[23];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sltu_succeeds() public {
+        uint32 insn = encodeRType(0x33, 2, 3, 14, 16, 0); // sltu x2, x14, x16
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[14] = 0x9cb6;
+        state.registers[16] = 0x79e2;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[2] = state.registers[14] < state.registers[16] ? 1 : 0;
+        expect.registers[14] = state.registers[14];
+        expect.registers[16] = state.registers[16];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_xor_succeeds() public {
+        uint32 insn = encodeRType(0x33, 29, 4, 17, 16, 0); // xor x29, x17, x16
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[17] = 0xb2f2;
+        state.registers[16] = 0xb5b7;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[29] = state.registers[17] ^ state.registers[16];
+        expect.registers[17] = state.registers[17];
+        expect.registers[16] = state.registers[16];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_srl_succeeds() public {
+        uint32 insn = encodeRType(0x33, 30, 5, 15, 26, 0); // srl x30, x15, x26
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[15] = 0x813d;
+        state.registers[26] = 0x7;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[30] = state.registers[15] >> state.registers[26];
+        expect.registers[15] = state.registers[15];
+        expect.registers[26] = state.registers[26];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sra_succeeds() public {
+        uint32 insn = encodeRType(0x33, 14, 5, 23, 2, 32); // sra x14, x23, x2
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        // intentionally set MSB to 1 to check sign preservation
+        state.registers[23] = 0xFF12_3412_3412_FFFF;
+        state.registers[2] = 0x8;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[14] = state.registers[23] >> state.registers[2];
+        bool signBit = (1 << 63) & state.registers[23] > 0;
+        if (signBit) {
+            uint64 signExtension = uint64(((1 << state.registers[2]) - 1) << (64 - state.registers[2]));
+            expect.registers[14] |= signExtension;
+        }
+        expect.registers[23] = state.registers[23];
         expect.registers[2] = state.registers[2];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_or_succeeds() public {
+        uint32 insn = encodeRType(0x33, 26, 6, 30, 18, 0); // or x26, x30, x18
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[30] = 0x3a8b;
+        state.registers[18] = 0xdcff;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[26] = state.registers[30] | state.registers[18];
+        expect.registers[30] = state.registers[30];
+        expect.registers[18] = state.registers[18];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_and_succeeds() public {
+        uint32 insn = encodeRType(0x33, 23, 7, 24, 2, 0); // and x23, x24, x2
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[24] = 0x6d53;
+        state.registers[2] = 0xe105;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[23] = state.registers[24] & state.registers[2];
+        expect.registers[24] = state.registers[24];
+        expect.registers[2] = state.registers[2];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_addw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 14, 0, 17, 19, 0); // addw x14, x17, x19
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[17] = 0x5742;
+        state.registers[19] = 0xfee0;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[14] = state.registers[17] + state.registers[19];
+        expect.registers[17] = state.registers[17];
+        expect.registers[19] = state.registers[19];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_subw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 28, 0, 13, 14, 32); // subw x28, x13, x14
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[13] = 0x3ea9;
+        state.registers[14] = 0x1d1f;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[28] = state.registers[13] - state.registers[14];
+        expect.registers[13] = state.registers[13];
+        expect.registers[14] = state.registers[14];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sllw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 12, 1, 21, 16, 0); // sllw x12, x21, x16
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[21] = 0xe77a;
+        state.registers[16] = 0xc;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[12] = state.registers[21] << state.registers[16];
+        expect.registers[21] = state.registers[21];
+        expect.registers[16] = state.registers[16];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_srlw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 10, 5, 22, 3, 0); // srlw x10, x22, x3
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[22] = 0xf3be;
+        state.registers[3] = 0x5;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[10] = state.registers[22] >> state.registers[3];
+        expect.registers[22] = state.registers[22];
         expect.registers[3] = state.registers[3];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_sraw_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 17, 5, 11, 4, 32); // sraw x17, x11, x4
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        // intentionally set MSB to 1 to check sign preservation
+        state.registers[11] = 0xFF12_3412;
+        state.registers[4] = 0x7;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[17] = state.registers[11] >> state.registers[4];
+        bool signBit = (1 << 31) & state.registers[11] > 0;
+        if (signBit) {
+            uint64 signExtension = uint64(((1 << (32 + state.registers[4])) - 1) << (32 - state.registers[4]));
+            expect.registers[17] |= signExtension;
+        }
+
+        expect.registers[11] = state.registers[11];
+        expect.registers[4] = state.registers[4];
 
         bytes32 postState = riscv.step(encodedState, proof, 0);
         assertEq(postState, outputState(expect), "unexpected post state");
