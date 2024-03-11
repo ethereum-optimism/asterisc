@@ -510,7 +510,7 @@ contract RISCV {
                 out := shr64(toU64(25), instr)
             }
 
-            function parseCSSR(instr) -> out {
+            function parseCSRR(instr) -> out {
                 out := shr64(toU64(20), instr)
             }
 
@@ -721,7 +721,7 @@ contract RISCV {
                 } case 3 { // ?11 = CSRRC(I)
                     v := and64(out, not64(v))
                 } default {
-                    revertWithCode(0xbadc0de0) // unkwown CSR mode
+                    revertWithCode(0xbadc0de0) // unknown CSR mode
                 }
                 writeCSR(num, v)
             }
@@ -1301,7 +1301,7 @@ contract RISCV {
                         setPC(add64(_pc, toU64(4))) // ignore breakpoint
                     }
                 } default { // CSR instructions
-                    let imm := parseCSSR(instr)
+                    let imm := parseCSRR(instr)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
                         value := getRegister(rs1)
