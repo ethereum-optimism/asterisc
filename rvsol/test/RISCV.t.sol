@@ -1578,6 +1578,67 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    function test_jalr_succeeds() public {
+        uint16 imm = 0xc;
+        uint32 insn = encodeIType(0x67, 15, 0, 3, imm); // jalr x15, x3, 0xc
+        uint64 pc = 0x4000;
+        (State memory state, bytes memory proof) = constructRISCVState(pc, insn);
+        state.registers[15] = 0x1337;
+        state.registers[3] = 0x3331;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.registers[15] = state.pc + 4;
+        expect.pc = state.registers[3] + imm;
+        // pc's LSB is set to zero
+        expect.pc -= expect.pc & 1;
+        expect.step = state.step + 1;
+        expect.registers[3] = state.registers[3];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_ecall_succeeds() public {
+        // some syscalls are not supported
+        // lets choose unsupported syscall clone just for testing functionality
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+        uint64 pc = 0x1337;
+        (State memory state, bytes memory proof) = constructRISCVState(pc, insn);
+        state.registers[17] = 220; // syscall number of clone
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[10] = 1;
+        expect.registers[11] = 0;
+        expect.registers[17] = state.registers[17];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_ebreak_succeeds() public {
+        // ebreak is ignored
+        uint16 imm = 0x1;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ebreak
+        uint64 pc = 0x4004;
+        (State memory state, bytes memory proof) = constructRISCVState(pc, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
