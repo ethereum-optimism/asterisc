@@ -2201,6 +2201,50 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* U Type instructions */
+
+    function test_lui_succeeds() public {
+        uint32 imm = 0xd4638aaa;
+        uint32 insn = encodeUType(0x37, 2, imm); // lui x2, imm
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 immSignExtended = (imm >> 12) << 12;
+        bool signBit = (1 << 31) & imm > 0;
+        if (signBit) {
+            immSignExtended |= ((1 << 32) - 1) << 32;
+        }
+        expect.registers[2] = immSignExtended;
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function test_auipc_succeeds() public {
+        uint32 imm = 0xf00dcd79;
+        uint32 insn = encodeUType(0x17, 7, imm); // auipc x7, imm
+        uint64 pc = 0x9fbdc310; // 0x9fbdc319 fails
+        (State memory state, bytes memory proof) = constructRISCVState(pc, insn);
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        uint64 immSignExtended = (imm >> 12) << 12;
+        bool signBit = (1 << 31) & imm > 0;
+        if (signBit) {
+            immSignExtended |= ((1 << 32) - 1) << 32;
+        }
+        expect.registers[7] = uint64((uint128(immSignExtended) + pc) & ((1 << 64) - 1));
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
