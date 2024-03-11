@@ -79,6 +79,8 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* Helper methods */
+
     function encodeState(State memory state) internal pure returns (bytes memory) {
         bytes memory registers;
         for (uint256 i = 0; i < state.registers.length; i++) {
@@ -152,5 +154,115 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(funct3 & 0x7) << (7 + 5);
         insn |= uint32(rd & 0x1F) << 7;
         insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeIType(uint8 opcode, uint8 rd, uint8 funct3, uint8 rs1, uint16 imm)
+        internal
+        pure
+        returns (uint32 insn)
+    {
+        // insn   := [imm[11:0]]  | [rs1] | [funct3] | [rd]  | [opcode]
+        // example:  000000000111 | 00101 | 000      | 00110 | 0010011
+        insn = uint32(imm & 0xFFF) << (7 + 5 + 3 + 5);
+        insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
+        insn |= uint32(funct3 & 0x7) << (7 + 5);
+        insn |= uint32(rd & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeSType(uint8 opcode, uint8 funct3, uint8 rs1, uint8 rs2, uint16 imm)
+        internal
+        pure
+        returns (uint32 insn)
+    {
+        // insn   := [imm[11:5]]| [rs2] | [rs1] | [funct3] | [imm[4:0]] | [opcode]
+        // example:  0001010    | 01011 | 00001 | 000      | 11011      | 0100011
+        insn = uint32((imm >> 5) & 0x7F) << (7 + 5 + 3 + 5 + 5);
+        insn |= uint32(rs2 & 0x1F) << (7 + 5 + 3 + 5);
+        insn |= uint32(rs1 & 0x1F) << (7 + 5 + 3);
+        insn |= uint32(funct3 & 0x7) << (7 + 5);
+        insn |= uint32(imm & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeBType(uint8 opcode, uint8 funct3, uint8 rs1, uint8 rs2, uint16 imm)
+        internal
+        pure
+        returns (uint32 insn)
+    {
+        // we lose information of lsb of imm, assuming always zero
+        // insn   := [imm[12]] | [imm[10:5]] | [rs2] | [rs1] | [funct3] | [imm[4:1]] | imm[11] | [opcode]
+        // example:  0         | 010101      | 01100 | 00100 | 000      | 0010       | 1       | 1100011
+        insn = uint32((imm >> 12) & 0x1) << (7 + 1 + 4 + 3 + 5 + 5 + 6);
+        insn |= uint32((imm >> 5) & 0x3f) << (7 + 1 + 4 + 3 + 5 + 5);
+        insn |= uint32(rs2 & 0x1F) << (7 + 1 + 4 + 3 + 5);
+        insn |= uint32(rs1 & 0x1F) << (7 + 1 + 4 + 3);
+        insn |= uint32(funct3 & 0x7) << (7 + 1 + 4);
+        insn |= uint32((imm >> 1) & 0xF) << (7 + 1);
+        insn |= uint32((imm >> 11) & 0x1) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeUType(uint8 opcode, uint8 rd, uint32 imm) internal pure returns (uint32 insn) {
+        // insn   := [imm[31:12]]         | [rd]  | [opcode]
+        // example:  00110010101010000001 | 01011 | 0110111
+        insn = uint32((imm >> 12) & 0xFFFFF) << (7 + 5);
+        insn |= uint32(rd & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeJType(uint8 opcode, uint8 rd, uint32 imm) internal pure returns (uint32 insn) {
+        // insn   := [imm[20|10:1|11|19:12]] | [rd]  | [opcode]
+        // example:  00110010101010000001    | 00101 | 1101111
+        insn = uint32((imm >> 20) & 0x1) << (7 + 5 + 8 + 1 + 10);
+        insn |= uint32((imm >> 1) & 0x3ff) << (7 + 5 + 8 + 1);
+        insn |= uint32((imm >> 11) & 0x1) << (7 + 5 + 8);
+        insn |= uint32((imm >> 12) & 0xFF) << (7 + 5);
+        insn |= uint32(rd & 0x1F) << 7;
+        insn |= uint32(opcode & 0x7F);
+    }
+
+    function encodeFunct7(uint8 funct5, uint8 aq, uint8 rl) internal pure returns (uint8 funct7) {
+        // funct7  := [funct5] | [aq] | [rl]
+        // example :  01100    | 0    | 0
+        funct7 = (funct5 & 0x1f) << 2;
+        funct7 |= (aq & 0x1) << 1;
+        funct7 |= rl & 0x1;
+    }
+
+    function mask32Signed64(uint64 val) internal pure returns (uint64) {
+        uint64 result = mask32Unsigned64(val);
+        if ((1 << 31) & result > 0) {
+            result |= uint64(((1 << 32) - 1) << 32);
+        }
+        return result;
+    }
+
+    function mask32Unsigned64(uint64 val) internal pure returns (uint64) {
+        return uint64(val & ((1 << 32) - 1));
+    }
+
+    function uint256ToBytes32(uint256 val) internal pure returns (bytes32) {
+        // we cannot use direct casting using bytes32 because of endianess
+        uint256 temp = 0;
+        for (uint8 i = 0; i < 32; i++) {
+            temp += uint256((val >> (8 * i)) & 0xFF) << (256 - 8 - 8 * i);
+        }
+        return bytes32(temp);
+    }
+
+    function truncate(bytes32 val, uint8 size) internal pure returns (bytes32 valueBytes32, uint64 valueU64) {
+        valueU64 = bytes32ToUint64(val, size);
+        uint256 temp = 0;
+        for (uint8 i = 0; i < size; i++) {
+            temp += uint8(val[i]) * uint256(1 << (256 - 8 - 8 * i));
+        }
+        valueBytes32 = bytes32(temp);
+    }
+
+    function bytes32ToUint64(bytes32 val, uint8 size) internal pure returns (uint64 result) {
+        for (uint8 i = 0; i < size; i++) {
+            result += uint8(val[i]) * uint64(1 << 8 * i);
+        }
     }
 }
