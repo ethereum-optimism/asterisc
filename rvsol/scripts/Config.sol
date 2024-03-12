@@ -25,6 +25,7 @@ library Config {
         );
     }
 
+    /// @notice Returns the path on the local filesystem where the target chain deployment artifact is written.
     function chainDeploymentFile() internal view returns (string memory _env) {
         _env = vm.envOr("CHAIN_DEPLOYMENT_FILE", string("./.deploy"));
     }
