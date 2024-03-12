@@ -4,6 +4,8 @@ rvgo/test/testdata
 
 rvsol/cache
 rvsol/out
+rvsol/broadcast
+rvsol/deployments/devnetL1
 
 tests/go-tests/bin
 

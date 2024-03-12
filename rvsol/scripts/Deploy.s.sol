@@ -4,6 +4,7 @@ pragma solidity ^0.8.15;
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 
+import { Chains } from "scripts/Chains.sol";
 import { Config } from "scripts/Config.sol";
 import { Deployer } from "scripts/Deployer.sol";
 import { RISCV } from "../src/RISCV.sol";
@@ -53,9 +54,27 @@ contract Deploy is Deployer {
 
     /// @notice Loads the riscv absolute prestate from the prestate-proof for devnets otherwise
     ///         from the config.
-    function loadRiscvAbsolutePrestate() internal returns (Claim riscVAbsolutePrestate_) {
-        // TODO: Implement this function
-        return Claim.wrap(bytes32(0));
+    function loadRiscvAbsolutePrestate() internal returns (Claim riscvAbsolutePrestate_) {
+        if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
+            // Fetch the absolute prestate dump
+            string memory filePath = string.concat(vm.projectRoot(), "/../rvgo/bin/prestate-proof.json");
+            string[] memory commands = new string[](3);
+            commands[0] = "bash";
+            commands[1] = "-c";
+            commands[2] = string.concat("[[ -f ", filePath, " ]] && echo \"present\"");
+            if (vm.ffi(commands).length == 0) {
+                revert("Asterisc prestate dump not found, generate it with `make prestate` in the Asterisc root.");
+            }
+            commands[2] = string.concat("cat ", filePath, " | jq -r .pre");
+            riscvAbsolutePrestate_ = Claim.wrap(abi.decode(vm.ffi(commands), (bytes32)));
+            console.log(
+                "[Asterisc Dispute Game] Using devnet RISCV Absolute prestate: %s",
+                vm.toString(Claim.unwrap(riscvAbsolutePrestate_))
+            );
+        } else {
+            revert("Currently Asterisc only supports local devnet");
+            // TODO: Add Asterisc absolute prestate into OP stack deploy config
+        }
     }
 
     /// @notice Make a call from the Safe contract to an arbitrary address with arbitrary data
