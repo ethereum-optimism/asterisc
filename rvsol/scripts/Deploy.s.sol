@@ -92,7 +92,7 @@ contract Deploy is Deployer {
             return;
         }
 
-        FaultDisputeGame fdg = new FaultDisputeGame({
+        FaultDisputeGame fdg = new FaultDisputeGame{ salt: _implSalt() }({
             _gameType: GameTypes.ASTERISC,
             _absolutePrestate: loadRiscvAbsolutePrestate(),
             _genesisBlockNumber: cfg.faultGameGenesisBlock(),
