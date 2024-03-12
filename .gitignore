@@ -1,5 +1,9 @@
+rvgo/bin
+rvgo/scripts/go-ffi/go-ffi
+
 rvsol/cache
 rvsol/out
+
 tests/go-tests/bin
 
 # jetbrains
