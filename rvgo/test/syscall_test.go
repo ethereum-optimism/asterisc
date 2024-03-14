@@ -369,33 +369,49 @@ func FuzzStatePreimageWrite(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64) {
+	f.Fuzz(func(t *testing.T, addr uint64, preimageOffset uint64, pc uint64, step uint64) {
 		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
 		preimageData := []byte("hello world")
 		if preimageOffset >= uint64(len(preimageData)) {
 			t.SkipNow()
 		}
+		heap := uint64(0x7f_00_00_00_00_00)
+		if addr < heap {
+			// to avoid override code space
+			addr = heap + addr%(0xff_ff_ff_ff_ff_ff_ff_ff-heap)
+		}
+		count := uint64(32) // preimage key is 32 bytes
 		state := &fast.VMState{
 			PC:              pc,
-			Heap:            0,
+			Heap:            heap,
 			ExitCode:        0,
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
 			Registers:       [32]uint64{17: riscv.SysWrite, 10: riscv.FdPreimageWrite, 11: addr, 12: count},
 			Step:            step,
-			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
+
+		// Set preimage key to addr
+		preimageKey := preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey()
+		state.Memory.SetUnaligned(addr, preimageKey[:])
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
+
 		maxData := 32 - (addr & 31)
 		if maxData < count {
 			count = maxData
 		}
 		expectedRegisters[10] = count
 		expectedRegisters[11] = 0
+
+		var expectedKey [32]byte
+		// slice preimage key by count
+		for i := uint64(0); i < count; i++ {
+			expectedKey[i+32-count] = preimageKey[i]
+		}
 
 		oracle := staticOracle(t, preimageData)
 
@@ -405,7 +421,7 @@ func FuzzStatePreimageWrite(f *testing.F) {
 		require.False(t, stepWitness.HasPreimage())
 
 		require.Equal(t, pc+4, state.PC) // PC must advance
-		require.Equal(t, uint64(0), state.Heap)
+		require.Equal(t, heap, state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode)
 		require.Equal(t, false, state.Exited)
@@ -413,6 +429,7 @@ func FuzzStatePreimageWrite(f *testing.F) {
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, uint64(0), state.PreimageOffset)
 		require.Equal(t, expectedRegisters, state.Registers)
+		require.Equal(t, expectedKey, state.PreimageKey)
 
 		fastPost := state.EncodeWitness()
 		runEVM(t, contracts, addrs, stepWitness, fastPost)
