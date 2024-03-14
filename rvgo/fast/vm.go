@@ -656,7 +656,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
-			switch shr64(toU64(6), imm) { // top 7 bits select the shift type
+			switch shr64(toU64(5), imm) { // top 7 bits select the shift type
 			case 0x00: // 0000000 = SRLIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
 			case 0x20: // 0100000 = SRAIW
