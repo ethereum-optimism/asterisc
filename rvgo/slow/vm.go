@@ -3,7 +3,7 @@ package slow
 import (
 	"encoding/binary"
 	"fmt"
-	
+
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -51,6 +51,14 @@ const (
 	stateSize                  = stateOffsetRegisters + stateSizeRegisters
 	paddedStateSize            = stateSize + ((32 - (stateSize % 32)) % 32)
 )
+
+type UnsupportedSyscallErr struct {
+	SyscallNum U64
+}
+
+func (e *UnsupportedSyscallErr) Error() string {
+	return fmt.Sprintf("unsupported system call: %d", e.SyscallNum)
+}
 
 type PreimageOracle interface {
 	ReadPreimagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error)
@@ -733,11 +741,11 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case fast.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
-			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		case fast.SysFutex: // futex - not supported, for now
-			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		case fast.SysNanosleep: // nanosleep - not supported, for now
-			revertWithCode(0xf001ca11, fmt.Errorf("unsupported system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
 		}
