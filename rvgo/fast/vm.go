@@ -4,46 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-)
 
-const (
-	SysExit             = 93
-	SysExitGroup        = 94
-	SysBrk              = 214
-	SysMmap             = 222
-	SysRead             = 63
-	SysWrite            = 64
-	SysFcntl            = 25
-	SysOpenat           = 56
-	SysSchedGetaffinity = 123
-	SysSchedYield       = 124
-	SysClockGettime     = 113
-	SysRtSigprocmask    = 135
-	SysSigaltstack      = 132
-	SysGettid           = 178
-	SysRtSigaction      = 134
-	SysClone            = 220
-	SysGetrlimit        = 163
-	SysMadvise          = 233
-	SysEpollCreate1     = 20
-	SysEpollCtl         = 21
-	SysPipe2            = 59
-	SysReadlinnkat      = 78
-	SysNewfstatat       = 79
-	SysNewuname         = 160
-	SysMunmap           = 215
-	SysGetRandom        = 278
-	SysPrlimit64        = 261
-	SysFutex            = 422
-	SysNanosleep        = 101
-
-	FdStdin         = 0
-	FdStdout        = 1
-	FdStderr        = 2
-	FdHintRead      = 3
-	FdHintWrite     = 4
-	FdPreimageRead  = 5
-	FdPreimageWrite = 6
+	"github.com/ethereum-optimism/asterisc/rvgo/riscv"
 )
 
 type UnsupportedSyscallErr struct {
@@ -390,23 +352,23 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	sysCall := func() {
 		a7 := getRegister(toU64(17))
 		switch a7 {
-		case SysExit: // exit the calling thread. No multi-thread support yet, so just exit.
+		case riscv.SysExit: // exit the calling thread. No multi-thread support yet, so just exit.
 			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0))
 			setExited()
 			// program stops here, no need to change registers.
-		case SysExitGroup: // exit-group
+		case riscv.SysExitGroup: // exit-group
 			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0))
 			setExited()
-		case SysBrk: // brk
+		case riscv.SysBrk: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 			// brk(0) changes nothing about the memory, and returns the current page break
 			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
 			setRegister(toU64(10), v)
 			setRegister(toU64(11), toU64(0)) // no error
-		case SysMmap: // mmap
+		case riscv.SysMmap: // mmap
 			// A0 = addr (hint)
 			addr := getRegister(toU64(10))
 			// A1 = n (length)
@@ -434,21 +396,21 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
 			setRegister(toU64(11), toU64(0)) // no error
-		case SysRead: // read
+		case riscv.SysRead: // read
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
 			count := getRegister(toU64(12)) // A2 = count
 			var n U64
 			var errCode U64
 			switch fd {
-			case FdStdin: // stdin
+			case riscv.FdStdin: // stdin
 				n = toU64(0) // never read anything from stdin
 				errCode = toU64(0)
-			case FdHintRead: // hint-read
+			case riscv.FdHintRead: // hint-read
 				// say we read it all, to continue execution after reading the hint-write ack response
 				n = count
 				errCode = toU64(0)
-			case FdPreimageRead: // preimage read
+			case riscv.FdPreimageRead: // preimage read
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
@@ -457,28 +419,28 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			setRegister(toU64(10), n)
 			setRegister(toU64(11), errCode)
-		case SysWrite: // write
+		case riscv.SysWrite: // write
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
 			count := getRegister(toU64(12)) // A2 = count
 			var n U64
 			var errCode U64
 			switch fd {
-			case FdStdout: // stdout
+			case riscv.FdStdout: // stdout
 				_, err := io.Copy(inst.stdOut, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stdout writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case FdStderr: // stderr
+			case riscv.FdStderr: // stderr
 				_, err := io.Copy(inst.stdErr, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stderr writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case FdHintWrite: // hint-write
+			case riscv.FdHintWrite: // hint-write
 				hintData, _ := io.ReadAll(s.Memory.ReadMemoryRange(addr, count))
 				s.LastHint = append(inst.state.LastHint, hintData...)
 				for len(s.LastHint) >= 4 { // process while there is enough data to check if there are any hints
@@ -493,7 +455,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				}
 				n = count
 				errCode = toU64(0)
-			case FdPreimageWrite: // pre-image key write
+			case riscv.FdPreimageWrite: // pre-image key write
 				n = writePreimageKey(addr, count)
 				errCode = toU64(0) // no error
 			default: // any other file, including (3) hint read (5) preimage read
@@ -502,7 +464,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			setRegister(toU64(10), n)
 			setRegister(toU64(11), errCode)
-		case SysFcntl: // fcntl - file descriptor manipulation / info lookup
+		case riscv.SysFcntl: // fcntl - file descriptor manipulation / info lookup
 			fd := getRegister(toU64(10))  // A0 = fd
 			cmd := getRegister(toU64(11)) // A1 = cmd
 			var out U64
@@ -534,38 +496,38 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			setRegister(toU64(10), out)
 			setRegister(toU64(11), errCode) // EBADF
-		case SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
+		case riscv.SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
 			setRegister(toU64(10), u64Mask())
 			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
-		case SysSchedGetaffinity: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
+		case riscv.SysSchedGetaffinity: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysSchedYield: // sched_yield - nothing to yield, synchronous execution only, for now
+		case riscv.SysSchedYield: // sched_yield - nothing to yield, synchronous execution only, for now
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysClockGettime: // clock_gettime
+		case riscv.SysClockGettime: // clock_gettime
 			addr := getRegister(toU64(11)) // addr of timespec struct
 			// write 1337s + 42ns as time
 			storeMemUnaligned(addr, toU64(8), shortToU256(1337), 1, 0xff, true, false)
 			storeMemUnaligned(add64(addr, toU64(8)), toU64(8), toU256(42), 2, 0xff, true, false)
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysRtSigprocmask: // rt_sigprocmask - ignore any sigset changes
+		case riscv.SysRtSigprocmask: // rt_sigprocmask - ignore any sigset changes
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysSigaltstack: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
+		case riscv.SysSigaltstack: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysGettid: // gettid - hardcode to 0
+		case riscv.SysGettid: // gettid - hardcode to 0
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysRtSigaction: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
+		case riscv.SysRtSigaction: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysClone: // clone - not supported
+		case riscv.SysClone: // clone - not supported
 			setRegister(toU64(10), toU64(1))
 			setRegister(toU64(11), toU64(0))
-		case SysGetrlimit: // getrlimit
+		case riscv.SysGetrlimit: // getrlimit
 			res := getRegister(toU64(10))
 			addr := getRegister(toU64(11))
 			switch res {
@@ -576,38 +538,38 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
-		case SysMadvise: // madvise - ignored
+		case riscv.SysMadvise: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysEpollCreate1: // epoll_create1 - ignored
+		case riscv.SysEpollCreate1: // epoll_create1 - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysEpollCtl: // epoll_ctl - ignored
+		case riscv.SysEpollCtl: // epoll_ctl - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysPipe2: // pipe2 - ignored
+		case riscv.SysPipe2: // pipe2 - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysReadlinnkat: // readlinkat - ignored
+		case riscv.SysReadlinnkat: // readlinkat - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysNewfstatat: // newfstatat - ignored
+		case riscv.SysNewfstatat: // newfstatat - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysNewuname: // newuname - ignored
+		case riscv.SysNewuname: // newuname - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysMunmap: // munmap - ignored
+		case riscv.SysMunmap: // munmap - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysGetRandom: // getrandom - ignored
+		case riscv.SysGetRandom: // getrandom - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
+		case riscv.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
-		case SysFutex: // futex - not supported, for now
+		case riscv.SysFutex: // futex - not supported, for now
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
-		case SysNanosleep: // nanosleep - not supported, for now
+		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))

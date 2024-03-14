@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	"github.com/ethereum-optimism/asterisc/rvgo/riscv"
 	"github.com/ethereum-optimism/asterisc/rvgo/slow"
 )
 
@@ -45,9 +46,9 @@ func runSlow(t *testing.T, stepWitness *fast.StepWitness, fastPost fast.StateWit
 
 func TestStateSyscallUnsupported(t *testing.T) {
 	syscalls := []int{
-		fast.SysPrlimit64,
-		fast.SysFutex,
-		fast.SysNanosleep,
+		riscv.SysPrlimit64,
+		riscv.SysFutex,
+		riscv.SysNanosleep,
 	}
 
 	for _, syscall := range syscalls {
@@ -79,7 +80,7 @@ func FuzzStateSyscallExit(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	syscalls := []int{fast.SysExit, fast.SysExitGroup}
+	syscalls := []int{riscv.SysExit, riscv.SysExitGroup}
 
 	testExit := func(t *testing.T, syscall int, exitCode uint8, pc uint64, step uint64) {
 		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
@@ -128,21 +129,21 @@ func FuzzStateSyscallNoop(f *testing.F) {
 	addrs := testAddrs
 
 	syscalls := []int{
-		fast.SysSchedGetaffinity,
-		fast.SysSchedYield,
-		fast.SysRtSigprocmask,
-		fast.SysSigaltstack,
-		fast.SysGettid,
-		fast.SysRtSigaction,
-		fast.SysMadvise,
-		fast.SysEpollCreate1,
-		fast.SysEpollCtl,
-		fast.SysPipe2,
-		fast.SysReadlinnkat,
-		fast.SysNewfstatat,
-		fast.SysNewuname,
-		fast.SysMunmap,
-		fast.SysGetRandom,
+		riscv.SysSchedGetaffinity,
+		riscv.SysSchedYield,
+		riscv.SysRtSigprocmask,
+		riscv.SysSigaltstack,
+		riscv.SysGettid,
+		riscv.SysRtSigaction,
+		riscv.SysMadvise,
+		riscv.SysEpollCreate1,
+		riscv.SysEpollCtl,
+		riscv.SysPipe2,
+		riscv.SysReadlinnkat,
+		riscv.SysNewfstatat,
+		riscv.SysNewuname,
+		riscv.SysMunmap,
+		riscv.SysGetRandom,
 	}
 
 	testNoop := func(t *testing.T, syscall int, arg uint64, pc uint64, step uint64) {
@@ -206,7 +207,7 @@ func FuzzStateHintRead(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysRead, 10: fast.FdHintRead, 11: addr, 12: count},
+			Registers:       [32]uint64{17: riscv.SysRead, 10: riscv.FdHintRead, 11: addr, 12: count},
 			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
@@ -258,7 +259,7 @@ func FuzzStatePreimageRead(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysRead, 10: fast.FdPreimageRead, 11: addr, 12: count},
+			Registers:       [32]uint64{17: riscv.SysRead, 10: riscv.FdPreimageRead, 11: addr, 12: count},
 			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
@@ -325,7 +326,7 @@ func FuzzStateHintWrite(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysWrite, 10: fast.FdHintWrite, 11: addr, 12: count},
+			Registers:       [32]uint64{17: riscv.SysWrite, 10: riscv.FdHintWrite, 11: addr, 12: count},
 			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
@@ -381,7 +382,7 @@ func FuzzStatePreimageWrite(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysWrite, 10: fast.FdPreimageWrite, 11: addr, 12: count},
+			Registers:       [32]uint64{17: riscv.SysWrite, 10: riscv.FdPreimageWrite, 11: addr, 12: count},
 			Step:            step,
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,

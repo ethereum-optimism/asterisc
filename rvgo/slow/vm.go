@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/ethereum-optimism/asterisc/rvgo/fast"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+
+	"github.com/ethereum-optimism/asterisc/rvgo/riscv"
 )
 
 func decodeU64BE(v []byte) (out U64) {
@@ -547,23 +547,23 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	sysCall := func() {
 		a7 := getRegister(toU64(17))
 		switch a7.val() {
-		case fast.SysExit: // exit the calling thread. No multi-thread support yet, so just exit.
+		case riscv.SysExit: // exit the calling thread. No multi-thread support yet, so just exit.
 			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0.val()))
 			setExited()
 			// program stops here, no need to change registers.
-		case fast.SysExitGroup: // exit-group
+		case riscv.SysExitGroup: // exit-group
 			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0.val()))
 			setExited()
-		case fast.SysBrk: // brk
+		case riscv.SysBrk: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 			// brk(0) changes nothing about the memory, and returns the current page break
 			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
 			setRegister(toU64(10), v)
 			setRegister(toU64(11), toU64(0)) // no error
-		case fast.SysMmap: // mmap
+		case riscv.SysMmap: // mmap
 			// A0 = addr (hint)
 			addr := getRegister(toU64(10))
 			// A1 = n (length)
@@ -591,21 +591,21 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
 			setRegister(toU64(11), toU64(0)) // no error
-		case fast.SysRead: // read
+		case riscv.SysRead: // read
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
 			count := getRegister(toU64(12)) // A2 = count
 			var n U64
 			var errCode U64
 			switch fd.val() {
-			case fast.FdStdin: // stdin
+			case riscv.FdStdin: // stdin
 				n = toU64(0) // never read anything from stdin
 				errCode = toU64(0)
-			case fast.FdHintRead: // hint-read
+			case riscv.FdHintRead: // hint-read
 				// say we read it all, to continue execution after reading the hint-write ack response
 				n = count
 				errCode = toU64(0)
-			case fast.FdPreimageRead: // preimage read
+			case riscv.FdPreimageRead: // preimage read
 				n = readPreimageValue(addr, count)
 				errCode = toU64(0)
 			default:
@@ -614,23 +614,23 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			}
 			setRegister(toU64(10), n)
 			setRegister(toU64(11), errCode)
-		case fast.SysWrite: // write
+		case riscv.SysWrite: // write
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
 			count := getRegister(toU64(12)) // A2 = count
 			var n U64
 			var errCode U64
 			switch fd.val() {
-			case fast.FdStdout: // stdout
+			case riscv.FdStdout: // stdout
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case fast.FdStderr: // stderr
+			case riscv.FdStderr: // stderr
 				n = count // write completes fully in single instruction step
 				errCode = toU64(0)
-			case fast.FdHintWrite: // hint-write
+			case riscv.FdHintWrite: // hint-write
 				n = count
 				errCode = toU64(0)
-			case fast.FdPreimageWrite: // pre-image key write
+			case riscv.FdPreimageWrite: // pre-image key write
 				n = writePreimageKey(addr, count)
 				errCode = toU64(0) // no error
 			default: // any other file, including (3) hint read (5) preimage read
@@ -639,7 +639,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			}
 			setRegister(toU64(10), n)
 			setRegister(toU64(11), errCode)
-		case fast.SysFcntl: // fcntl - file descriptor manipulation / info lookup
+		case riscv.SysFcntl: // fcntl - file descriptor manipulation / info lookup
 			fd := getRegister(toU64(10))  // A0 = fd
 			cmd := getRegister(toU64(11)) // A1 = cmd
 			var out U64
@@ -671,38 +671,38 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			}
 			setRegister(toU64(10), out)
 			setRegister(toU64(11), errCode) // EBADF
-		case fast.SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
+		case riscv.SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
 			setRegister(toU64(10), u64Mask())
 			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
-		case fast.SysSchedGetaffinity: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
+		case riscv.SysSchedGetaffinity: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysSchedYield: // sched_yield - nothing to yield, synchronous execution only, for now
+		case riscv.SysSchedYield: // sched_yield - nothing to yield, synchronous execution only, for now
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysClockGettime: // clock_gettime
+		case riscv.SysClockGettime: // clock_gettime
 			addr := getRegister(toU64(11)) // addr of timespec struct
 			// write 1337s + 42ns as time
 			storeMemUnaligned(addr, toU64(8), shortToU256(1337), 1, 0xff)
 			storeMemUnaligned(add64(addr, toU64(8)), toU64(8), toU256(42), 2, 0xff)
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysRtSigprocmask: // rt_sigprocmask - ignore any sigset changes
+		case riscv.SysRtSigprocmask: // rt_sigprocmask - ignore any sigset changes
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysSigaltstack: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
+		case riscv.SysSigaltstack: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysGettid: // gettid - hardcode to 0
+		case riscv.SysGettid: // gettid - hardcode to 0
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysRtSigaction: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
+		case riscv.SysRtSigaction: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysClone: // clone - not supported
+		case riscv.SysClone: // clone - not supported
 			setRegister(toU64(10), toU64(1))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysGetrlimit: // getrlimit
+		case riscv.SysGetrlimit: // getrlimit
 			res := getRegister(toU64(10))
 			addr := getRegister(toU64(11))
 			switch res.val() {
@@ -713,38 +713,38 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
-		case fast.SysMadvise: // madvise - ignored
+		case riscv.SysMadvise: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysEpollCreate1: // epoll_create1 - ignored
+		case riscv.SysEpollCreate1: // epoll_create1 - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysEpollCtl: // epoll_ctl - ignored
+		case riscv.SysEpollCtl: // epoll_ctl - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysPipe2: // pipe2 - ignored
+		case riscv.SysPipe2: // pipe2 - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysReadlinnkat: // readlinkat - ignored
+		case riscv.SysReadlinnkat: // readlinkat - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysNewfstatat: // newfstatat - ignored
+		case riscv.SysNewfstatat: // newfstatat - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysNewuname: // newuname - ignored
+		case riscv.SysNewuname: // newuname - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysMunmap: // munmap - ignored
+		case riscv.SysMunmap: // munmap - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysGetRandom: // getrandom - ignored
+		case riscv.SysGetRandom: // getrandom - ignored
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
-		case fast.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
+		case riscv.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
-		case fast.SysFutex: // futex - not supported, for now
+		case riscv.SysFutex: // futex - not supported, for now
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
-		case fast.SysNanosleep: // nanosleep - not supported, for now
+		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
