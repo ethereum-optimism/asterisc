@@ -50,7 +50,7 @@ abstract contract Artifacts {
         console.log("Writing artifact to %s", deploymentOutfile);
         ensurePath(deploymentOutfile);
 
-        // Load addresses from a JSON file if the CHAIN_DEPLOYMENT_FILE environment variable
+        // Load addresses from a JSON file if the TARGET_L2_DEPLOYMENT_FILE environment variable
         // is set. Great for loading addresses from `superchain-registry`.
         string memory addresses = Config.chainDeploymentFile();
         if (bytes(addresses).length > 0) {

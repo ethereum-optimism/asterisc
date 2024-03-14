@@ -21,13 +21,13 @@ library Config {
     /// @notice Returns the path on the local filesystem where the deploy config is
     function deployConfigPath() internal view returns (string memory _env) {
         _env = vm.envOr(
-            "DEPLOY_CONFIG_PATH", string.concat(vm.projectRoot(), "/deploy-config/", _getDeploymentContext(), ".json")
+            "TARGET_L2_DEPLOY_CONFIG", string.concat(vm.projectRoot(), "/deploy-config/", _getDeploymentContext(), ".json")
         );
     }
 
     /// @notice Returns the path on the local filesystem where the target chain deployment artifact is written.
     function chainDeploymentFile() internal view returns (string memory _env) {
-        _env = vm.envOr("CHAIN_DEPLOYMENT_FILE", string("./.deploy"));
+        _env = vm.envOr("TARGET_L2_DEPLOYMENT_FILE", string("./.deploy"));
     }
 
     /// @notice Returns the chainid from the EVM context or the value of the CHAIN_ID env var as
