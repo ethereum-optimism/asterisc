@@ -19,4 +19,4 @@ Currently, Asterisc only supports the local devnet launched from the Optimism mo
 2. Generate prestate proof
    - Run ```make prestate``` in the project root
 3. Run deploy script
-   - Run ```./rvsol/scripts/deploy.sh``` in the project root
+   - Run ```./scripts/deploy.sh``` in `rvsol`

@@ -13,9 +13,10 @@ if [ -z "${TARGET_L2_DEPLOY_CONFIG}" ]; then
     echo "TARGET_L2_DEPLOY_CONFIG is not set. Must point target chain deploy config file (optimism/packages/contracts-bedrock/deploy-config/devnetL1.json)"
     exit 1
 fi
-LOCAL_DEPLOY_CONFIG_PATH="$(dirname "$(dirname "$(realpath "$0")")")/deploy-config.json"
+SCRIPTS_DIR="$(dirname "$(realpath "$0")")"
+LOCAL_DEPLOY_CONFIG_PATH="$(dirname "${SCRIPTS_DIR}")/deploy-config.json"
 cp "$TARGET_L2_DEPLOY_CONFIG" "$LOCAL_DEPLOY_CONFIG_PATH"
 
 
 echo "> Deploying contracts"
-TARGET_L2_DEPLOY_CONFIG=$LOCAL_DEPLOY_CONFIG_PATH forge script -vvv scripts/Deploy.s.sol:Deploy --rpc-url "$TARGET_L1_RPC_URL" --broadcast --private-key "$DEPLOY_PRIVATE_KEY"
+TARGET_L2_DEPLOY_CONFIG=$LOCAL_DEPLOY_CONFIG_PATH forge script -vvv "${SCRIPTS_DIR}"/Deploy.s.sol:Deploy --rpc-url "$TARGET_L1_RPC_URL" --broadcast --private-key "$DEPLOY_PRIVATE_KEY"
