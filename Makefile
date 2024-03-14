@@ -7,7 +7,7 @@ build-rvsol:
 .PHONY: build-rvsol
 
 build-test:
-	make -C ./tests/go-tests bin bin/simple bin/minimal
+	make -C ./tests/go-tests all-test
 	make -C ./rvgo build-ffi
 .PHONY: build-test
 

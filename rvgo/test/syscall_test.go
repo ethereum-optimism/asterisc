@@ -272,8 +272,9 @@ func FuzzStatePreimageRead(f *testing.F) {
 		if writeLen > maxData {
 			writeLen = maxData
 		}
-		if preimageOffset+writeLen > uint64(8+len(preimageData)) {
-			writeLen = uint64(8+len(preimageData)) - preimageOffset
+		leftPreimageLen := uint64(8+len(preimageData)) - preimageOffset
+		if writeLen > leftPreimageLen {
+			writeLen = leftPreimageLen
 		}
 		expectedRegisters[10] = writeLen
 		expectedRegisters[11] = 0
@@ -329,7 +330,7 @@ func FuzzStateHintWrite(f *testing.F) {
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 
-			// This is only used by mips.go. The reads a zeroed page-sized buffer when reading hint data from memory.
+			// This is only used by fast/vm.go. The reads a zeroed page-sized buffer when reading hint data from memory.
 			// We pre-allocate a buffer for the read hint data to be copied into.
 			LastHint: make(hexutil.Bytes, fast.PageSize),
 		}

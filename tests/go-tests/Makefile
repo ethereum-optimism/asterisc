@@ -1,5 +1,7 @@
 all: bin bin/simple bin/simple.dump bin/minimal bin/minimal.dump
 
+all-test: bin bin/simple bin/minimal
+
 bin:
 	mkdir bin
 
