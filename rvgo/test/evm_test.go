@@ -54,7 +54,7 @@ func fakeHeader(n uint64, parentHash common.Hash) *types.Header {
 	return &header
 }
 
-func loadRISCVContractCode(t *testing.T) *Contract {
+func loadRISCVContractCode(t require.TestingT) *Contract {
 	dat, err := os.ReadFile("../../rvsol/out/RISCV.sol/RISCV.json")
 	require.NoError(t, err)
 	var outDat Contract
@@ -63,7 +63,7 @@ func loadRISCVContractCode(t *testing.T) *Contract {
 	return &outDat
 }
 
-func loadPreimageOracleContractCode(t *testing.T) *Contract {
+func loadPreimageOracleContractCode(t require.TestingT) *Contract {
 	dat, err := os.ReadFile("../../rvsol/out/PreimageOracle.sol/PreimageOracle.json")
 	require.NoError(t, err)
 	var outDat Contract
@@ -123,7 +123,7 @@ var testAddrs = &Addresses{
 	FeeRecipient: common.HexToAddress("0xbd69"),
 }
 
-func testContracts(t *testing.T) *Contracts {
+func testContracts(t require.TestingT) *Contracts {
 	return &Contracts{
 		RISCV:  loadRISCVContractCode(t),
 		Oracle: loadPreimageOracleContractCode(t),
