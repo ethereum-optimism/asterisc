@@ -482,6 +482,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 		_, err := fastState.Step(true)
 		require.Contains(t, err.Error(), "f0012")
+		// TODO: Test EVM & slow VM
 	}
 
 	f.Fuzz(func(t *testing.T, res, addr, pc, step uint64) {
