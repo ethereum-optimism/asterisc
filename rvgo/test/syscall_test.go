@@ -138,7 +138,7 @@ func FuzzStateSyscallBrk(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysBrk},
+			Registers:       [32]uint64{17: riscv.SysBrk},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -183,7 +183,7 @@ func FuzzStateSyscallMmap(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysMmap, 10: addr, 11: length},
+			Registers:       [32]uint64{17: riscv.SysMmap, 10: addr, 11: length},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -234,7 +234,7 @@ func FuzzStateSyscallFcntl(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysFcntl, 10: fd, 11: cmd},
+			Registers:       [32]uint64{17: riscv.SysFcntl, 10: fd, 11: cmd},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -297,7 +297,7 @@ func FuzzStateSyscallOpenat(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysOpenat},
+			Registers:       [32]uint64{17: riscv.SysOpenat},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -340,7 +340,7 @@ func FuzzStateSyscallClockGettime(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysClockGettime, 11: addr},
+			Registers:       [32]uint64{17: riscv.SysClockGettime, 11: addr},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -387,7 +387,7 @@ func FuzzStateSyscallClone(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysClone},
+			Registers:       [32]uint64{17: riscv.SysClone},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -430,7 +430,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysGetrlimit, 10: 7, 11: addr},
+			Registers:       [32]uint64{17: riscv.SysGetrlimit, 10: 7, 11: addr},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -474,7 +474,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysGetrlimit, 10: res, 11: addr},
+			Registers:       [32]uint64{17: riscv.SysGetrlimit, 10: res, 11: addr},
 			Step:            0,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -576,7 +576,7 @@ func FuzzStateSyscallRead(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysRead, 10: fd, 11: addr, 12: count},
+			Registers:       [32]uint64{17: riscv.SysRead, 10: fd, 11: addr, 12: count},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -606,10 +606,10 @@ func FuzzStateSyscallRead(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, fd, addr, count, pc, step uint64) {
 		// Test stdin
-		testRead(t, fast.FdStdin, addr, count, pc, step, 0, 0)
+		testRead(t, riscv.FdStdin, addr, count, pc, step, 0, 0)
 
 		// Test EBADF err
-		if fd == fast.FdStdin || fd == fast.FdHintRead || fd == fast.FdPreimageRead {
+		if fd == riscv.FdStdin || fd == riscv.FdHintRead || fd == riscv.FdPreimageRead {
 			// Ensure unsupported fd
 			fd += 1
 		}
@@ -749,7 +749,7 @@ func FuzzStateSyscallWrite(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: fast.SysWrite, 10: fd, 11: addr, 12: count},
+			Registers:       [32]uint64{17: riscv.SysWrite, 10: fd, 11: addr, 12: count},
 			Step:            step,
 		}
 		state.Memory.SetUnaligned(pc, syscallInsn)
@@ -779,13 +779,13 @@ func FuzzStateSyscallWrite(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, fd, addr, count, pc, step uint64) {
 		// Test stdout
-		testWrite(t, fast.FdStdout, addr, count, pc, step, count, 0)
+		testWrite(t, riscv.FdStdout, addr, count, pc, step, count, 0)
 
 		// Test stderr
-		testWrite(t, fast.FdStderr, addr, count, pc, step, count, 0)
+		testWrite(t, riscv.FdStderr, addr, count, pc, step, count, 0)
 
 		// Test EBADF err
-		if fd == fast.FdStdout || fd == fast.FdStderr || fd == fast.FdHintWrite || fd == fast.FdPreimageWrite {
+		if fd == riscv.FdStdout || fd == riscv.FdStderr || fd == riscv.FdHintWrite || fd == riscv.FdPreimageWrite {
 			// Ensure unsupported fd
 			fd += 6
 		}
