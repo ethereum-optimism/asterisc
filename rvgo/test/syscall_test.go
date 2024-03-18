@@ -156,7 +156,7 @@ func FuzzStateSyscallBrk(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -199,7 +199,7 @@ func FuzzStateSyscallMmap(f *testing.F) {
 		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 
@@ -252,7 +252,7 @@ func FuzzStateSyscallFcntl(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -315,7 +315,7 @@ func FuzzStateSyscallOpenat(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -363,7 +363,7 @@ func FuzzStateSyscallClockGettime(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, state.Memory.MerkleRoot(), postMemory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -405,7 +405,7 @@ func FuzzStateSyscallClone(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -454,7 +454,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, state.Memory.MerkleRoot(), postMemory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -594,7 +594,7 @@ func FuzzStateSyscallRead(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
@@ -767,7 +767,7 @@ func FuzzStateSyscallWrite(f *testing.F) {
 		require.Equal(t, uint64(0), state.Heap)
 		require.Equal(t, uint64(0), state.LoadReservation)
 		require.Equal(t, uint8(0), state.ExitCode) // ExitCode must be set
-		require.Equal(t, false, state.Exited)      // Must be exited
+		require.Equal(t, false, state.Exited)      // Must not be exited
 		require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
 		require.Equal(t, step+1, state.Step) // Step must advance
 		require.Equal(t, expectedRegisters, state.Registers)
