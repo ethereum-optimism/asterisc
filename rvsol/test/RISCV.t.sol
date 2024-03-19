@@ -451,8 +451,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        int256 temp = int256(int64(state.registers[4])) / int256(int64(state.registers[29]));
-        expect.registers[18] = uint64(uint256(temp & ((1 << 64) - 1)));
+        expect.registers[18] = uint64(int64(state.registers[4]) / int64(state.registers[29]));
         expect.registers[4] = state.registers[4];
         expect.registers[29] = state.registers[29];
 
@@ -491,8 +490,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        int256 temp = int256(int64(state.registers[16])) % int256(int64(state.registers[27]));
-        expect.registers[5] = uint64(uint256(temp & ((1 << 64) - 1)));
+        expect.registers[5] = uint64(int64(state.registers[16]) % int64(state.registers[27]));
         expect.registers[16] = state.registers[16];
         expect.registers[27] = state.registers[27];
 
