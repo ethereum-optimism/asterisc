@@ -462,7 +462,7 @@ contract RISCV_Test is CommonTest {
     function test_divu_succeeds() public {
         uint32 insn = encodeRType(0x33, 28, 5, 4, 11, 1); // divu x28, x4, x11
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
-        state.registers[4] = 0x7555d9a795ed923c;
+        state.registers[4] = 0xf555d9a795ed923c;
         state.registers[11] = 0xf9d68900a39ad4ec;
         bytes memory encodedState = encodeState(state);
 
@@ -470,8 +470,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        uint256 temp = uint256(state.registers[4]) / uint256(state.registers[11]);
-        expect.registers[28] = uint64(temp & ((1 << 64) - 1));
+        expect.registers[28] = state.registers[4] / state.registers[11];
         expect.registers[4] = state.registers[4];
         expect.registers[11] = state.registers[11];
 
@@ -509,8 +508,7 @@ contract RISCV_Test is CommonTest {
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
-        uint256 temp = uint256(state.registers[14]) % uint256(state.registers[1]);
-        expect.registers[3] = uint64(temp & ((1 << 64) - 1));
+        expect.registers[3] = state.registers[14] % state.registers[1];
         expect.registers[14] = state.registers[14];
         expect.registers[1] = state.registers[1];
 
