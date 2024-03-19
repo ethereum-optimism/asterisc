@@ -15,6 +15,8 @@ remappings = [
   'safe-contracts/=lib/optimism/packages/contracts-bedrock/lib/safe-contracts/contracts',
   'kontrol-cheatcodes/=lib/optimism/packages/contracts-bedrock/lib/kontrol-cheatcodes/src',
   'solady/=lib/optimism/packages/contracts-bedrock/lib/solady/src',
+
+  # We need these remappings to use the Optimism monorepo contracts as a library.
   'src/dispute=lib/optimism/packages/contracts-bedrock/src/dispute',
   'src/libraries=lib/optimism/packages/contracts-bedrock/src/libraries',
   
