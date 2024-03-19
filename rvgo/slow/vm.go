@@ -860,10 +860,10 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			shamt := and64(imm, toU64(0x1F))
-			switch shr64(toU64(6), imm).val() { // in rv64i the top 6 bits select the shift type
-			case 0x00: // 000000 = SRLIW
+			switch shr64(toU64(5), imm).val() { // top 7 bits select the shift type
+			case 0x00: // 0000000 = SRLIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
-			case 0x10: // 010000 = SRAIW
+			case 0x20: // 0100000 = SRAIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
 			}
 		}

@@ -510,7 +510,7 @@ contract RISCV {
                 out := shr64(toU64(25), instr)
             }
 
-            function parseCSSR(instr) -> out {
+            function parseCSRR(instr) -> out {
                 out := shr64(toU64(20), instr)
             }
 
@@ -721,7 +721,7 @@ contract RISCV {
                 } case 3 { // ?11 = CSRRC(I)
                     v := and64(out, not64(v))
                 } default {
-                    revertWithCode(0xbadc0de0) // unkwown CSR mode
+                    revertWithCode(0xbadc0de0) // unknown CSR mode
                 }
                 writeCSR(num, v)
             }
@@ -1147,10 +1147,10 @@ contract RISCV {
                     rdValue := mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
                 } case 5 { // 101 = SR~
                     let shamt := and64(imm, toU64(0x1F))
-                    switch shr64(toU64(6), imm) // in rv64i the top 6 bits select the shift type
-                    case 0x00 { // 000000 = SRLIW
+                    switch shr64(toU64(5), imm) // top 7 bits select the shift type
+                    case 0x00 { // 0000000 = SRLIW
                         rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
-                    } case 0x10 { // 010000 = SRAIW
+                    } case 0x20 { // 0100000 = SRAIW
                         rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
                     }
                 }
@@ -1325,7 +1325,7 @@ contract RISCV {
                         setPC(add64(_pc, toU64(4))) // ignore breakpoint
                     }
                 } default { // CSR instructions
-                    let imm := parseCSSR(instr)
+                    let imm := parseCSRR(instr)
                     let value := rs1
                     if iszero64(and64(funct3, toU64(4))) {
                         value := getRegister(rs1)
@@ -1335,7 +1335,7 @@ contract RISCV {
                     setRegister(rd, rdValue)
                     setPC(add64(_pc, toU64(4)))
                 }
-            } case 0x2F { // 010_1111: RV32A and RV32A atomic operations extension
+            } case 0x2F { // 010_1111: RV{32,64}A and RV{32,64}A atomic operations extension
                 // acquire and release bits:
                 //   aq := and64(shr64(toU64(1), funct7), toU64(1))
                 //   rl := and64(funct7, toU64(1))
@@ -1348,7 +1348,7 @@ contract RISCV {
                 // 0b010 == RV32A W variants
                 // 0b011 == RV64A D variants
                 let size := shl64(funct3, toU64(1))
-                if lt64(size, toU64(4)) {
+                if or(lt64(size, toU64(4)), gt64(size, toU64(8))) {
                     revertWithCode(0xbada70) // bad AMO size
                 }
                 let addr := getRegister(rs1)
