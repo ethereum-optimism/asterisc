@@ -116,7 +116,7 @@ contract Deploy is Deployer {
             _absolutePrestate: loadRiscvAbsolutePrestate(),
             _genesisBlockNumber: cfg.faultGameGenesisBlock(),
             _genesisOutputRoot: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-            _maxGameDepth :cfg.faultGameMaxDepth(),
+            _maxGameDepth: cfg.faultGameMaxDepth(),
             _splitDepth: cfg.faultGameSplitDepth(),
             _gameDuration: Duration.wrap(uint64(cfg.faultGameMaxDuration())),
             _vm: IBigStepper(mustGetAddress("RISCV")),
@@ -132,5 +132,4 @@ contract Deploy is Deployer {
             vm.toString(GameType.unwrap(GameTypes.ASTERISC))
         );
     }
-
 }

@@ -21,7 +21,8 @@ library Config {
     /// @notice Returns the path on the local filesystem where the deploy config is
     function deployConfigPath() internal view returns (string memory _env) {
         _env = vm.envOr(
-            "TARGET_L2_DEPLOY_CONFIG", string.concat(vm.projectRoot(), "/deploy-config/", _getDeploymentContext(), ".json")
+            "TARGET_L2_DEPLOY_CONFIG",
+            string.concat(vm.projectRoot(), "/deploy-config/", _getDeploymentContext(), ".json")
         );
     }
 

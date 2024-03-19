@@ -8,10 +8,10 @@ import { Config } from "scripts/Config.sol";
 
 /// @notice Represents a deployment. Is serialized to JSON as a key/value
 ///         pair. Can be accessed from within scripts.
-    struct Deployment {
-        string name;
-        address payable addr;
-    }
+struct Deployment {
+    string name;
+    address payable addr;
+}
 
 /// @title Artifacts
 abstract contract Artifacts {
@@ -34,7 +34,7 @@ abstract contract Artifacts {
     ///         exists for the file to live in.
     function ensurePath(string memory _path) internal {
         (, bytes memory returndata) =
-                                address(vm).call(abi.encodeWithSignature("split(string,string)", _path, string("/")));
+            address(vm).call(abi.encodeWithSignature("split(string,string)", _path, string("/")));
         string[] memory outputs = abi.decode(returndata, (string[]));
 
         string memory path = "";
@@ -159,5 +159,4 @@ abstract contract Artifacts {
         }
         return payable(addr);
     }
-
 }
