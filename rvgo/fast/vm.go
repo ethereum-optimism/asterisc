@@ -16,6 +16,22 @@ func (e *UnsupportedSyscallErr) Error() string {
 	return fmt.Sprintf("unsupported system call: %d", e.SyscallNum)
 }
 
+type UnrecognizedSyscallErr struct {
+	SyscallNum U64
+}
+
+func (e *UnrecognizedSyscallErr) Error() string {
+	return fmt.Sprintf("unrecognized system call: %d", e.SyscallNum)
+}
+
+type UnrecognizedResourceErr struct {
+	Resource U64
+}
+
+func (e *UnrecognizedResourceErr) Error() string {
+	return fmt.Sprintf("unrecognized resource limit lookup: %d", e.Resource)
+}
+
 // riscvStep runs a single instruction
 // Note: errors are only returned in debugging/tooling modes, not in production use.
 func (inst *InstrumentedState) riscvStep() (outErr error) {
@@ -538,7 +554,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				setRegister(toU64(10), toU64(0))
 				setRegister(toU64(11), toU64(0))
 			default:
-				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
+				revertWithCode(0xf0012, &UnrecognizedResourceErr{Resource: res})
 			}
 		case riscv.SysMadvise: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
@@ -574,7 +590,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
-			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnrecognizedSyscallErr{SyscallNum: a7})
 		}
 	}
 

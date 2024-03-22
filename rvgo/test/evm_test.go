@@ -143,7 +143,7 @@ func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts
 	}, os.Stdout)
 }
 
-func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses, step uint64) (postState []byte, postHash common.Hash, gasUsed uint64) {
+func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses, step uint64, revertCode []byte) (postState []byte, postHash common.Hash, gasUsed uint64) {
 	startingGas := uint64(30_000_000)
 
 	snap := env.StateDB.Snapshot()
@@ -158,6 +158,11 @@ func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses,
 	input := wit.EncodeStepInput(fast.LocalContext{})
 
 	ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.RISCV, input, startingGas, big.NewInt(0))
+	if revertCode != nil {
+		require.ErrorIs(t, err, vm.ErrExecutionReverted)
+		require.Equal(t, ret, revertCode)
+		return
+	}
 	require.NoError(t, err, "evm must not fail (ret: %x), at step %d", ret, step)
 	gasUsed = startingGas - leftOverGas
 

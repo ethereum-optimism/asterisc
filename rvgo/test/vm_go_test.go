@@ -114,7 +114,7 @@ func fullTest(t *testing.T, vmState *fast.VMState, po *testOracle, symbols fast.
 			}
 
 			if runEVM {
-				evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs, i)
+				evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs, i, nil)
 				if gasUsed > maxGasUsed {
 					maxGasUsed = gasUsed
 				}

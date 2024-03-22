@@ -60,6 +60,22 @@ func (e *UnsupportedSyscallErr) Error() string {
 	return fmt.Sprintf("unsupported system call: %d", e.SyscallNum)
 }
 
+type UnrecognizedSyscallErr struct {
+	SyscallNum U64
+}
+
+func (e *UnrecognizedSyscallErr) Error() string {
+	return fmt.Sprintf("unrecognized system call: %d", e.SyscallNum)
+}
+
+type UnrecognizedResourceErr struct {
+	Resource U64
+}
+
+func (e *UnrecognizedResourceErr) Error() string {
+	return fmt.Sprintf("unrecognized resource limit lookup: %d", e.Resource)
+}
+
 type PreimageOracle interface {
 	ReadPreimagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error)
 }
@@ -67,8 +83,13 @@ type PreimageOracle interface {
 func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr error) {
 	var revertCode uint64
 	defer func() {
-		if err := recover(); err != nil {
-			outErr = fmt.Errorf("revert: %v", err)
+		if errInterface := recover(); errInterface != nil {
+			if err, ok := errInterface.(error); ok {
+				outErr = fmt.Errorf("revert: %w", err)
+			} else {
+				outErr = fmt.Errorf("revert: %v", err)
+			}
+
 		}
 		if revertCode != 0 {
 			outErr = fmt.Errorf("revert %x: %w", revertCode, outErr)
@@ -713,7 +734,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				setRegister(toU64(10), toU64(0))
 				setRegister(toU64(11), toU64(0))
 			default:
-				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
+				revertWithCode(0xf0012, &UnrecognizedResourceErr{Resource: res})
 			}
 		case riscv.SysMadvise: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
@@ -749,7 +770,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
-			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
+			revertWithCode(0xf001ca11, &UnrecognizedSyscallErr{SyscallNum: a7})
 		}
 	}
 
