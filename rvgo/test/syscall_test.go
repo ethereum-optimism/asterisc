@@ -82,8 +82,7 @@ func TestStateSyscallUnsupported(t *testing.T) {
 			var fastSyscallErr *fast.UnsupportedSyscallErr
 			require.ErrorAs(t, err, &fastSyscallErr)
 
-			revertCode := uint64(0xf001ca11)
-			runEVM(t, contracts, addrs, stepWitness, nil, errCodeToByte32(revertCode))
+			runEVM(t, contracts, addrs, stepWitness, nil, errCodeToByte32(riscv.ErrInvalidSyscall))
 
 			var slowSyscallErr *slow.UnsupportedSyscallErr
 			runSlow(t, stepWitness, nil, nil, &slowSyscallErr)
@@ -498,8 +497,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		var fastSyscallErr *fast.UnrecognizedResourceErr
 		require.ErrorAs(t, err, &fastSyscallErr)
 
-		revertCode := uint64(0xf0012)
-		runEVM(t, contracts, addrs, stepWitness, nil, errCodeToByte32(revertCode))
+		runEVM(t, contracts, addrs, stepWitness, nil, errCodeToByte32(riscv.ErrUnrecognizedResource))
 
 		var slowSyscallErr *slow.UnrecognizedResourceErr
 		runSlow(t, stepWitness, nil, nil, &slowSyscallErr)

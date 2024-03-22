@@ -139,7 +139,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 	getRegister := func(reg U64) U64 {
 		if reg > 31 {
-			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg))
+			revertWithCode(riscv.ErrInvalidRegister, fmt.Errorf("cannot load invalid register: %d", reg))
 		}
 		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		return s.Registers[reg]
@@ -166,7 +166,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 	getMemoryB32 := func(addr U64, proofIndex uint8) (out [32]byte) {
 		if addr&31 != 0 { // quick addr alignment check
-			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
 		inst.trackMemAccess(addr, proofIndex)
 		s.Memory.GetUnaligned(addr, out[:])
@@ -184,12 +184,12 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
 	loadMem := func(addr U64, size U64, signed bool, proofIndexL uint8, proofIndexR uint8) (out U64) {
 		if size > 8 {
-			revertWithCode(0xbad512e0, fmt.Errorf("cannot load more than 8 bytes: %d", size))
+			revertWithCode(riscv.ErrLoadExceeds8Bytes, fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
 		inst.trackMemAccess(addr&^31, proofIndexL)
 		if (addr+size-1)&^31 != addr&^31 {
 			if proofIndexR == 0xff {
-				revertWithCode(0xbad22220, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
+				revertWithCode(riscv.ErrUnexpectedRProofLoad, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
 			}
 			inst.trackMemAccess((addr+size-1)&^31, proofIndexR)
 		}
@@ -206,7 +206,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
 		if size > 32 {
-			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
+			revertWithCode(riscv.ErrStoreExceeds32Bytes, fmt.Errorf("cannot store more than 32 bytes: %d", size))
 		}
 		var bytez [32]byte
 		binary.LittleEndian.PutUint64(bytez[:8], value[0])
@@ -224,7 +224,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			return
 		}
 		if proofIndexR == 0xff {
-			revertWithCode(0xbad22221, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
+			revertWithCode(riscv.ErrUnexpectedRProofStoreUnaligned, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
 		}
 		// if not aligned
 		rightAddr := leftAddr + 32
@@ -239,7 +239,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
 		if size > 8 {
-			revertWithCode(0xbad512e8, fmt.Errorf("cannot store more than 8 bytes: %d", size))
+			revertWithCode(riscv.ErrStoreExceeds8Bytes, fmt.Errorf("cannot store more than 8 bytes: %d", size))
 		}
 		var bytez [8]byte
 		binary.LittleEndian.PutUint64(bytez[:], value)
@@ -254,7 +254,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		// if not aligned
 		if proofIndexR == 0xff {
-			revertWithCode(0xbad2222f, fmt.Errorf("unexpected need for right-side proof %d in storeMem", proofIndexR))
+			revertWithCode(riscv.ErrUnexpectedRProofStore, fmt.Errorf("unexpected need for right-side proof %d in storeMem", proofIndexR))
 		}
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
@@ -287,7 +287,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 3: // ?11 = CSRRC(I)
 			v = and64(out, not64(v))
 		default:
-			revertWithCode(0xbadc0de0, fmt.Errorf("unkwown CSR mode: %d", mode))
+			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unkwown CSR mode: %d", mode))
 		}
 		writeCSR(num, v)
 		return
@@ -331,7 +331,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		pdatB32, pdatlen, err := inst.readPreimage(preImageKey, offset) // pdat is left-aligned
 		if err != nil {
-			revertWithCode(0xbadf00d0, err)
+			revertWithCode(riscv.ErrFailToReadPreimage, err)
 		}
 		if iszero64(pdatlen) { // EOF
 			return toU64(0)
@@ -554,7 +554,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				setRegister(toU64(10), toU64(0))
 				setRegister(toU64(11), toU64(0))
 			default:
-				revertWithCode(0xf0012, &UnrecognizedResourceErr{Resource: res})
+				revertWithCode(riscv.ErrUnrecognizedResource, &UnrecognizedResourceErr{Resource: res})
 			}
 		case riscv.SysMadvise: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
@@ -584,13 +584,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case riscv.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
-			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysFutex: // futex - not supported, for now
-			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
-			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
-			revertWithCode(0xf001ca11, &UnrecognizedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnrecognizedSyscallErr{SyscallNum: a7})
 		}
 	}
 
@@ -905,7 +905,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// 0b011 == RV64A D variants
 		size := shl64(funct3, toU64(1))
 		if lt64(size, toU64(4)) != 0 {
-			revertWithCode(0xbada70, fmt.Errorf("bad AMO size: %d", size))
+			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
 		// TODO check if addr is aligned
@@ -961,7 +961,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					v = value
 				}
 			default:
-				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
+				revertWithCode(riscv.ErrUnknownAtomicOperation, fmt.Errorf("unknown atomic operation %d", op))
 			}
 			storeMem(addr, size, v, 1, 3, false, true) // after overwriting 1, proof 2 is no longer valid
 			setRegister(rd, rdValue)
@@ -979,7 +979,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
 		setPC(add64(pc, toU64(4))) // no-op this.
 	default:
-		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
+		revertWithCode(riscv.ErrUnknownOpCode, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
 	return nil
 }
