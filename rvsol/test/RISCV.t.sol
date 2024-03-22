@@ -1,9 +1,9 @@
 pragma solidity 0.8.15;
 
-import {Test} from "forge-std/Test.sol";
-import {RISCV} from "src/RISCV.sol";
-import {PreimageOracle} from "@optimism/src/cannon/PreimageOracle.sol";
-import {CommonTest} from "./CommonTest.sol";
+import { Test } from "forge-std/Test.sol";
+import { RISCV } from "src/RISCV.sol";
+import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
+import { CommonTest } from "./CommonTest.sol";
 // FIXME: somehow this import gives a multiple declaration error
 // This import is for the VMStatus
 // import "@optimism/src/libraries/DisputeTypes.sol";
@@ -2407,7 +2407,12 @@ contract RISCV_Test is CommonTest {
         }
     }
 
-    function constructRISCVState(uint64 pc, uint32 insn, uint64 addr, bytes32 val)
+    function constructRISCVState(
+        uint64 pc,
+        uint32 insn,
+        uint64 addr,
+        bytes32 val
+    )
         internal
         returns (State memory state, bytes memory proof)
     {
@@ -2420,7 +2425,14 @@ contract RISCV_Test is CommonTest {
         state.pc = pc;
     }
 
-    function encodeRType(uint8 opcode, uint8 rd, uint8 funct3, uint8 rs1, uint8 rs2, uint8 funct7)
+    function encodeRType(
+        uint8 opcode,
+        uint8 rd,
+        uint8 funct3,
+        uint8 rs1,
+        uint8 rs2,
+        uint8 funct7
+    )
         internal
         pure
         returns (uint32 insn)
@@ -2435,7 +2447,13 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(opcode & 0x7F);
     }
 
-    function encodeIType(uint8 opcode, uint8 rd, uint8 funct3, uint8 rs1, uint16 imm)
+    function encodeIType(
+        uint8 opcode,
+        uint8 rd,
+        uint8 funct3,
+        uint8 rs1,
+        uint16 imm
+    )
         internal
         pure
         returns (uint32 insn)
@@ -2449,7 +2467,13 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(opcode & 0x7F);
     }
 
-    function encodeSType(uint8 opcode, uint8 funct3, uint8 rs1, uint8 rs2, uint16 imm)
+    function encodeSType(
+        uint8 opcode,
+        uint8 funct3,
+        uint8 rs1,
+        uint8 rs2,
+        uint16 imm
+    )
         internal
         pure
         returns (uint32 insn)
@@ -2464,7 +2488,13 @@ contract RISCV_Test is CommonTest {
         insn |= uint32(opcode & 0x7F);
     }
 
-    function encodeBType(uint8 opcode, uint8 funct3, uint8 rs1, uint8 rs2, uint16 imm)
+    function encodeBType(
+        uint8 opcode,
+        uint8 funct3,
+        uint8 rs1,
+        uint8 rs2,
+        uint16 imm
+    )
         internal
         pure
         returns (uint32 insn)
