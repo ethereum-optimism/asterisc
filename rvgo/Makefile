@@ -24,3 +24,11 @@ clean:
 test:
 	go test ./...
 .PHONY: test
+
+lint-check:
+	golangci-lint run
+.PHONY: lint-check
+
+lint-fix:
+	golangci-lint run --fix
+.PHONY: lint-fix

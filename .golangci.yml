@@ -1,0 +1,8 @@
+linters:
+  enable:
+    - goimports
+    - sqlclosecheck
+    - bodyclose
+    - asciicheck
+    - misspell
+    - errorlint
