@@ -710,6 +710,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				// first 8 bytes: soft limit. 1024 file handles max open
 				// second 8 bytes: hard limit
 				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2)
+				setRegister(toU64(10), toU64(0))
+				setRegister(toU64(11), toU64(0))
 			default:
 				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
 			}
