@@ -25,7 +25,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			if err, ok := errInterface.(error); ok {
 				outErr = fmt.Errorf("revert: %w", err)
 			} else {
-				outErr = fmt.Errorf("revert: %v", err)
+				outErr = fmt.Errorf("revert: %v", err) // nolint:errorlint
 			}
 
 		}

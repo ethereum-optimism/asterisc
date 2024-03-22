@@ -253,7 +253,7 @@ func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
 			l = 32
 		}
 		var zeroes [32]byte
-		d = copy(dest[d:], zeroes[:l])
+		copy(dest[d:], zeroes[:l])
 	} else {
 		copy(dest[d:], p.Data[pageAddr:])
 	}
