@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -107,7 +108,8 @@ func (p *ProcessPreimageOracle) Close() error {
 func (p *ProcessPreimageOracle) wait() {
 	err := p.cmd.Wait()
 	var waitErr error
-	if err, ok := err.(*exec.ExitError); !ok || !err.Success() {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || !exitErr.Success() {
 		waitErr = err
 	}
 	p.cancelIO(fmt.Errorf("%w: pre-image server has exited", waitErr))

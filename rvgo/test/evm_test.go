@@ -130,6 +130,7 @@ func testContracts(t require.TestingT) *Contracts {
 	}
 }
 
+// nolint:unused
 func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts) {
 	//env.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
 

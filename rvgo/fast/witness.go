@@ -40,7 +40,7 @@ func (wit *StepWitness) EncodeStepInput(localContext LocalContext) []byte {
 	input = append(input, uint64ToBytes32(32*3+32+uint64(len(wit.State))+abiStatePadding)...)
 	// local context in bytes
 	input = append(input, common.Hash(localContext).Bytes()...)
-	
+
 	// state data length in bytes
 	input = append(input, uint64ToBytes32(uint64(len(wit.State)))...)
 	input = append(input, wit.State[:]...)
