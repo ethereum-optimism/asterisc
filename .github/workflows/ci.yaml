@@ -43,6 +43,17 @@ jobs:
       - name: Run foundry tests
         run: forge test -vvv --ffi
         working-directory: rvsol
+  rvsol-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Run lint
+        run: make lint-check
+        working-directory: rvsol
 
   # go-lint:
   #   runs-on: ubuntu-latest
