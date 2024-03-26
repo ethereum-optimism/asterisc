@@ -5,9 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { RISCV } from "src/RISCV.sol";
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
 import { CommonTest } from "./CommonTest.sol";
-// FIXME: somehow this import gives a multiple declaration error
-// This import is for the VMStatus
-// import "@optimism/src/libraries/DisputeTypes.sol";
+import "@optimism/src/libraries/DisputeTypes.sol";
 
 contract RISCV_Test is CommonTest {
     /// @notice Stores the VM state.
@@ -2386,22 +2384,21 @@ contract RISCV_Test is CommonTest {
     ///      1. Exited with success (Invalid)
     ///      2. Exited with failure (Panic)
     ///      3. Unfinished
-    // TODO: import DisputeTypes.sol. For some reason, import is not working
-    function vmStatus(State memory state) internal pure returns (uint8 out_) {
+    function vmStatus(State memory state) internal pure returns (VMStatus out_) {
         if (!state.exited) {
-            return 3; // VMStatuses.UNFINISHED
+            return VMStatuses.UNFINISHED;
         } else if (state.exitCode == 0) {
-            return 0; // VMStatuses.VALID
+            return VMStatuses.VALID;
         } else if (state.exitCode == 1) {
-            return 1; // VMStatuses.INVALID
+            return VMStatuses.INVALID;
         } else {
-            return 2; // VMStatuses.PANIC
+            return VMStatuses.PANIC;
         }
     }
 
     function outputState(State memory state) internal pure returns (bytes32 out_) {
         bytes memory enc = encodeState(state);
-        uint8 status = vmStatus(state);
+        VMStatus status = vmStatus(state);
         assembly {
             out_ := keccak256(add(enc, 0x20), 362)
             out_ := or(and(not(shl(248, 0xFF)), out_), shl(248, status))
