@@ -218,7 +218,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			inst.trackMemAccess(rightAddr, proofIndexR)
 		}
 		inst.verifyMemChange(rightAddr, proofIndexR)
-		s.Memory.SetUnaligned(addr, bytez[leftSize:size])
+		s.Memory.SetUnaligned(rightAddr, bytez[leftSize:size])
 	}
 
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
