@@ -683,8 +683,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case riscv.SysClockGettime: // clock_gettime
 			addr := getRegister(toU64(11)) // addr of timespec struct
 			// write 1337s + 42ns as time
-			storeMemUnaligned(addr, toU64(8), shortToU256(1337), 1, 0xff)
-			storeMemUnaligned(add64(addr, toU64(8)), toU64(8), toU256(42), 2, 0xff)
+			value := or(shortToU256(1337), shl(shortToU256(64), toU256(42)))
+			storeMemUnaligned(addr, toU64(16), value, 1, 2)
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case riscv.SysRtSigprocmask: // rt_sigprocmask - ignore any sigset changes
