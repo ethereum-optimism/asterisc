@@ -2357,6 +2357,83 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    /* Revert cases */
+
+    function test_unknown_instruction() public {
+        uint32 insn = encodeRType(0xff, 0, 0, 0, 0, 0); // 0xff is unknown instruction opcode
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001c0de");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_invalid_proof() public {
+        uint32 insn = encodeRType(0xff, 0, 0, 0, 0, 0);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+        proof = hex"00"; // Invalid memory proof
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000badf00d1");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_unrecognized_resource_limit() public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[17] = 163;
+        state.registers[10] = 0;
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000000f0012");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_unrecognized_syscall() public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[17] = 999; // unrecognized syscall
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_invalid_amo_size() public {
+        uint32 insn;
+        uint8 funct3 = 0x1; // invalid amo size
+        uint8 funct7 = encodeFunct7(0x0, 0x0, 0x0);
+        insn = encodeRType(0x2f, 23, funct3, 17, 3, funct7);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"0000000000000000000000000000000000000000000000000000000000bada70");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_unknown_atomic_operation() public {
+        uint64 addr = 0xeae426a36ff2bb67;
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0xff, 0x0, 0x0); // unknown atomic operation
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 14, funct3, 8, 28, funct7); // amoaddd x14, x28, (x8)
+        }
+        (, uint64 rs2ValueU64) = truncate(hex"a0821b98f6c0d237", size);
+        (bytes32 memValueBytes32,) = truncate(hex"f47daefa285404dc", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[8] = addr;
+        state.registers[28] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"000000000000000000000000000000000000000000000000000000000f001a70");
+        riscv.step(encodedState, proof, 0);
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {
