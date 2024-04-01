@@ -332,7 +332,6 @@ func FuzzStateSyscallClockGettime(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, addr, pc, step uint64) {
 		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
-		addr = addr &^ 31
 		state := &fast.VMState{
 			PC:              pc,
 			Heap:            0,
