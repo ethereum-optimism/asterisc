@@ -60,6 +60,22 @@ func (e *UnsupportedSyscallErr) Error() string {
 	return fmt.Sprintf("unsupported system call: %d", e.SyscallNum)
 }
 
+type UnrecognizedSyscallErr struct {
+	SyscallNum U64
+}
+
+func (e *UnrecognizedSyscallErr) Error() string {
+	return fmt.Sprintf("unrecognized system call: %d", e.SyscallNum)
+}
+
+type UnrecognizedResourceErr struct {
+	Resource U64
+}
+
+func (e *UnrecognizedResourceErr) Error() string {
+	return fmt.Sprintf("unrecognized resource limit lookup: %d", e.Resource)
+}
+
 type PreimageOracle interface {
 	ReadPreimagePart(key [32]byte, offset uint64) (dat [32]byte, datlen uint8, err error)
 }
@@ -67,8 +83,13 @@ type PreimageOracle interface {
 func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr error) {
 	var revertCode uint64
 	defer func() {
-		if err := recover(); err != nil {
-			outErr = fmt.Errorf("revert: %v", err)
+		if errInterface := recover(); errInterface != nil {
+			if err, ok := errInterface.(error); ok {
+				outErr = fmt.Errorf("revert: %w", err)
+			} else {
+				outErr = fmt.Errorf("revert: %v", err)
+			}
+
 		}
 		if revertCode != 0 {
 			outErr = fmt.Errorf("revert %x: %w", revertCode, outErr)
@@ -196,7 +217,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 	getRegister := func(reg U64) U64 {
 		if gt64(reg, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad4e9, fmt.Errorf("cannot load invalid register: %d", reg.val()))
+			revertWithCode(riscv.ErrInvalidRegister, fmt.Errorf("cannot load invalid register: %d", reg.val()))
 		}
 		//fmt.Printf("load reg %2d: %016x\n", reg, state.Registers[reg])
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
@@ -209,7 +230,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			return
 		}
 		if gt64(reg, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad4e9, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
+			revertWithCode(riscv.ErrInvalidRegister, fmt.Errorf("unknown register %d, cannot write %x", reg.val(), v.val()))
 		}
 		offset := add64(toU64(stateOffsetRegisters), mul64(reg, toU64(8)))
 		writeState(offset.val(), 8, encodeU64BE(v))
@@ -261,7 +282,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 	getMemoryB32 := func(addr U64, proofIndex uint8) (out [32]byte) {
 		if and64(addr, toU64(31)) != (U64{}) { // quick addr alignment check
-			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
 		offset := proofOffset(proofIndex)
 		leaf := calldataload(offset)
@@ -281,7 +302,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		}
 		memRoot := getMemRoot()
 		if iszero(eq(b32asBEWord(node), b32asBEWord(memRoot))) { // verify the root matches
-			revertWithCode(0xbadf00d1, fmt.Errorf("bad memory proof, got mem root: %x, expected %x", node, memRoot))
+			revertWithCode(riscv.ErrBadMemoryProof, fmt.Errorf("bad memory proof, got mem root: %x, expected %x", node, memRoot))
 		}
 		out = leaf
 		return
@@ -291,7 +312,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	// it assumes the same memory proof has been verified with getMemoryB32
 	setMemoryB32 := func(addr U64, v [32]byte, proofIndex uint8) {
 		if and64(addr, toU64(31)) != (U64{}) {
-			revertWithCode(0xbad10ad0, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
 		offset := proofOffset(proofIndex)
 		leaf := v
@@ -315,7 +336,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
 	loadMem := func(addr U64, size U64, signed bool, proofIndexL uint8, proofIndexR uint8) (out U64) {
 		if size.val() > 8 {
-			revertWithCode(0xbad512e0, fmt.Errorf("cannot load more than 8 bytes: %d", size))
+			revertWithCode(riscv.ErrLoadExceeds8Bytes, fmt.Errorf("cannot load more than 8 bytes: %d", size))
 		}
 		// load/verify left part
 		leftAddr := and64(addr, not64(toU64(31)))
@@ -329,7 +350,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		if iszero64(eq64(leftAddr, rightAddr)) {
 			// if unaligned, use second proof for the right part
 			if proofIndexR == 0xff {
-				revertWithCode(0xbad22220, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
+				revertWithCode(riscv.ErrUnexpectedRProofLoad, fmt.Errorf("unexpected need for right-side proof %d in loadMem", proofIndexR))
 			}
 			// load/verify right part
 			right = b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
@@ -400,7 +421,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8) {
 		if size.val() > 32 {
-			revertWithCode(0xbad512e1, fmt.Errorf("cannot store more than 32 bytes: %d", size))
+			revertWithCode(riscv.ErrStoreExceeds32Bytes, fmt.Errorf("cannot store more than 32 bytes: %d", size))
 		}
 
 		leftAddr := and64(addr, not64(toU64(31)))
@@ -420,7 +441,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			return
 		}
 		if proofIndexR == 0xff {
-			revertWithCode(0xbad22221, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
+			revertWithCode(riscv.ErrUnexpectedRProofStoreUnaligned, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
 		}
 		// load the right base (with updated mem root)
 		right := b32asBEWord(getMemoryB32(rightAddr, proofIndexR))
@@ -454,7 +475,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case 3: // ?11 = CSRRC(I)
 			v = and64(out, not64(v))
 		default:
-			revertWithCode(0xbadc0de0, fmt.Errorf("unkwown CSR mode: %d", mode.val()))
+			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unkwown CSR mode: %d", mode.val()))
 		}
 		writeCSR(num, v)
 		return
@@ -500,7 +521,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			datlen = toU64(l)
 			return
 		}
-		revertWithCode(0xbadf00d0, err)
+		revertWithCode(riscv.ErrFailToReadPreimage, err)
 		return
 	}
 
@@ -713,7 +734,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				setRegister(toU64(10), toU64(0))
 				setRegister(toU64(11), toU64(0))
 			default:
-				revertWithCode(0xf0012, fmt.Errorf("unrecognized resource limit lookup: %d", res))
+				revertWithCode(riscv.ErrUnrecognizedResource, &UnrecognizedResourceErr{Resource: res})
 			}
 		case riscv.SysMadvise: // madvise - ignored
 			setRegister(toU64(10), toU64(0))
@@ -743,13 +764,13 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case riscv.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
-			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysFutex: // futex - not supported, for now
-			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
-			revertWithCode(0xf001ca11, &UnsupportedSyscallErr{SyscallNum: a7})
+			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
-			revertWithCode(0xf001ca11, fmt.Errorf("unrecognized system call: %d", a7))
+			revertWithCode(riscv.ErrInvalidSyscall, &UnrecognizedSyscallErr{SyscallNum: a7})
 		}
 	}
 
@@ -1064,7 +1085,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		// 0b011 == RV64A D variants
 		size := shl64(funct3, toU64(1))
 		if lt64(size, toU64(4)) != (U64{}) {
-			revertWithCode(0xbada70, fmt.Errorf("bad AMO size: %d", size))
+			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
 		// TODO check if addr is aligned
@@ -1120,7 +1141,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 					v = value
 				}
 			default:
-				revertWithCode(0xf001a70, fmt.Errorf("unknown atomic operation %d", op))
+				revertWithCode(riscv.ErrUnknownAtomicOperation, fmt.Errorf("unknown atomic operation %d", op))
 			}
 			storeMem(addr, size, v, 1, 3) // after overwriting 1, proof 2 is no longer valid
 			setRegister(rd, rdValue)
@@ -1138,7 +1159,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
 		setPC(add64(pc, toU64(4))) // no-op this.
 	default:
-		revertWithCode(0xf001c0de, fmt.Errorf("unknown instruction opcode: %d", opcode))
+		revertWithCode(riscv.ErrUnknownOpCode, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}
 	return computeStateHash(), nil
 }

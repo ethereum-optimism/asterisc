@@ -55,9 +55,6 @@ func (m *InstrumentedState) Step(proof bool) (wit *StepWitness, err error) {
 	}
 
 	err = m.riscvStep()
-	if err != nil {
-		return nil, err
-	}
 
 	if proof {
 		wit.MemProof = make([]byte, 0, len(m.memProofs)*memProofSize)
@@ -70,6 +67,7 @@ func (m *InstrumentedState) Step(proof bool) (wit *StepWitness, err error) {
 			wit.PreimageValue = m.lastPreimage
 		}
 	}
+
 	return
 }
 

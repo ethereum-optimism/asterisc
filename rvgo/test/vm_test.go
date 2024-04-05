@@ -121,7 +121,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 		wit, err := instState.Step(true)
 		require.NoError(t, err)
 
-		evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs, i)
+		evmPost, evmPostHash, gasUsed := stepEVM(t, env, wit, addrs, i, nil)
 		if gasUsed > maxGasUsed {
 			maxGasUsed = gasUsed
 		}

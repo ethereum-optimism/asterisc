@@ -30,22 +30,33 @@ func staticOracle(t *testing.T, preimageData []byte) *testOracle {
 	}
 }
 
-func runEVM(t *testing.T, contracts *Contracts, addrs *Addresses, stepWitness *fast.StepWitness, fastPost fast.StateWitness) {
+func runEVM(t *testing.T, contracts *Contracts, addrs *Addresses, stepWitness *fast.StepWitness, fastPost fast.StateWitness, revertCode []byte) {
 	env := newEVMEnv(t, contracts, addrs)
-	evmPost, _, _ := stepEVM(t, env, stepWitness, addrs, 0)
+	evmPost, _, _ := stepEVM(t, env, stepWitness, addrs, 0, revertCode)
 	require.Equal(t, hexutil.Bytes(fastPost).String(), hexutil.Bytes(evmPost).String(),
 		"fast VM produced different state than EVM")
 }
 
-func runSlow(t *testing.T, stepWitness *fast.StepWitness, fastPost fast.StateWitness, po slow.PreimageOracle) {
+func runSlow(t *testing.T, stepWitness *fast.StepWitness, fastPost fast.StateWitness, po slow.PreimageOracle, expectedErr interface{}) {
 	slowPostHash, err := slow.Step(stepWitness.EncodeStepInput(fast.LocalContext{}), po)
-	require.NoError(t, err)
-	fastPostHash, err := fastPost.StateHash()
-	require.NoError(t, err)
-	require.Equal(t, fastPostHash, slowPostHash, "fast VM produced different state than slow VM")
+	if expectedErr != nil {
+		require.ErrorAs(t, err, expectedErr)
+	} else {
+                require.NoError(t, err)
+		fastPostHash, err := fastPost.StateHash()
+		require.NoError(t, err)
+		require.Equal(t, fastPostHash, slowPostHash, "fast VM produced different state than slow VM")
+	}
+
+}
+
+func errCodeToByte32(errCode uint64) []byte {
+	return binary.BigEndian.AppendUint64(make([]byte, 24), errCode)
 }
 
 func TestStateSyscallUnsupported(t *testing.T) {
+	contracts := testContracts(t)
+	addrs := testAddrs
 	syscalls := []int{
 		riscv.SysPrlimit64,
 		riscv.SysFutex,
@@ -68,11 +79,14 @@ func TestStateSyscallUnsupported(t *testing.T) {
 			state.Memory.SetUnaligned(pc, syscallInsn)
 
 			fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
-			_, err := fastState.Step(true)
-			var syscallErr *fast.UnsupportedSyscallErr
-			require.ErrorAs(t, err, &syscallErr)
+			stepWitness, err := fastState.Step(true)
+			var fastSyscallErr *fast.UnsupportedSyscallErr
+			require.ErrorAs(t, err, &fastSyscallErr)
 
-			// TODO: Test EVM & slow VM
+			runEVM(t, contracts, addrs, stepWitness, nil, errCodeToByte32(riscv.ErrInvalidSyscall))
+
+			var slowSyscallErr *slow.UnsupportedSyscallErr
+			runSlow(t, stepWitness, nil, nil, &slowSyscallErr)
 		})
 	}
 }
@@ -114,8 +128,8 @@ func FuzzStateSyscallExit(f *testing.F) {
 		require.Equal(t, preStateRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	}
 
 	f.Fuzz(func(t *testing.T, exitCode uint8, pc uint64, step uint64) {
@@ -162,8 +176,8 @@ func FuzzStateSyscallBrk(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	})
 }
 
@@ -216,8 +230,8 @@ func FuzzStateSyscallMmap(f *testing.F) {
 		require.Equal(t, newHeap, state.Heap)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	})
 }
 
@@ -258,8 +272,8 @@ func FuzzStateSyscallFcntl(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	}
 
 	f.Fuzz(func(t *testing.T, fd uint64, cmd uint64, pc uint64, step uint64) {
@@ -321,8 +335,8 @@ func FuzzStateSyscallOpenat(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	})
 }
 
@@ -368,8 +382,8 @@ func FuzzStateSyscallClockGettime(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	})
 }
 
@@ -410,8 +424,8 @@ func FuzzStateSyscallClone(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	})
 }
 
@@ -458,8 +472,8 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	}
 
 	testGetrlimitErr := func(t *testing.T, res, addr, pc, step uint64) {
@@ -478,9 +492,14 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		state.Memory.SetUnaligned(pc, syscallInsn)
 
 		fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
-		_, err := fastState.Step(true)
-		require.Contains(t, err.Error(), "f0012")
-		// TODO: Test EVM & slow VM
+		stepWitness, err := fastState.Step(true)
+		var fastSyscallErr *fast.UnrecognizedResourceErr
+		require.ErrorAs(t, err, &fastSyscallErr)
+
+		runEVM(t, contracts, addrs, stepWitness, nil, errCodeToByte32(riscv.ErrUnrecognizedResource))
+
+		var slowSyscallErr *slow.UnrecognizedResourceErr
+		runSlow(t, stepWitness, nil, nil, &slowSyscallErr)
 	}
 
 	f.Fuzz(func(t *testing.T, res, addr, pc, step uint64) {
@@ -551,8 +570,8 @@ func FuzzStateSyscallNoop(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	}
 
 	f.Fuzz(func(t *testing.T, arg uint64, pc uint64, step uint64) {
@@ -599,8 +618,8 @@ func FuzzStateSyscallRead(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	}
 
 	f.Fuzz(func(t *testing.T, fd, addr, count, pc, step uint64) {
@@ -663,8 +682,8 @@ func FuzzStateHintRead(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, oracle)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, oracle, nil)
 	})
 }
 
@@ -730,8 +749,8 @@ func FuzzStatePreimageRead(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, oracle)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, oracle, nil)
 	})
 }
 
@@ -772,8 +791,8 @@ func FuzzStateSyscallWrite(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, nil)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, nil, nil)
 	}
 
 	f.Fuzz(func(t *testing.T, fd, addr, count, pc, step uint64) {
@@ -843,8 +862,8 @@ func FuzzStateHintWrite(f *testing.F) {
 		require.Equal(t, expectedRegisters, state.Registers)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, oracle)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, oracle, nil)
 	})
 }
 
@@ -915,7 +934,7 @@ func FuzzStatePreimageWrite(f *testing.F) {
 		require.Equal(t, expectedKey, state.PreimageKey)
 
 		fastPost := state.EncodeWitness()
-		runEVM(t, contracts, addrs, stepWitness, fastPost)
-		runSlow(t, stepWitness, fastPost, oracle)
+		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
+		runSlow(t, stepWitness, fastPost, oracle, nil)
 	})
 }
