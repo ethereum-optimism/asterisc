@@ -13,6 +13,7 @@ import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 import { DisputeGameFactory } from "@optimism/src/dispute/DisputeGameFactory.sol";
 import { DelayedWETH } from "@optimism/src/dispute/weth/DelayedWETH.sol";
+import { AnchorStateRegistry } from "@optimism/src/dispute/AnchorStateRegistry.sol";
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
 import { Safe } from "safe-contracts/Safe.sol";
 import { Enum as SafeOps } from "safe-contracts/common/Enum.sol";
@@ -103,6 +104,7 @@ contract Deploy is Deployer {
         console.log("Setting Asterisc FaultDisputeGame implementation");
         DisputeGameFactory factory = DisputeGameFactory(mustGetChainAddress("DisputeGameFactoryProxy"));
         DelayedWETH weth = DelayedWETH(mustGetChainAddress("DelayedWETHProxy"));
+        AnchorStateRegistry anchorStateRegistry = AnchorStateRegistry(mustGetChainAddress("AnchorStateRegistryProxy"));
 
         if (address(factory.gameImpls(GameTypes.ASTERISC)) != address(0) && !_allowUpgrade) {
             console.log(
@@ -114,13 +116,12 @@ contract Deploy is Deployer {
         FaultDisputeGame fdg = new FaultDisputeGame{ salt: _implSalt() }({
             _gameType: GameTypes.ASTERISC,
             _absolutePrestate: loadRiscvAbsolutePrestate(),
-            _genesisBlockNumber: cfg.faultGameGenesisBlock(),
-            _genesisOutputRoot: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
             _maxGameDepth: cfg.faultGameMaxDepth(),
             _splitDepth: cfg.faultGameSplitDepth(),
             _gameDuration: Duration.wrap(uint64(cfg.faultGameMaxDuration())),
             _vm: IBigStepper(mustGetAddress("RISCV")),
             _weth: weth,
+            _anchorStateRegistry: anchorStateRegistry,
             _l2ChainId: cfg.l2ChainID()
         });
 
