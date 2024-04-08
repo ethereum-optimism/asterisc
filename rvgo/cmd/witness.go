@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
@@ -10,6 +9,11 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
+
+type WitnessOutput struct {
+	Witness   []byte   `json:"witness"`
+	StateHash [32]byte `json:"stateHash"`
+}
 
 func Witness(ctx *cli.Context) error {
 	input := ctx.Path(cannon.WitnessInputFlag.Name)
@@ -19,23 +23,25 @@ func Witness(ctx *cli.Context) error {
 		return fmt.Errorf("invalid input state (%v): %w", input, err)
 	}
 	witness := state.EncodeWitness()
-	h, err := witness.StateHash()
+	stateHash, err := witness.StateHash()
 	if err != nil {
 		return fmt.Errorf("failed to compute witness hash: %w", err)
 	}
-	if output != "" {
-		if err := os.WriteFile(output, witness, 0755); err != nil {
-			return fmt.Errorf("writing output to %v: %w", output, err)
-		}
+	witnessOutput := &WitnessOutput{
+		Witness:   witness,
+		StateHash: stateHash,
 	}
-	fmt.Println(h.Hex())
+	if err := jsonutil.WriteJSON(output, witnessOutput, OutFilePerm); err != nil {
+		return fmt.Errorf("failed to write witness output %w", err)
+	}
+	fmt.Println(stateHash.Hex())
 	return nil
 }
 
 var WitnessCommand = &cli.Command{
 	Name:        "witness",
 	Usage:       "Convert an Asterisc JSON state into a binary witness",
-	Description: "Convert an Asterisc JSON state into a binary witness. The hash of the witness is written to stdout",
+	Description: "Convert an Asterisc JSON state into a binary witness. The statehash is written to stdout",
 	Action:      Witness,
 	Flags: []cli.Flag{
 		cannon.WitnessInputFlag,
