@@ -42,7 +42,7 @@ func runSlow(t *testing.T, stepWitness *fast.StepWitness, fastPost fast.StateWit
 	if expectedErr != nil {
 		require.ErrorAs(t, err, expectedErr)
 	} else {
-                require.NoError(t, err)
+		require.NoError(t, err)
 		fastPostHash, err := fastPost.StateHash()
 		require.NoError(t, err)
 		require.Equal(t, fastPostHash, slowPostHash, "fast VM produced different state than slow VM")
