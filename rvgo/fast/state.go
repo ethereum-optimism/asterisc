@@ -50,6 +50,11 @@ type VMState struct {
 	// Warning: the hint MAY NOT BE COMPLETE. I.e. this is buffered,
 	// and should only be read when len(LastHint) > 4 && uint32(LastHint[:4]) >= len(LastHint[4:])
 	LastHint hexutil.Bytes `json:"lastHint,omitempty"`
+
+	// VMState must hold these values because if not, we must ask FPVM again to
+	// compute these values.
+	Witness   []byte   `json:"witness,omitempty"`
+	StateHash [32]byte `json:"stateHash,omitempty"`
 }
 
 func NewVMState() *VMState {
@@ -57,6 +62,17 @@ func NewVMState() *VMState {
 		Memory: NewMemory(),
 		Heap:   1 << 28, // 0.25 GiB of program code space
 	}
+}
+
+func (state *VMState) SetWitnessAndStateHash() error {
+	witness := state.EncodeWitness()
+	state.Witness = witness
+	stateHash, err := witness.StateHash()
+	if err != nil {
+		return fmt.Errorf("failed to compute stateHash: %w", err)
+	}
+	state.StateHash = stateHash
+	return nil
 }
 
 func (state *VMState) GetStep() uint64 { return state.Step }

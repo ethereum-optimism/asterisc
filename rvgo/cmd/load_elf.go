@@ -32,6 +32,10 @@ func LoadELF(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to compute program metadata: %w", err)
 	}
+	// Must set witness and stateHash after initial state is prepared
+	if err := state.SetWitnessAndStateHash(); err != nil {
+		return fmt.Errorf("failed to set witness and stateHash: %w", err)
+	}
 	if err := jsonutil.WriteJSON[*Metadata](ctx.Path(cannon.LoadELFMetaFlag.Name), meta, OutFilePerm); err != nil {
 		return fmt.Errorf("failed to output metadata: %w", err)
 	}
