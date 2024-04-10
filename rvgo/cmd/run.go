@@ -223,6 +223,10 @@ func Run(ctx *cli.Context) error {
 		}
 	}
 
+	if err := state.SetWitnessAndStateHash(); err != nil {
+		return fmt.Errorf("failed to set witness and stateHash: %w", err)
+	}
+
 	if err := jsonutil.WriteJSON(ctx.Path(cannon.RunOutputFlag.Name), state, OutFilePerm); err != nil {
 		return fmt.Errorf("failed to write state output: %w", err)
 	}
