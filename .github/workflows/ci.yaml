@@ -21,10 +21,14 @@ jobs:
         run: make bin bin/simple bin/minimal
         working-directory: tests/go-tests
       - name: Run tests
-        run: go test -v ./...
-        working-directory: rvgo
+        run: go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
       - name: Fuzz
         run: make fuzz
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
   rvsol-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
