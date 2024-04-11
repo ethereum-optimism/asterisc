@@ -42,6 +42,10 @@ contract Deploy is Deployer {
     function run() public {
         deployRiscv();
         setAsteriscFaultGameImplementation(false);
+        string memory path = vm.envOr(
+            "STATE_DUMP_PATH", string.concat(vm.projectRoot(), "/", name(), "-", vm.toString(block.chainid), ".json")
+        );
+        vm.dumpState(path);
     }
 
     /// @notice Deploy RISCV
