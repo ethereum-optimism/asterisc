@@ -156,7 +156,8 @@ func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses,
 		require.NoError(t, err, "evm must not fail (ret: %x, gas: %d)", ret, startingGas-leftOverGas)
 	}
 
-	input := wit.EncodeStepInput(fast.LocalContext{})
+	input, err := wit.EncodeStepInput(fast.LocalContext{})
+	require.NoError(t, err)
 
 	ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.RISCV, input, startingGas, big.NewInt(0))
 	if revertCode != nil {

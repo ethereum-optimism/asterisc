@@ -38,7 +38,9 @@ func runEVM(t *testing.T, contracts *Contracts, addrs *Addresses, stepWitness *f
 }
 
 func runSlow(t *testing.T, stepWitness *fast.StepWitness, fastPost fast.StateWitness, po slow.PreimageOracle, expectedErr interface{}) {
-	slowPostHash, err := slow.Step(stepWitness.EncodeStepInput(fast.LocalContext{}), po)
+	input, err := stepWitness.EncodeStepInput(fast.LocalContext{})
+	require.NoError(t, err)
+	slowPostHash, err := slow.Step(input, po)
 	if expectedErr != nil {
 		require.ErrorAs(t, err, expectedErr)
 	} else {

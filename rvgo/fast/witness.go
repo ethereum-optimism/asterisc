@@ -1,10 +1,11 @@
 package fast
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/big"
 
+	"github.com/ethereum-optimism/asterisc/rvgo/bindings"
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -22,34 +23,16 @@ type StepWitness struct {
 	PreimageOffset uint64
 }
 
-func uint64ToBytes32(v uint64) []byte {
-	var out [32]byte
-	binary.BigEndian.PutUint64(out[32-8:], v)
-	return out[:]
-}
-
-func (wit *StepWitness) EncodeStepInput(localContext LocalContext) []byte {
-	abiStatePadding := (32 - (uint64(len(wit.State)) % 32)) % 32
-	abiProofPadding := (32 - (uint64(len(wit.MemProof)) % 32)) % 32
-
-	var input []byte
-	input = append(input, StepBytes4...)
-	// state data offset in bytes
-	input = append(input, uint64ToBytes32(32*3)...)
-	// proof data offset in bytes
-	input = append(input, uint64ToBytes32(32*3+32+uint64(len(wit.State))+abiStatePadding)...)
-	// local context in bytes
-	input = append(input, common.Hash(localContext).Bytes()...)
-
-	// state data length in bytes
-	input = append(input, uint64ToBytes32(uint64(len(wit.State)))...)
-	input = append(input, wit.State[:]...)
-	input = append(input, make([]byte, abiStatePadding)...)
-	// proof data length in bytes
-	input = append(input, uint64ToBytes32(uint64(len(wit.MemProof)))...)
-	input = append(input, wit.MemProof[:]...)
-	input = append(input, make([]byte, abiProofPadding)...)
-	return input
+func (wit *StepWitness) EncodeStepInput(localContext LocalContext) ([]byte, error) {
+	abi, err := bindings.RISCVMetaData.GetAbi()
+	if err != nil {
+		return nil, err
+	}
+	input, err := abi.Pack("step", wit.State, wit.MemProof, localContext)
+	if err != nil {
+		return nil, err
+	}
+	return input, nil
 }
 
 func (wit *StepWitness) HasPreimage() bool {
@@ -61,32 +44,38 @@ func (wit *StepWitness) EncodePreimageOracleInput(localContext LocalContext) ([]
 		return nil, errors.New("cannot encode pre-image oracle input, witness has no pre-image to proof")
 	}
 
+	preimageAbi, err := bindings.PreimageOracleMetaData.GetAbi()
+	if err != nil {
+		return nil, err
+	}
+
 	switch preimage.KeyType(wit.PreimageKey[0]) {
 	case preimage.LocalKeyType:
 		if len(wit.PreimageValue) > 32+8 {
 			return nil, fmt.Errorf("local pre-image exceeds maximum size of 32 bytes with key 0x%x", wit.PreimageKey)
 		}
-		var input []byte
-		input = append(input, LoadLocalDataBytes4...)
-		input = append(input, wit.PreimageKey[:]...)
-		input = append(input, common.Hash(localContext).Bytes()...)
-
 		preimagePart := wit.PreimageValue[8:]
 		var tmp [32]byte
 		copy(tmp[:], preimagePart)
-		input = append(input, tmp[:]...)
-		input = append(input, uint64ToBytes32(uint64(len(wit.PreimageValue)-8))...)
-		input = append(input, uint64ToBytes32(wit.PreimageOffset)...)
-		// Note: we can pad calldata to 32 byte multiple, but don't strictly have to
+		input, err := preimageAbi.Pack("loadLocalData",
+			new(big.Int).SetBytes(wit.PreimageKey[1:]),
+			localContext,
+			tmp,
+			new(big.Int).SetUint64(uint64(len(preimagePart))),
+			new(big.Int).SetUint64(uint64(wit.PreimageOffset)),
+		)
+		if err != nil {
+			return nil, err
+		}
 		return input, nil
 	case preimage.Keccak256KeyType:
-		var input []byte
-		input = append(input, LoadKeccak256PreimagePartBytes4...)
-		input = append(input, uint64ToBytes32(wit.PreimageOffset)...)
-		input = append(input, uint64ToBytes32(32+32)...) // partOffset, calldata offset
-		input = append(input, uint64ToBytes32(uint64(len(wit.PreimageValue))-8)...)
-		input = append(input, wit.PreimageValue[8:]...)
-		// Note: we can pad calldata to 32 byte multiple, but don't strictly have to
+		input, err := preimageAbi.Pack(
+			"loadKeccak256PreimagePart",
+			new(big.Int).SetUint64(uint64(wit.PreimageOffset)),
+			wit.PreimageValue[8:])
+		if err != nil {
+			return nil, err
+		}
 		return input, nil
 	default:
 		return nil, fmt.Errorf("unsupported pre-image type %d, cannot prepare preimage with key %x offset %d for oracle",
