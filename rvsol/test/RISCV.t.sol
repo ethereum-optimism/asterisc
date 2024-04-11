@@ -2432,7 +2432,7 @@ contract RISCV_Test is CommonTest {
         // 261(prlimit64), 422(futex), 101(nanosleep): unsupported
         uint64[3] memory syscalls = [uint64(261), 422, 101];
 
-        for (uint i = 0; i < syscalls.length; i++) {
+        for (uint256 i = 0; i < syscalls.length; i++) {
             (State memory state, bytes memory proof) = constructRISCVState(0, insn);
             state.registers[17] = syscalls[i];
             bytes memory encodedState = encodeState(state);
@@ -2466,7 +2466,7 @@ contract RISCV_Test is CommonTest {
             step -= 1;
         }
 
-        for (uint i = 0; i < syscalls.length; i++) {
+        for (uint256 i = 0; i < syscalls.length; i++) {
             (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
             state.step = step;
             state.registers[17] = syscalls[i];
@@ -2509,7 +2509,16 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
-    function testFuzz_syscall_mmap(bool isZeroAddr, uint64 addr, uint32 _length, uint32 _heap, uint32 pc, uint64 step) public {
+    function testFuzz_syscall_mmap(
+        bool isZeroAddr,
+        uint64 addr,
+        uint32 _length,
+        uint32 _heap,
+        uint32 pc,
+        uint64 step
+    )
+        public
+    {
         uint16 imm = 0x0;
         uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
 
@@ -2623,7 +2632,7 @@ contract RISCV_Test is CommonTest {
         // EpollCtl, Pipe2, Readlinnkat, Newfstatat, Newuname, Munmap, GetRandom,
         uint64[15] memory syscalls = [uint64(123), 124, 135, 132, 178, 134, 233, 20, 21, 59, 78, 79, 160, 215, 278];
 
-        for (uint i = 0; i < syscalls.length; i ++) {
+        for (uint256 i = 0; i < syscalls.length; i++) {
             (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
             state.step = step;
             state.registers[17] = syscalls[i];
