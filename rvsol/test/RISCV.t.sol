@@ -2390,17 +2390,6 @@ contract RISCV_Test is CommonTest {
         riscv.step(encodedState, proof, 0);
     }
 
-    function test_unrecognized_syscall() public {
-        uint16 imm = 0x0;
-        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
-        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
-        state.registers[17] = 999; // unrecognized syscall
-        bytes memory encodedState = encodeState(state);
-
-        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
-        riscv.step(encodedState, proof, 0);
-    }
-
     function test_invalid_amo_size() public {
         uint32 insn;
         uint8 funct3 = 0x1; // invalid amo size
@@ -2432,6 +2421,223 @@ contract RISCV_Test is CommonTest {
 
         vm.expectRevert(hex"000000000000000000000000000000000000000000000000000000000f001a70");
         riscv.step(encodedState, proof, 0);
+    }
+
+    /* Syscall Tests */
+
+    function test_unsupported_syscall() public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        // 261(prlimit64), 422(futex), 101(nanosleep): unsupported
+        uint64[3] memory syscalls = [uint64(261), 422, 101];
+
+        for (uint i = 0; i < syscalls.length; i++) {
+            (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+            state.registers[17] = syscalls[i];
+            bytes memory encodedState = encodeState(state);
+
+            vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+            riscv.step(encodedState, proof, 0);
+        }
+    }
+
+    function testFuzz_unrecognized_syscall(uint32 syscall) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[17] = uint64(syscall) + 500; // there's no syscall greater than 500
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function testFuzz_syscall_exit(uint8 exitCode, uint32 pc, uint64 step) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        // 93(exit), 94(exitGroup)d
+        uint64[2] memory syscalls = [uint64(93), 94];
+
+        // prevent overflow
+        uint64 alignedPc = uint64(pc) << 4;
+        if (step > 0) {
+            step -= 1;
+        }
+
+        for (uint i = 0; i < syscalls.length; i++) {
+            (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
+            state.step = step;
+            state.registers[17] = syscalls[i];
+            state.registers[10] = exitCode;
+            bytes memory encodedState = encodeState(state);
+
+            State memory expect = state;
+            expect.pc += 4;
+            expect.step += 1;
+            expect.exited = true;
+            expect.exitCode = exitCode;
+
+            bytes32 postState = riscv.step(encodedState, proof, 0);
+            assertEq(postState, outputState(expect), "unexpected post state");
+        }
+    }
+
+    function testFuzz_syscall_brk(uint32 pc, uint64 step) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        // prevent overflow
+        uint64 alignedPc = uint64(pc) << 4;
+        if (step > 0) {
+            step -= 1;
+        }
+
+        (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
+        state.step = step;
+        state.registers[17] = 214; // brk
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect = state;
+        expect.pc += 4;
+        expect.step += 1;
+        expect.registers[10] = 1 << 30;
+        expect.registers[11] = 0;
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    function testFuzz_syscall_mmap(bool isZeroAddr, uint64 addr, uint32 _length, uint32 _heap, uint32 pc, uint64 step) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        if (isZeroAddr) {
+            addr = 0;
+        }
+
+        // prevent overflow
+        uint64 alignedPc = uint64(pc) << 4;
+        if (step > 0) {
+            step -= 1;
+        }
+        uint64 length = uint64(_length);
+        uint64 heap = uint64(_heap);
+
+        (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
+        state.step = step;
+        state.registers[17] = 222; // mmap
+        state.registers[10] = addr;
+        state.registers[11] = length;
+        state.heap = heap;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect = state;
+        expect.pc += 4;
+        expect.step += 1;
+        expect.registers[11] = 0;
+
+        uint64 newHeap = heap;
+        if (addr == 0) {
+            expect.registers[10] = heap;
+            uint64 align = length & (4096 - 1);
+            if (align != 0) {
+                length = length + 4096 - align;
+            }
+            newHeap += length;
+        }
+        expect.heap = newHeap;
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    // TODO: fcntl
+
+    function testFuzz_syscall_openat(uint32 pc, uint64 step) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        // prevent overflow
+        uint64 alignedPc = uint64(pc) << 4;
+        if (step > 0) {
+            step -= 1;
+        }
+
+        (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
+        state.step = step;
+        state.registers[17] = 56; // openat
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect = state;
+        expect.pc += 4;
+        expect.step += 1;
+        expect.registers[10] = 0xFFFF_FFFF_FFFF_FFFF;
+        expect.registers[11] = 0xd;
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    // TODO : clockGettime
+
+    function testFuzz_syscall_clone(uint32 pc, uint64 step) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        // prevent overflow
+        uint64 alignedPc = uint64(pc) << 4;
+        if (step > 0) {
+            step -= 1;
+        }
+
+        (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
+        state.step = step;
+        state.registers[17] = 220; // clone
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect = state;
+        expect.pc += 4;
+        expect.step += 1;
+        expect.registers[10] = 1;
+        expect.registers[11] = 0;
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
+    // TODO: getrlimit
+
+    function testFuzz_syscall_noop(uint32 pc, uint64 step) public {
+        uint16 imm = 0x0;
+        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
+
+        // prevent overflow
+        uint64 alignedPc = uint64(pc) << 4;
+        if (step > 0) {
+            step -= 1;
+        }
+
+        // SchedGetaffinity, SchedYield, RtSigprocmask, Sigaltstack, Gettid, RtSigaction, Madvise, EpollCreate1,
+        // EpollCtl, Pipe2, Readlinnkat, Newfstatat, Newuname, Munmap, GetRandom,
+        uint64[15] memory syscalls = [uint64(123), 124, 135, 132, 178, 134, 233, 20, 21, 59, 78, 79, 160, 215, 278];
+
+        for (uint i = 0; i < syscalls.length; i ++) {
+            (State memory state, bytes memory proof) = constructRISCVState(alignedPc, insn);
+            state.step = step;
+            state.registers[17] = syscalls[i];
+            bytes memory encodedState = encodeState(state);
+
+            State memory expect = state;
+            expect.pc += 4;
+            expect.step += 1;
+            expect.registers[10] = 0;
+            expect.registers[11] = 0;
+
+            bytes32 postState = riscv.step(encodedState, proof, 0);
+            assertEq(postState, outputState(expect), "unexpected post state");
+        }
     }
 
     /* Helper methods */
