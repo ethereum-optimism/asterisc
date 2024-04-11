@@ -148,7 +148,7 @@ func runEVMTestSuite(t *testing.T, path string) {
 }
 
 func TestFastStep(t *testing.T) {
-	testsPath := filepath.FromSlash("../tests/riscv-tests")
+	testsPath := filepath.FromSlash("../../tests/riscv-tests")
 	runTestCategory := func(name string) {
 		t.Run(name, func(t *testing.T) {
 			forEachTestSuite(t, filepath.Join(testsPath, name), runFastTestSuite)
@@ -161,7 +161,7 @@ func TestFastStep(t *testing.T) {
 }
 
 func TestSlowStep(t *testing.T) {
-	testsPath := filepath.FromSlash("../tests/riscv-tests")
+	testsPath := filepath.FromSlash("../../tests/riscv-tests")
 	runTestCategory := func(name string) {
 		t.Run(name, func(t *testing.T) {
 			forEachTestSuite(t, filepath.Join(testsPath, name), runSlowTestSuite)
@@ -174,7 +174,7 @@ func TestSlowStep(t *testing.T) {
 }
 
 func TestEVMStep(t *testing.T) {
-	testsPath := filepath.FromSlash("../tests/riscv-tests")
+	testsPath := filepath.FromSlash("../../tests/riscv-tests")
 	runTestCategory := func(name string) {
 		t.Run(name, func(t *testing.T) {
 			forEachTestSuite(t, filepath.Join(testsPath, name), runEVMTestSuite)
