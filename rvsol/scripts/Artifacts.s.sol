@@ -29,6 +29,8 @@ abstract contract Artifacts {
     mapping(string => Deployment) internal _namedDeployments;
     /// @notice The path to the deployment artifact that is being written to.
     string internal deploymentOutfile;
+    /// @notice The path to the asterisc absolute prestate.
+    string internal asteriscPrestatefile;
 
     /// @notice Accepts a filepath and then ensures that the directory
     ///         exists for the file to live in.
@@ -49,6 +51,9 @@ abstract contract Artifacts {
         deploymentOutfile = Config.deploymentOutfile();
         console.log("Writing artifact to %s", deploymentOutfile);
         ensurePath(deploymentOutfile);
+
+        // Prepare absolute asterisc prestate
+        asteriscPrestatefile = Config.asteriscPrestatePath();
 
         // Load addresses from a JSON file if the TARGET_L2_DEPLOYMENT_FILE environment variable
         // is set. Great for loading addresses from `superchain-registry`.

@@ -31,6 +31,10 @@ library Config {
         _env = vm.envOr("TARGET_L2_DEPLOYMENT_FILE", string("./.deploy"));
     }
 
+    function asteriscPrestatePath() internal view returns (string memory _env) {
+        _env = vm.envOr("ASTERISC_PRESTATE", string.concat(vm.projectRoot(), "/../rvgo/bin/prestate-proof.json"));
+    }
+
     /// @notice Returns the chainid from the EVM context or the value of the CHAIN_ID env var as
     ///         an override.
     function chainID() internal view returns (uint256 _env) {

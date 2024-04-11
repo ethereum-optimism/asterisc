@@ -58,7 +58,7 @@ contract Deploy is Deployer {
     function loadRiscvAbsolutePrestate() internal returns (Claim riscvAbsolutePrestate_) {
         if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
             // Fetch the absolute prestate dump
-            string memory filePath = string.concat(vm.projectRoot(), "/../rvgo/bin/prestate-proof.json");
+            string memory filePath = asteriscPrestatefile;
             string[] memory commands = new string[](3);
             commands[0] = "bash";
             commands[1] = "-c";
