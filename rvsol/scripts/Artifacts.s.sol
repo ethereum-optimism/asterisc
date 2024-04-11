@@ -29,6 +29,9 @@ abstract contract Artifacts {
     mapping(string => Deployment) internal _namedDeployments;
     /// @notice The path to the deployment artifact that is being written to.
     string internal deploymentOutfile;
+    /// @notice The path to the l1 Alloc that is being loaded for asterisc deployment.
+    //          Required because we assume all other components are already at chaindata.
+    string internal l1Allocfile;
     /// @notice The path to the asterisc absolute prestate.
     string internal asteriscPrestatefile;
 
@@ -51,6 +54,10 @@ abstract contract Artifacts {
         deploymentOutfile = Config.deploymentOutfile();
         console.log("Writing artifact to %s", deploymentOutfile);
         ensurePath(deploymentOutfile);
+
+        // Load L1 allocs from a genesis file
+        l1Allocfile = Config.chainL1AllocPath();
+        vm.loadAllocs(l1Allocfile);
 
         // Prepare absolute asterisc prestate
         asteriscPrestatefile = Config.asteriscPrestatePath();

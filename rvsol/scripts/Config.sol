@@ -31,6 +31,10 @@ library Config {
         _env = vm.envOr("TARGET_L2_DEPLOYMENT_FILE", string("./.deploy"));
     }
 
+    function chainL1AllocPath() internal view returns (string memory _env) {
+        _env = vm.envOr("TARGET_L1_ALLOC", string("./allocs-L1.json"));
+    }
+
     function asteriscPrestatePath() internal view returns (string memory _env) {
         _env = vm.envOr("ASTERISC_PRESTATE", string.concat(vm.projectRoot(), "/../rvgo/bin/prestate-proof.json"));
     }
