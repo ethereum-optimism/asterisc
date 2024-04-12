@@ -75,7 +75,8 @@ func runSlowTestSuite(t *testing.T, path string) {
 		require.NoError(t, err)
 
 		// Now run the same in slow mode
-		input := wit.EncodeStepInput(fast.LocalContext{})
+		input, err := wit.EncodeStepInput(fast.LocalContext{})
+		require.NoError(t, err)
 		post, err := slow.Step(input, nil)
 		require.NoErrorf(t, err, "slow VM err at step %d, PC %08x: %v", i, vmState.PC, err)
 

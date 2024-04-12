@@ -32,3 +32,20 @@ lint-check:
 lint-fix:
 	golangci-lint run --fix
 .PHONY: lint-fix
+
+build-bindgen:
+	cd ../rvsol/lib/optimism/op-bindings && \
+	go build -o ./bin/op-bindings ./cmd/. && \
+	cp ./bin/op-bindings ../../../../rvgo/
+.PHONY: build-bindgen
+
+bindgen-generate-local:
+	./op-bindings \
+		generate \
+		--metadata-out ./bindings \
+		--bindings-package bindings \
+		--contracts-list ../rvsol/artifacts.json \
+		--log.level info \
+		local \
+		--forge-artifacts ../rvsol/out
+.PHONY: bindgen-generate-local
