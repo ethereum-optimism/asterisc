@@ -16,6 +16,12 @@ workflows:
           requires: ["go-mod-download-monorepo"]
       - asterisc-prestate:
           requires: ["go-mod-download-asterisc", "op-program-riscv", "pnpm-monorepo"]
+      - go-e2e-test:
+          name: op-e2e-cannon-tests
+          module: op-e2e
+          target: test-cannon
+          parallelism: 4
+          requires: ["go-mod-download-monorepo", "pnpm-monorepo"]
 
 jobs:
   pnpm-monorepo:
@@ -241,3 +247,83 @@ jobs:
           root: .
           paths: 
             - "asterisc-artifacts"
+
+  go-e2e-test:
+    parameters:
+      fpac:
+        type: string
+        default: ''
+      module:
+        description: Go Module Name
+        type: string
+      target:
+        description: The make target to execute
+        type: string
+      parallelism:
+        description: Number of parallel test runs
+        type: integer
+        default: 6
+    environment:
+      DEVNET_FPAC: 'false'
+      OP_E2E_USE_FPAC: 'false'
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
+    parallelism: <<parameters.parallelism>>
+    steps:
+      - checkout
+      - run:
+          name: Fetch submodules for asterisc
+          command: git submodule update --init --recursive
+      - when:
+          condition:
+            equal: ['-fault-proofs', <<parameters.fpac>>]
+          steps:
+            - run:
+                name: Set DEVNET_FPAC = true
+                command: echo 'export DEVNET_FPAC=true' >> $BASH_ENV
+            - run:
+                name: Set OP_E2E_USE_FPAC = true
+                command: echo 'export OP_E2E_USE_FPAC=true' >> $BASH_ENV
+      - run:
+          name: prep results dir
+          command: mkdir -p /tmp/test-results
+      - restore_cache:
+          name: Restore Go modules cache
+          # this go mod cache wil be populated from go-mod-download-monorepo step
+          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
+      - restore_cache:
+          name: Restore Go build cache
+          key: golang-build-cache
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Load devnet-allocs
+          command: |
+            mkdir -p .devnet
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l1.json .devnet/allocs-l1.json
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/addresses.json .devnet/addresses.json
+            cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json packages/contracts-bedrock/deploy-config/devnetL1.json
+            cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 packages/contracts-bedrock/deployments/devnetL1
+          working_directory: rvsol/lib/optimism
+      - run:
+          name: print go's available MIPS targets
+          command: go tool dist list | grep mips
+      - run:
+          name: run tests
+          no_output_timeout: 20m
+          command: |
+            mkdir -p /testlogs
+            # The below env var gets overridden when running make test-cannon, but we
+            # need to explicitly set it here to prevent Cannon from running when we don't
+            # want it to.
+            export OP_E2E_CANNON_ENABLED="false"
+            # Note: We don't use circle CI test splits because we need to split by test name, not by package. There is an additional
+            # constraint that gotestsum does not currently (nor likely will) accept files from different pacakges when building.
+            JUNIT_FILE=/tmp/test-results/<<parameters.module>>_<<parameters.target>>.xml JSON_LOG_FILE=/testlogs/test.log make <<parameters.target>>
+          working_directory: rvsol/lib/optimism/<<parameters.module>>
+      - store_artifacts:
+          path: /testlogs
+          when: always
+      - store_test_results:
+          path: /tmp/test-results
