@@ -20,4 +20,4 @@ if [ -z "${TARGET_L1_ALLOC}" ]; then
     exit 1
 fi
 
-forge script --chain-id 900 scripts/Deploy.s.sol --sig "run()" --private-key "$DEPLOY_PRIVATE_KEY"
+forge script --chain-id 900 scripts/Deploy.s.sol --sig "runForDevnetAlloc()" --private-key "$DEPLOY_PRIVATE_KEY"

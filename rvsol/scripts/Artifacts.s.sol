@@ -57,7 +57,6 @@ abstract contract Artifacts {
 
         // Load L1 allocs from a genesis file
         l1Allocfile = Config.chainL1AllocPath();
-        vm.loadAllocs(l1Allocfile);
 
         // Prepare absolute asterisc prestate
         asteriscPrestatefile = Config.asteriscPrestatePath();

@@ -42,6 +42,11 @@ contract Deploy is Deployer {
     function run() public {
         deployRiscv();
         setAsteriscFaultGameImplementation(false);
+    }
+
+    function runForDevnetAlloc() public {
+        vm.loadAllocs(l1Allocfile);
+        run();
         string memory path = vm.envOr(
             "STATE_DUMP_PATH", string.concat(vm.projectRoot(), "/", name(), "-", vm.toString(block.chainid), ".json")
         );
