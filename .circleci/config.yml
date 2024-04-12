@@ -78,6 +78,10 @@ jobs:
           name: Copy FPAC allocs to .devnet-fpac
           command: cp -r .devnet/ .devnet-fault-proofs/
           working_directory: rvsol/lib/optimism
+      - run:
+          name: Generate non-FPAC allocs
+          command: make devnet-allocs
+          working_directory: rvsol/lib/optimism
       - persist_to_workspace:
           root: rvsol/lib/optimism
           paths:
@@ -89,6 +93,8 @@ jobs:
             - "packages/contracts-bedrock/tsconfig.build.tsbuildinfo"
             - ".devnet-fault-proofs/allocs-l1.json"
             - ".devnet-fault-proofs/addresses.json"
+            - ".devnet/allocs-l1.json"
+            - ".devnet/addresses.json"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
 
@@ -235,4 +241,3 @@ jobs:
           root: .
           paths: 
             - "asterisc-artifacts"
-      
