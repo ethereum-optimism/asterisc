@@ -44,6 +44,15 @@ contract Deploy is Deployer {
         setAsteriscFaultGameImplementation(false);
     }
 
+    function runForDevnetAlloc() public {
+        vm.loadAllocs(l1Allocfile);
+        run();
+        string memory path = vm.envOr(
+            "STATE_DUMP_PATH", string.concat(vm.projectRoot(), "/", name(), "-", vm.toString(block.chainid), ".json")
+        );
+        vm.dumpState(path);
+    }
+
     /// @notice Deploy RISCV
     function deployRiscv() public broadcast returns (address addr_) {
         console.log("Deploying RISCV implementation");
@@ -58,7 +67,7 @@ contract Deploy is Deployer {
     function loadRiscvAbsolutePrestate() internal returns (Claim riscvAbsolutePrestate_) {
         if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
             // Fetch the absolute prestate dump
-            string memory filePath = string.concat(vm.projectRoot(), "/../rvgo/bin/prestate-proof.json");
+            string memory filePath = asteriscPrestatefile;
             string[] memory commands = new string[](3);
             commands[0] = "bash";
             commands[1] = "-c";
