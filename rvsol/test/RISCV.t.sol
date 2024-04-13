@@ -656,7 +656,7 @@ contract RISCV_Test is CommonTest {
         uint8 size = uint8(1 << (funct3 & 0x3));
         uint32 insn = encodeRType(0x2f, 23, funct3, 27, 30, funct7); // scw x23, x30, (x27)
         (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"3ee07aaba5c04760", size);
-        // note. asterisc memory is zero-initalized.
+        // note. asterisc memory is zero-initialized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
         state.loadReservation = addr;
         state.registers[27] = addr;
@@ -1015,7 +1015,7 @@ contract RISCV_Test is CommonTest {
         uint8 size = uint8(1 << (funct3 & 0x3));
         uint32 insn = encodeRType(0x2f, 4, funct3, 13, 24, funct7); // scd x4, x24, (x13)
         (bytes32 rs2ValueBytes32, uint64 rs2ValueU64) = truncate(hex"3186582d2a2adf7d", size);
-        // note. asterisc memory is zero-initalized.
+        // note. asterisc memory is zero-initialized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
         state.loadReservation = addr;
         state.registers[13] = addr;
@@ -1919,7 +1919,7 @@ contract RISCV_Test is CommonTest {
             addr -= 1 << 12;
         }
         uint32 insn = encodeSType(0x23, funct3, 6, 3, imm); // sb x3, offset(x6)
-        // note. asterisc memory is zero-initalized.
+        // note. asterisc memory is zero-initialized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
         state.registers[6] = rs1Value;
         state.registers[3] = rs2Value;
@@ -1949,7 +1949,7 @@ contract RISCV_Test is CommonTest {
             addr -= 1 << 12;
         }
         uint32 insn = encodeSType(0x23, funct3, 19, 25, imm); // sh x25, offset(x19)
-        // note. asterisc memory is zero-initalized.
+        // note. asterisc memory is zero-initialized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
         state.registers[19] = rs1Value;
         state.registers[25] = rs2Value;
@@ -1979,7 +1979,7 @@ contract RISCV_Test is CommonTest {
             addr -= 1 << 12;
         }
         uint32 insn = encodeSType(0x23, funct3, 12, 29, imm); // sw x29, offset(x12)
-        // note. asterisc memory is zero-initalized.
+        // note. asterisc memory is zero-initialized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
         state.registers[12] = rs1Value;
         state.registers[29] = rs2Value;
@@ -2009,7 +2009,7 @@ contract RISCV_Test is CommonTest {
             addr -= 1 << 12;
         }
         uint32 insn = encodeSType(0x23, funct3, 1, 2, imm); // sd x2, offset(x1)
-        // note. asterisc memory is zero-initalized.
+        // note. asterisc memory is zero-initialized.
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, 0);
         state.registers[1] = rs1Value;
         state.registers[2] = rs2Value;

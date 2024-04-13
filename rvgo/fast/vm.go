@@ -287,7 +287,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 3: // ?11 = CSRRC(I)
 			v = and64(out, not64(v))
 		default:
-			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unkwown CSR mode: %d", mode))
+			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unknown CSR mode: %d", mode))
 		}
 		writeCSR(num, v)
 		return

@@ -475,7 +475,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case 3: // ?11 = CSRRC(I)
 			v = and64(out, not64(v))
 		default:
-			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unkwown CSR mode: %d", mode.val()))
+			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unknown CSR mode: %d", mode.val()))
 		}
 		writeCSR(num, v)
 		return
