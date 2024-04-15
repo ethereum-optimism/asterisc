@@ -78,6 +78,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Submodule update
+        run: git submodule update --init
       - name: Install Golang
         uses: actions/setup-go@v5
         with:
