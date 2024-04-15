@@ -78,6 +78,8 @@ func Run(ctx *cli.Context) error {
 		stopAtPreimageTypeByte = preimage.Sha256KeyType
 	case "blob":
 		stopAtPreimageTypeByte = preimage.BlobKeyType
+	case "precompile":
+		stopAtPreimageTypeByte = preimage.PrecompileKeyType
 	case "any":
 		stopAtAnyPreimage = true
 	case "":
