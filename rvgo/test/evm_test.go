@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -152,14 +153,14 @@ func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses,
 	if wit.HasPreimage() {
 		input, err := wit.EncodePreimageOracleInput(fast.LocalContext{})
 		require.NoError(t, err)
-		ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.Oracle, input, startingGas, big.NewInt(0))
+		ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.Oracle, input, startingGas, uint256.NewInt(0))
 		require.NoError(t, err, "evm must not fail (ret: %x, gas: %d)", ret, startingGas-leftOverGas)
 	}
 
 	input, err := wit.EncodeStepInput(fast.LocalContext{})
 	require.NoError(t, err)
 
-	ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.RISCV, input, startingGas, big.NewInt(0))
+	ret, leftOverGas, err := env.Call(vm.AccountRef(addrs.Sender), addrs.RISCV, input, startingGas, uint256.NewInt(0))
 	if revertCode != nil {
 		require.ErrorIs(t, err, vm.ErrExecutionReverted)
 		require.Equal(t, ret, revertCode)
