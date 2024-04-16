@@ -1043,42 +1043,12 @@ contract RISCV {
                     setRegister(toU64(10), u64Mask())
                     setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
                 }
-                case 123 {
-                    // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 124 {
-                    // sched_yield - nothing to yield, synchronous execution only, for now
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
                 case 113 {
                     // clock_gettime
                     let addr := getRegister(toU64(11)) // addr of timespec struct
                     // write 1337s + 42ns as time
                     let value := or(shortToU256(1337), shl(shortToU256(64), toU256(42)))
                     storeMemUnaligned(addr, toU64(16), value, 1, 2)
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 135 {
-                    // rt_sigprocmask - ignore any sigset changes
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 132 {
-                    // sigaltstack - ignore any hints of an alternative signal receiving stack addr
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 178 {
-                    // gettid - hardcode to 0
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 134 {
-                    // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
                     setRegister(toU64(10), toU64(0))
                     setRegister(toU64(11), toU64(0))
                 }
@@ -1104,51 +1074,6 @@ contract RISCV {
                     }
                     default { revertWithCode(0xf0012) } // unrecognized resource limit lookup
                 }
-                case 233 {
-                    // madvise - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 20 {
-                    // epoll_create1 - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 21 {
-                    // epoll_ctl - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 59 {
-                    // pipe2 - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 78 {
-                    // readlinkat - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 79 {
-                    // newfstatat - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 160 {
-                    // newuname - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 215 {
-                    // munmap - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 278 {
-                    // getrandom - ignored
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
                 case 261 {
                     // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
                     revertWithCode(0xf001ca11) // unsupported system call
@@ -1161,7 +1086,6 @@ contract RISCV {
                     // nanosleep - not supported, for now
                     revertWithCode(0xf001ca11) // unsupported system call
                 }
-                default { revertWithCode(0xf001ca11) } // unrecognized system call
             }
 
             //

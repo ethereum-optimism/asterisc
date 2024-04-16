@@ -695,29 +695,11 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case riscv.SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
 			setRegister(toU64(10), u64Mask())
 			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
-		case riscv.SysSchedGetaffinity: // sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysSchedYield: // sched_yield - nothing to yield, synchronous execution only, for now
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
 		case riscv.SysClockGettime: // clock_gettime
 			addr := getRegister(toU64(11)) // addr of timespec struct
 			// write 1337s + 42ns as time
 			value := or(shortToU256(1337), shl(shortToU256(64), toU256(42)))
 			storeMemUnaligned(addr, toU64(16), value, 1, 2)
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysRtSigprocmask: // rt_sigprocmask - ignore any sigset changes
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysSigaltstack: // sigaltstack - ignore any hints of an alternative signal receiving stack addr
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysGettid: // gettid - hardcode to 0
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysRtSigaction: // rt_sigaction - no-op, we never send signals, and thus need no sig handler info
 			setRegister(toU64(10), toU64(0))
 			setRegister(toU64(11), toU64(0))
 		case riscv.SysClone: // clone - not supported
@@ -736,41 +718,12 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			default:
 				revertWithCode(riscv.ErrUnrecognizedResource, &UnrecognizedResourceErr{Resource: res})
 			}
-		case riscv.SysMadvise: // madvise - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysEpollCreate1: // epoll_create1 - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysEpollCtl: // epoll_ctl - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysPipe2: // pipe2 - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysReadlinnkat: // readlinkat - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysNewfstatat: // newfstatat - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysNewuname: // newuname - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysMunmap: // munmap - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysGetRandom: // getrandom - ignored
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
 		case riscv.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysFutex: // futex - not supported, for now
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
-		default:
-			revertWithCode(riscv.ErrInvalidSyscall, &UnrecognizedSyscallErr{SyscallNum: a7})
 		}
 	}
 

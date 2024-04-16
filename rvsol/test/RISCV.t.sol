@@ -2390,17 +2390,6 @@ contract RISCV_Test is CommonTest {
         riscv.step(encodedState, proof, 0);
     }
 
-    function test_unrecognized_syscall() public {
-        uint16 imm = 0x0;
-        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
-        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
-        state.registers[17] = 999; // unrecognized syscall
-        bytes memory encodedState = encodeState(state);
-
-        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
-        riscv.step(encodedState, proof, 0);
-    }
-
     function test_invalid_amo_size() public {
         uint32 insn;
         uint8 funct3 = 0x1; // invalid amo size
