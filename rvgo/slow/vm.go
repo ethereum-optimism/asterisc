@@ -724,6 +724,10 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
+		default:
+			// Ignore(no-op) unsupported system calls
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 		}
 	}
 

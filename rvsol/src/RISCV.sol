@@ -1086,6 +1086,11 @@ contract RISCV {
                     // nanosleep - not supported, for now
                     revertWithCode(0xf001ca11) // unsupported system call
                 }
+                default {
+                    // Ignore(no-op) unsupported system calls
+                    setRegister(toU64(10), toU64(0))
+                    setRegister(toU64(11), toU64(0))
+                }
             }
 
             //

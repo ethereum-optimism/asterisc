@@ -544,7 +544,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysNanosleep: // nanosleep - not supported, for now
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
-
+		default:
+			// Ignore(no-op) unsupported system calls
+			setRegister(toU64(10), toU64(0))
+			setRegister(toU64(11), toU64(0))
 			// List of ignored(no-op) syscalls used by op-program:
 			// sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			// sched_yield - nothing to yield, synchronous execution only, for now
