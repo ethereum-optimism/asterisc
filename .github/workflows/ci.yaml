@@ -86,3 +86,21 @@ jobs:
           go-version: '1.21.x'
       - name: Check if optimism submodule version matches go.mod version
         run: ./.github/scripts/check_versions.sh
+
+  op-program-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Submodule update
+        run: git submodule update --init
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+      - name: Build asterisc
+        run: make build-rvgo && cp rvgo/bin/asterisc tests/op-program-test/
+      - name: Build op-program
+        run: make -C rvsol/lib/optimism/op-program op-program-host && cp rvsol/lib/optimism/op-program/bin/op-program tests/op-program-test/
+      - name: Run op-program
+        run: ./local_cmd.sh
+        working-directory: tests/op-program-test

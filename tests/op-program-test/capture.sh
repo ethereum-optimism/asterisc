@@ -42,7 +42,7 @@ rm ./preimages/*
 ./capture_cmd.sh
 
 # Clean up
-rm ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./meta.json ./out.json
+rm ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./out.json
 
 # Write optimism version
 echo $git_commit_hash > VERSION
