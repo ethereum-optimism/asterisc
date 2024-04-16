@@ -35,11 +35,13 @@ type Proof struct {
 
 type StepFn func(proof bool) (*fast.StepWitness, error)
 
+// Guard checks if the step is failed due to pre-image server error
 func Guard(proc *os.ProcessState, fn StepFn) StepFn {
 	return func(proof bool) (*fast.StepWitness, error) {
 		wit, err := fn(proof)
 		if err != nil {
-			if proc.Exited() {
+			// proc is not nil when the preimage server process is terminated
+			if proc != nil && proc.Exited() {
 				return nil, fmt.Errorf("pre-image server exited with code %d, resulting in err %w", proc.ExitCode(), err)
 			} else {
 				return nil, err
