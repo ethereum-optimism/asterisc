@@ -39,7 +39,7 @@ func Guard(proc *os.ProcessState, fn StepFn) StepFn {
 	return func(proof bool) (*fast.StepWitness, error) {
 		wit, err := fn(proof)
 		if err != nil {
-			if proc.Exited() {
+			if proc != nil && proc.Exited() {
 				return nil, fmt.Errorf("pre-image server exited with code %d, resulting in err %w", proc.ExitCode(), err)
 			} else {
 				return nil, err
