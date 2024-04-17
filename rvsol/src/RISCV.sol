@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 
 contract RISCV {
-    IPreimageOracle public preimageOracle;
+    IPreimageOracle public oracle;
 
-    constructor(IPreimageOracle _preimageOracle) {
-        preimageOracle = _preimageOracle;
+    constructor(IPreimageOracle _oracle) {
+        oracle = _oracle;
     }
 
     // Executes a single RISC-V instruction, starting from
