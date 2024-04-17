@@ -16,6 +16,8 @@ workflows:
           requires: ["go-mod-download-monorepo"]
       - asterisc-prestate:
           requires: ["go-mod-download-asterisc", "op-program-riscv", "pnpm-monorepo"]
+      - devnet-allocs-including-asterisc:
+          requires: ["asterisc-prestate"]
 
 jobs:
   pnpm-monorepo:
@@ -241,3 +243,82 @@ jobs:
           root: .
           paths: 
             - "asterisc-artifacts"
+
+  devnet-allocs-including-asterisc:
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Fetch submodules for asterisc
+          command: git submodule update --init --recursive
+      - run:
+          name: Forge build
+          # We first build here to avoid `failed to read artifact source file` foundry error while running forge script
+          # issue: https://github.com/foundry-rs/foundry/issues/6572
+          command: forge build
+          working_directory: rvsol
+      - run:
+          name: Load asterisc absolute prestate
+          command: cp /tmp/workspace/asterisc-artifacts/prestate-proof.json ./prestate-proof.json
+          working_directory: rvsol
+      - run:
+          name: Load devnet-allocs
+          command: |
+            mkdir -p .devnet
+            cp /tmp/workspace/.devnet/allocs-l1.json .devnet/allocs-l1.json
+            cp /tmp/workspace/.devnet/addresses.json .devnet/addresses.json
+            cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json devnetL1.json
+            cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
+          working_directory: rvsol
+      - run:
+          name: Patch L1 Allocs
+          # allocs-l1.json has the form as # we need json as the form {"accounts": ... }
+          # We need value of "accounts" key for foundry loadAlloc method
+          command: jq .accounts .devnet/allocs-l1.json > allocs-l1-patched.json
+          working_directory: rvsol
+      - run:
+          name: Generate allocs including asterisc
+          command: >
+            ASTERISC_PRESTATE=./prestate-proof.json
+            TARGET_L2_DEPLOYMENT_FILE=./devnetL1/.deploy
+            TARGET_L2_DEPLOY_CONFIG=./devnetL1.json
+            TARGET_L1_ALLOC=./allocs-l1-patched.json
+            DEPLOYMENT_OUTFILE=./deployments/devnetL1/.deploy
+            STATE_DUMP_PATH=./allocs-l1-asterisc.json
+            ./scripts/create_poststate_after_deployment.sh
+          working_directory: rvsol
+      - run:
+          name: Create address json
+          command: |
+            mkdir -p .devnet-asterisc
+            jq -s '.[0] * .[1]' ./deployments/devnetL1/.deploy ./devnetL1/.deploy | tee .devnet-asterisc/address.json
+          working_directory: rvsol
+      - run:
+          name: Patch L1 Allocs
+          # we need json as the form {"accounts": ... } for op-e2e
+          command: |
+            jq '{accounts: .}' ./allocs-l1-asterisc.json > .devnet-asterisc/allocs-l1.json
+          working_directory: rvsol
+      - run:
+          name: Patch .deploy
+          command: |
+            mkdir -p packages/contracts-bedrock/deployments/devnetL1
+            cp .devnet-asterisc/address.json packages/contracts-bedrock/deployments/devnetL1/.deploy
+          working_directory: rvsol
+      - run:
+          name: Sanity Check
+          command: |
+            ASTERISC_ADDR=$(jq '.RISCV' .devnet-asterisc/address.json | tr '[:upper:]' '[:lower:]')
+            ASTERISC_ADDR=$(echo ${ASTERISC_ADDR//\"/})
+            echo $ASTERISC_ADDR
+            jq --arg key $ASTERISC_ADDR '.[$key]' ./allocs-l1-asterisc.json
+          working_directory: rvsol
+      - persist_to_workspace:
+          root: rvsol
+          paths:
+            - ".devnet-asterisc"
+            - "packages/contracts-bedrock/deployments/devnetL1"
+            # we do not patch devnetL1.json because it did not change
