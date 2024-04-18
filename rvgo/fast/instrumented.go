@@ -116,6 +116,6 @@ func (m *InstrumentedState) verifyMemChange(effAddr uint64, proofIndex uint8) {
 	}
 }
 
-func (m *InstrumentedState) LastPreimage() []byte {
-	return m.lastPreimage
+func (m *InstrumentedState) LastPreimage() ([32]byte, []byte, uint64) {
+	return m.lastPreimageKey, m.lastPreimage, m.lastPreimageOffset
 }
