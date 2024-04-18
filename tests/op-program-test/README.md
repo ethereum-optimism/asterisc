@@ -12,3 +12,7 @@ These requirements should be generated in the local machine when `rvsol/lib/opti
 
 To generate requirements, simply run `PYTHON_PATH={PYTHON_BIN_PATH} capture.sh` in the local machine, 
 and commit all generated files!
+
+## Prerequisites
+- All prerequisites to build the optimism monorepo and launch devnet. See https://github.com/ethereum-optimism/optimism/blob/develop/CONTRIBUTING.md#development-quick-start.
+- Python environment(>3.10) which has all dependencies in `requirements.txt`.
