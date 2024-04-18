@@ -1,3 +1,5 @@
+MONOREPO_ROOT=./rvsol/lib/optimism
+
 build-rvgo:
 	make -C ./rvgo build
 .PHONY: build-rvgo
@@ -63,9 +65,9 @@ fuzz-mac:
   fuzz \
   fuzz-mac
 
-OP_PROGRAM_PATH ?= ./op-program-client-riscv.elf
+OP_PROGRAM_PATH ?= $(MONOREPO_ROOT)/op-program/bin-riscv/op-program-client-riscv.elf
 
-prestate: build-rvgo
+prestate: build-rvgo op-program-riscv
 	./rvgo/bin/asterisc load-elf --path $(OP_PROGRAM_PATH) --out ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json
 	./rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json --proof-fmt './rvgo/bin/%d.json' --output ""
 	mv ./rvgo/bin/0.json ./rvgo/bin/prestate-proof.json
@@ -74,3 +76,24 @@ prestate: build-rvgo
 op-program-test-capture:
 	./tests/op-program-test/capture.sh
 .PHONY: op-program-test-capture
+
+op-program-riscv:
+	rm -rf $(MONOREPO_ROOT)/op-program/bin-riscv $(MONOREPO_ROOT)/op-program/bin
+	make -C $(MONOREPO_ROOT)/op-program op-program-client-riscv
+	# clear $(MONOREPO_ROOT)/op-program/bin to trigger `make cannon-prestate` at monorepo
+	mv $(MONOREPO_ROOT)/op-program/bin $(MONOREPO_ROOT)/op-program/bin-riscv
+.PHONY: op-program
+
+devnet-allocs-monorepo:
+	make -C $(MONOREPO_ROOT) devnet-allocs
+.PHONY: devnet-allocs-monorepo
+
+devnet-allocs: devnet-allocs-monorepo prestate
+	./rvsol/scripts/devnet_allocs.sh
+.PHONY: devnet-allocs
+
+devnet-clean:
+	rm -rf .devnet
+	rm -rf packages/contracts-bedrock/deployments
+	rm -rf packages/contracts-bedrock/deploy-config
+.PHONY: devnet-clean

@@ -9,5 +9,8 @@ rvsol/deployments/devnetL1
 
 tests/go-tests/bin
 
+packages/contracts-bedrock
+.devnet
+
 # jetbrains
 .idea/
