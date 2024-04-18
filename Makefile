@@ -70,3 +70,7 @@ prestate: build-rvgo
 	./rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json --proof-fmt './rvgo/bin/%d.json' --output ""
 	mv ./rvgo/bin/0.json ./rvgo/bin/prestate-proof.json
 .PHONY: prestate
+
+op-program-test-capture:
+	./tests/op-program-test/capture.sh
+.PHONY: op-progra-test-capture
