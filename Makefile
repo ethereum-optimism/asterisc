@@ -73,4 +73,4 @@ prestate: build-rvgo
 
 op-program-test-capture:
 	./tests/op-program-test/capture.sh
-.PHONY: op-progra-test-capture
+.PHONY: op-program-test-capture
