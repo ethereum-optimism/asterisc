@@ -38,11 +38,13 @@ cd $script_dir
 $absolute_python_path capture.py
 
 # Capture preimages
-rm ./preimages/*
+rm -f ./preimages.tar.gz
+mkdir ./preimages
 ./capture_cmd.sh
+tar -czvf preimages.tar.gz ./preimages
 
 # Clean up
-rm ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./out.json
+rm -r ./preimages ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./out.json
 
 # Write optimism version
 echo $git_commit_hash > VERSION

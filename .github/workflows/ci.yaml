@@ -102,5 +102,5 @@ jobs:
       - name: Build op-program
         run: make -C rvsol/lib/optimism/op-program op-program-host && cp rvsol/lib/optimism/op-program/bin/op-program tests/op-program-test/
       - name: Run op-program
-        run: ./local_cmd.sh
+        run: tar -xzvf ./preimages.tar.gz && ./local_cmd.sh
         working-directory: tests/op-program-test
