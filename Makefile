@@ -77,12 +77,16 @@ op-program-test-capture:
 	./tests/op-program-test/capture.sh
 .PHONY: op-program-test-capture
 
+op-program:
+	make -C $(MONOREPO_ROOT)/op-program
+.PHONY: op-program
+
 op-program-riscv:
 	rm -rf $(MONOREPO_ROOT)/op-program/bin-riscv $(MONOREPO_ROOT)/op-program/bin
 	make -C $(MONOREPO_ROOT)/op-program op-program-client-riscv
 	# clear $(MONOREPO_ROOT)/op-program/bin to trigger `make cannon-prestate` at monorepo
 	mv $(MONOREPO_ROOT)/op-program/bin $(MONOREPO_ROOT)/op-program/bin-riscv
-.PHONY: op-program
+.PHONY: op-program-riscv
 
 devnet-allocs-monorepo:
 	make -C $(MONOREPO_ROOT) devnet-allocs
