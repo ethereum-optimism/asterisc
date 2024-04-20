@@ -1,14 +1,14 @@
 {
   "genesis": {
     "l1": {
-      "hash": "0xe756f27a2fbc74bfb52e771fccc20a9070f95a579ad2c1d71cb331d7912048c4",
+      "hash": "0x1c5bfc11e91b66dd64239c9ffcaf371c729294068f1a4c98e8001570081c876f",
       "number": 0
     },
     "l2": {
-      "hash": "0x88f9c499e677ae3e539dc5d0ffd058d1a947a43147612185fbb34f973991c535",
+      "hash": "0x43e77696357ba085401fb455c606bade7aa4230e850e1448870caf0dbee8f313",
       "number": 0
     },
-    "l2_time": 1713458907,
+    "l2_time": 1713572352,
     "system_config": {
       "batcherAddr": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
       "overhead": "0x0000000000000000000000000000000000000000000000000000000000000834",
@@ -28,7 +28,7 @@
   "deposit_contract_address": "0x9a676e781a523b5d0c0e43731313a708cb607508",
   "l1_system_config_address": "0x0b306bf915c4d645ff596e518faf3f9669b97016",
   "protocol_versions_address": "0x0000000000000000000000000000000000000000",
-  "da_challenge_address": "0x0000000000000000000000000000000000000000",
+  "da_challenge_contract_address": "0x0000000000000000000000000000000000000000",
   "da_challenge_window": 160,
   "da_resolve_window": 160,
   "use_plasma": false
