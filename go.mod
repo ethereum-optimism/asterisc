@@ -4,7 +4,7 @@ go 1.21
 
 toolchain go1.21.1
 
-replace github.com/ethereum/go-ethereum v1.13.11 => github.com/ethereum-optimism/op-geth v1.101311.0-rc.1
+replace github.com/ethereum/go-ethereum v1.13.11 => github.com/ethereum-optimism/op-geth v1.101311.0
 
 require (
 	github.com/ethereum-optimism/optimism v1.7.4-0.20240419175707-d2263b19958f
