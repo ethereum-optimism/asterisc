@@ -27,6 +27,7 @@ import (
 )
 
 type dummyChain struct {
+	startTime uint64
 }
 
 // Engine retrieves the chain's consensus engine.
@@ -97,9 +98,15 @@ type Addresses struct {
 }
 
 func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
-	chainCfg := params.MainnetChainConfig
-	bc := &dummyChain{}
-	header := bc.GetHeader(common.Hash{}, 100)
+	// Temporary hack until Cancun is activated on mainnet
+	cpy := *params.MainnetChainConfig
+	chainCfg := &cpy // don't modify the global chain config
+	// Activate Cancun for EIP-4844 KZG point evaluation precompile
+	cancunActivation := *chainCfg.ShanghaiTime + 10
+	chainCfg.CancunTime = &cancunActivation
+	offsetBlocks := uint64(1000) // blocks after cancun fork
+	bc := &dummyChain{startTime: *chainCfg.CancunTime + offsetBlocks*12}
+	header := bc.GetHeader(common.Hash{}, 17034870+offsetBlocks)
 	db := rawdb.NewMemoryDatabase()
 	statedb := state.NewDatabase(db)
 	state, err := state.New(types.EmptyRootHash, statedb, nil)
