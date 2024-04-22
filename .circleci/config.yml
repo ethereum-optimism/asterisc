@@ -4,7 +4,7 @@ parameters:
   ci_builder_image:
     type: string
     # depends with rvsol/lib/optimism submodule version
-    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.46.1
+    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.47.3
 
 workflows:
   main:
