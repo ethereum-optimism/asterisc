@@ -18,6 +18,8 @@ workflows:
           requires: ["go-mod-download-asterisc", "op-program-riscv", "pnpm-monorepo"]
       - devnet-allocs-including-asterisc:
           requires: ["asterisc-prestate"]
+      - op-e2e-asterisc-tests:
+          requires: ["devnet-allocs-including-asterisc"]
 
 jobs:
   pnpm-monorepo:
@@ -95,23 +97,14 @@ jobs:
   go-mod-download-monorepo:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
-    parameters:
-      file:
-        default: rvsol/lib/optimism/go.sum
-        description: The file name of checksum for restore_cache and save_cache.
-        type: string
-      key:
-        default: gomod
-        description: The key of restore_cache and save_cache.
-        type: string
     steps:
       - checkout
       - run:
           name: Fetch submodules for asterisc
           command: git submodule update --init --recursive
       - restore_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
-          name: Restore Go modules cache
+          key: gomod>-{{ checksum "rvsol/lib/optimism/go.sum" }}
+          name: Restore Go modules cache for monorepo
       - run:
           name: Sanity check go mod cache path
           command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
@@ -132,7 +125,7 @@ jobs:
             make lint-go
           working_directory: rvsol/lib/optimism
       - save_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Save Go modules cache
           paths:
             - "/go/pkg/mod"
@@ -140,19 +133,10 @@ jobs:
   go-mod-download-asterisc:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
-    parameters:
-      file:
-        default: go.sum
-        description: The file name of checksum for restore_cache and save_cache.
-        type: string
-      key:
-        default: gomod
-        description: The key of restore_cache and save_cache.
-        type: string
     steps:
       - checkout
       - restore_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          key: gomod-{{ checksum "go.sum" }}
           name: Restore Go modules cache
       - run:
           name: Sanity check go mod cache path
@@ -161,7 +145,7 @@ jobs:
           command: go mod download
           name: Download Go module dependencies
       - save_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          key: gomod-{{ checksum "go.sum" }}
           name: Save Go modules cache
           paths:
             - "/go/pkg/mod"
@@ -184,7 +168,7 @@ jobs:
           name: Fetch submodules for asterisc
           command: git submodule update --init --recursive
       - restore_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache
       - run:
           name: Build op-program-client-riscv
@@ -288,7 +272,7 @@ jobs:
           name: Create address json
           command: |
             mkdir -p .devnet-asterisc
-            jq -s '.[0] * .[1]' ./deployments/devnetL1/.deploy ./devnetL1/.deploy | tee .devnet-asterisc/address.json
+            jq -s '.[0] * .[1]' ./deployments/devnetL1/.deploy ./devnetL1/.deploy | tee .devnet-asterisc/addresses.json
           working_directory: rvsol
       - run:
           name: Patch L1 Allocs
@@ -300,12 +284,12 @@ jobs:
           name: Patch .deploy
           command: |
             mkdir -p packages/contracts-bedrock/deployments/devnetL1
-            cp .devnet-asterisc/address.json packages/contracts-bedrock/deployments/devnetL1/.deploy
+            cp .devnet-asterisc/addresses.json packages/contracts-bedrock/deployments/devnetL1/.deploy
           working_directory: rvsol
       - run:
           name: Sanity Check
           command: |
-            ASTERISC_ADDR=$(jq '.RISCV' .devnet-asterisc/address.json | tr '[:upper:]' '[:lower:]')
+            ASTERISC_ADDR=$(jq '.RISCV' .devnet-asterisc/addresses.json | tr '[:upper:]' '[:lower:]')
             ASTERISC_ADDR=$(echo ${ASTERISC_ADDR//\"/})
             echo $ASTERISC_ADDR
             jq --arg key $ASTERISC_ADDR '.[$key]' ./allocs-l1-asterisc.json
@@ -322,3 +306,56 @@ jobs:
             - ".devnet-asterisc"
             - "packages/contracts-bedrock/deployments/devnetL1"
             # we do not patch devnetL1.json because it did not change
+
+  op-e2e-asterisc-tests:
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
+    parallelism: 4
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Fetch submodules for asterisc
+          command: git submodule update --init --recursive
+      - restore_cache:
+          name: Restore Go modules cache for monorepo
+          # this go mod cache will be populated from go-mod-download-monorepo step
+          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
+      - run:
+          name: Make op-program at monorepo
+          command: make op-program
+      - run:
+          name: Load devnet-allocs
+          command: |
+            mkdir -p .devnet
+            cp /tmp/workspace/.devnet-asterisc/allocs-l1.json .devnet/allocs-l1.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2.json .devnet/allocs-l2.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-delta.json .devnet/allocs-l2-delta.json
+            cp /tmp/workspace/.devnet-asterisc/addresses.json .devnet/addresses.json
+            mkdir -p packages/contracts-bedrock
+            cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock
+            mkdir -p packages/contracts-bedrock/deployments/devnetL1
+            cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 packages/contracts-bedrock/deployments
+      - restore_cache:
+          name: Restore Go modules cache
+          # this go mod cache will be populated from go-mod-download-monorepo step
+          key: gomod-{{ checksum "go.sum" }}
+      - run:
+          name: Load asterisc artifacts
+          command: |
+            mkdir -p rvgo/bin
+            cp -r /tmp/workspace/asterisc-artifacts/* rvgo/bin
+      - run:
+          name: run tests
+          no_output_timeout: 20m
+          command: |
+            mkdir -p /testlogs
+            OP_TESTLOG_DISABLE_COLOR=true OP_E2E_DISABLE_PARALLEL=false gotestsum --format=testname --junitfile=/tmp/test-results/op_e2e_test-asterisc.xml --jsonfile=/testlogs/test.log -- -failfast -timeout=60m -parallel=8 ./faultproofs
+          working_directory: op-e2e
+      - store_artifacts:
+          path: /testlogs
+          when: always
+      - store_test_results:
+          path: /tmp/test-results
