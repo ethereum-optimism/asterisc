@@ -73,15 +73,7 @@ jobs:
           command: pnpm build
           working_directory: rvsol/lib/optimism
       - run:
-          name: Generate FPAC allocs
-          command: DEVNET_FPAC="true" make devnet-allocs
-          working_directory: rvsol/lib/optimism
-      - run:
-          name: Copy FPAC allocs to .devnet-fpac
-          command: cp -r .devnet/ .devnet-fault-proofs/
-          working_directory: rvsol/lib/optimism
-      - run:
-          name: Generate non-FPAC allocs
+          name: Generate allocs
           command: make devnet-allocs
           working_directory: rvsol/lib/optimism
       - persist_to_workspace:
@@ -93,9 +85,9 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/tsconfig.tsbuildinfo"
             - "packages/contracts-bedrock/tsconfig.build.tsbuildinfo"
-            - ".devnet-fault-proofs/allocs-l1.json"
-            - ".devnet-fault-proofs/addresses.json"
             - ".devnet/allocs-l1.json"
+            - ".devnet/allocs-l2.json"
+            - ".devnet/allocs-l2-delta.json"      
             - ".devnet/addresses.json"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
@@ -269,6 +261,8 @@ jobs:
           command: |
             mkdir -p .devnet
             cp /tmp/workspace/.devnet/allocs-l1.json .devnet/allocs-l1.json
+            cp /tmp/workspace/.devnet/allocs-l2.json .devnet/allocs-l2.json
+            cp /tmp/workspace/.devnet/allocs-l2-delta.json .devnet/allocs-l2-delta.json
             cp /tmp/workspace/.devnet/addresses.json .devnet/addresses.json
             cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json devnetL1.json
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
@@ -315,6 +309,12 @@ jobs:
             ASTERISC_ADDR=$(echo ${ASTERISC_ADDR//\"/})
             echo $ASTERISC_ADDR
             jq --arg key $ASTERISC_ADDR '.[$key]' ./allocs-l1-asterisc.json
+          working_directory: rvsol
+      - run:
+          name: Copy L2 Allocs
+          command: |
+            cp .devnet/allocs-l2.json .devnet-asterisc/allocs-l2.json 
+            cp .devnet/allocs-l2-delta.json .devnet-asterisc/allocs-l2-delta.json 
           working_directory: rvsol
       - persist_to_workspace:
           root: rvsol
