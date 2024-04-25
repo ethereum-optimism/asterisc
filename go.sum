@@ -738,8 +738,8 @@ github.com/tdewolff/parse/v2 v2.7.8/go.mod h1:3FbJWZp3XT9OWVN3Hmfp0p/a08v4h8J9W1
 github.com/tdewolff/test v1.0.11-0.20231101010635-f1265d231d52/go.mod h1:6DAvZliBAAnD7rhVgwaM7DE5/d9NMOAJ09SqYqeK4QE=
 github.com/tdewolff/test v1.0.11-0.20240106005702-7de5f7df4739 h1:IkjBCtQOOjIn03u/dMQK9g+Iw9ewps4mCl1nB8Sscbo=
 github.com/tdewolff/test v1.0.11-0.20240106005702-7de5f7df4739/go.mod h1:XPuWBzvdUzhCuxWO1ojpXsyzsA5bFoS3tO/Q3kFuTG8=
-github.com/testinprod-io/optimism v0.2.1-0.20240423193447-8faf87a6d681 h1:4PAdw4TW0Ufwsj3ZjgE0h71UPXpfM9xbbDTT2n338bo=
-github.com/testinprod-io/optimism v0.2.1-0.20240423193447-8faf87a6d681/go.mod h1:+M2UOTyG20iuKiQOi+Pzz3abOtTYbTnwah/CIp8o6Y8=
+github.com/testinprod-io/optimism v0.2.1-0.20240425205605-14e33cca6798 h1:Z9LtEGi4jKG6HZsNj6RZmR53erm2ycYl/IbTLj46lsw=
+github.com/testinprod-io/optimism v0.2.1-0.20240425205605-14e33cca6798/go.mod h1:A8ZV09pgVVmjabprGRKyQK5aJVldB7oOH3IiCS362MY=
 github.com/tklauser/go-sysconf v0.3.12 h1:0QaGUFOdQaIVdPgfITYzaTegZvdCjmYO52cSFAEVmqU=
 github.com/tklauser/go-sysconf v0.3.12/go.mod h1:Ho14jnntGE1fpdOqQEEaiKRpvIavV0hSfmBq8nJbHYI=
 github.com/tklauser/numcpus v0.6.1 h1:ng9scYS7az0Bk4OZLvrNXNSAO2Pxr1XXRAPyjhIx+Fk=

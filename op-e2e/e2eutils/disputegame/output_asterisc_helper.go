@@ -69,7 +69,8 @@ func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node
 	logger := testlog.Logger(g.T, log.LevelInfo).New("role", "HonestHelper", "game", g.Addr)
 	l2Client := g.System.NodeClient(l2Node)
 	caller := batching.NewMultiCaller(g.System.NodeClient("l1").Client(), batching.DefaultBatchSize)
-	contract := contracts.NewFaultDisputeGameContract(contractMetrics.NoopContractMetrics, g.Addr, caller)
+	contract, err := contracts.NewFaultDisputeGameContract(ctx, contractMetrics.NoopContractMetrics, g.Addr, caller)
+	g.Require.NoError(err)
 
 	prestateBlock, poststateBlock, err := contract.GetBlockRange(ctx)
 	g.Require.NoError(err, "Failed to load block range")
@@ -269,7 +270,8 @@ func (g *OutputAsteriscGameHelper) createAsteriscTraceProvider(ctx context.Conte
 
 	caller := batching.NewMultiCaller(g.System.NodeClient("l1").Client(), batching.DefaultBatchSize)
 	l2Client := g.System.NodeClient(l2Node)
-	contract := contracts.NewFaultDisputeGameContract(contractMetrics.NoopContractMetrics, g.Addr, caller)
+	contract, err := contracts.NewFaultDisputeGameContract(ctx, contractMetrics.NoopContractMetrics, g.Addr, caller)
+	g.Require.NoError(err)
 
 	prestateBlock, poststateBlock, err := contract.GetBlockRange(ctx)
 	g.Require.NoError(err, "Failed to load block range")
