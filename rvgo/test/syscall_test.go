@@ -18,7 +18,7 @@ import (
 	"github.com/ethereum-optimism/asterisc/rvgo/slow"
 )
 
-var syscallInsn = []byte{0x73}
+var syscallInsn = []byte{0x73, 0x00, 0x00, 0x00}
 
 func staticOracle(t *testing.T, preimageData []byte) *testOracle {
 	return &testOracle{
