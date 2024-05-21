@@ -1,8 +1,10 @@
 package test
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"os"
 	"testing"
 
@@ -28,6 +30,18 @@ func staticOracle(t *testing.T, preimageData []byte) *testOracle {
 			return preimageData
 		},
 	}
+}
+
+type hintTrackingOracle struct {
+	hints [][]byte
+}
+
+func (t *hintTrackingOracle) Hint(v []byte) {
+	t.hints = append(t.hints, v)
+}
+
+func (t *hintTrackingOracle) GetPreimage(k [32]byte) []byte {
+	return nil
 }
 
 func runEVM(t *testing.T, contracts *Contracts, addrs *Addresses, stepWitness *fast.StepWitness, fastPost fast.StateWitness, revertCode []byte) {
@@ -89,6 +103,176 @@ func TestStateSyscallUnsupported(t *testing.T) {
 
 			var slowSyscallErr *slow.UnsupportedSyscallErr
 			runSlow(t, stepWitness, nil, nil, &slowSyscallErr)
+		})
+	}
+}
+
+func TestEVMSysWriteHint(t *testing.T) {
+	contracts := testContracts(t)
+	addrs := testAddrs
+
+	cases := []struct {
+		name          string
+		memOffset     int      // Where the hint data is stored in memory
+		hintData      []byte   // Hint data stored in memory at memOffset
+		bytesToWrite  int      // How many bytes of hintData to write
+		lastHint      []byte   // The buffer that stores lastHint in the state
+		expectedHints [][]byte // The hints we expect to be processed
+	}{
+		{
+			name:      "write 1 full hint at beginning of page",
+			memOffset: 4096,
+			hintData: []byte{
+				0, 0, 0, 6, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite: 10,
+			lastHint:     nil,
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB},
+			},
+		},
+		{
+			name:      "write 1 full hint across page boundary",
+			memOffset: 4092,
+			hintData: []byte{
+				0, 0, 0, 8, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite: 12,
+			lastHint:     nil,
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB},
+			},
+		},
+		{
+			name:      "write 2 full hints",
+			memOffset: 5012,
+			hintData: []byte{
+				0, 0, 0, 6, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, // Hint data
+				0, 0, 0, 8, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite: 22,
+			lastHint:     nil,
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB},
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB},
+			},
+		},
+		{
+			name:      "write a single partial hint",
+			memOffset: 4092,
+			hintData: []byte{
+				0, 0, 0, 6, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite:  8,
+			lastHint:      nil,
+			expectedHints: nil,
+		},
+		{
+			name:      "write 1 full, 1 partial hint",
+			memOffset: 5012,
+			hintData: []byte{
+				0, 0, 0, 6, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, // Hint data
+				0, 0, 0, 8, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite: 16,
+			lastHint:     nil,
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB},
+			},
+		},
+		{
+			name:      "write a single partial hint to large capacity lastHint buffer",
+			memOffset: 4092,
+			hintData: []byte{
+				0, 0, 0, 6, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite:  8,
+			lastHint:      make([]byte, 0, 4096),
+			expectedHints: nil,
+		},
+		{
+			name:      "write full hint to large capacity lastHint buffer",
+			memOffset: 5012,
+			hintData: []byte{
+				0, 0, 0, 6, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite: 10,
+			lastHint:     make([]byte, 0, 4096),
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB},
+			},
+		},
+		{
+			name:      "write multiple hints to large capacity lastHint buffer",
+			memOffset: 4092,
+			hintData: []byte{
+				0, 0, 0, 8, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC, // Hint data
+				0, 0, 0, 8, // Length prefix
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB, // Hint data
+			},
+			bytesToWrite: 24,
+			lastHint:     make([]byte, 0, 4096),
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC},
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xBB, 0xBB},
+			},
+		},
+		{
+			name:      "write remaining hint data to non-empty lastHint buffer",
+			memOffset: 4092,
+			hintData: []byte{
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC, // Hint data
+			},
+			bytesToWrite: 8,
+			lastHint:     []byte{0, 0, 0, 8},
+			expectedHints: [][]byte{
+				{0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC},
+			},
+		},
+		{
+			name:      "write partial hint data to non-empty lastHint buffer",
+			memOffset: 4092,
+			hintData: []byte{
+				0xAA, 0xAA, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC, // Hint data
+			},
+			bytesToWrite:  4,
+			lastHint:      []byte{0, 0, 0, 8},
+			expectedHints: nil,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			oracle := hintTrackingOracle{}
+
+			state := &fast.VMState{
+				PC:        0,
+				Memory:    fast.NewMemory(),
+				Registers: [32]uint64{17: riscv.SysWrite, 10: riscv.FdHintWrite, 11: uint64(tt.memOffset), 12: uint64(tt.bytesToWrite)},
+				LastHint:  tt.lastHint,
+			}
+
+			err := state.Memory.SetMemoryRange(uint64(tt.memOffset), bytes.NewReader(tt.hintData))
+			require.NoError(t, err)
+			state.Memory.SetUnaligned(0, syscallInsn)
+
+			fastState := fast.NewInstrumentedState(state, &oracle, os.Stdout, os.Stderr)
+			stepWitness, err := fastState.Step(true)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedHints, oracle.hints)
+
+			fastPost := state.EncodeWitness()
+			runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
 		})
 	}
 }
@@ -817,7 +1001,7 @@ func FuzzStateHintWrite(f *testing.F) {
 	contracts := testContracts(f)
 	addrs := testAddrs
 
-	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64) {
+	f.Fuzz(func(t *testing.T, addr uint64, count uint64, preimageOffset uint64, pc uint64, step uint64, randSeed int64) {
 		pc = pc & 0xFF_FF_FF_FF_FF_FF_FF_FC // align PC
 		preimageData := []byte("hello world")
 		if preimageOffset >= uint64(len(preimageData)) {
@@ -835,10 +1019,15 @@ func FuzzStateHintWrite(f *testing.F) {
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 
-			// This is only used by fast/vm.go. The reads a zeroed page-sized buffer when reading hint data from memory.
-			// We pre-allocate a buffer for the read hint data to be copied into.
-			LastHint: make(hexutil.Bytes, fast.PageSize),
+			LastHint: nil,
 		}
+		// Set random data at the target memory range
+		randBytes, err := randomBytes(randSeed, count)
+		require.NoError(t, err)
+		err = state.Memory.SetMemoryRange(addr, bytes.NewReader(randBytes))
+		require.NoError(t, err)
+
+		// Set syscall instruction
 		state.Memory.SetUnaligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
@@ -939,4 +1128,13 @@ func FuzzStatePreimageWrite(f *testing.F) {
 		runEVM(t, contracts, addrs, stepWitness, fastPost, nil)
 		runSlow(t, stepWitness, fastPost, oracle, nil)
 	})
+}
+
+func randomBytes(seed int64, length uint64) ([]byte, error) {
+	r := rand.New(rand.NewSource(seed))
+	randBytes := make([]byte, length)
+	if _, err := r.Read(randBytes); err != nil {
+		return nil, err
+	}
+	return randBytes, nil
 }

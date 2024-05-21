@@ -461,7 +461,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				s.LastHint = append(inst.state.LastHint, hintData...)
 				for len(s.LastHint) >= 4 { // process while there is enough data to check if there are any hints
 					hintLen := binary.BigEndian.Uint32(s.LastHint[:4])
-					if hintLen >= uint32(len(s.LastHint[4:])) {
+					if hintLen <= uint32(len(s.LastHint[4:])) {
 						hint := s.LastHint[4 : 4+hintLen] // without the length prefix
 						s.LastHint = s.LastHint[4+hintLen:]
 						inst.preimageOracle.Hint(hint)

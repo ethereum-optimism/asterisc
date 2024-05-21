@@ -48,7 +48,7 @@ type VMState struct {
 	// to make sure pre-image requests can be served.
 	// The first 4 bytes are a uin32 length prefix.
 	// Warning: the hint MAY NOT BE COMPLETE. I.e. this is buffered,
-	// and should only be read when len(LastHint) > 4 && uint32(LastHint[:4]) >= len(LastHint[4:])
+	// and should only be read when len(LastHint) > 4 && uint32(LastHint[:4]) <= len(LastHint[4:])
 	LastHint hexutil.Bytes `json:"lastHint,omitempty"`
 
 	// VMState must hold these values because if not, we must ask FPVM again to
