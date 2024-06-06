@@ -29,8 +29,8 @@ func TestMultipleGameTypes(t *testing.T) {
 
 	// Start a challenger with both asterisc and alphabet support
 	gameFactory.StartChallenger(ctx, "TowerDefense",
-		challenger.WithAsterisc(t, sys.RollupConfig, sys.L2GenesisCfg, sys.RollupEndpoint("sequencer"), sys.NodeEndpoint("sequencer")),
-		op_e2e_challenger.WithAlphabet(sys.RollupEndpoint("sequencer")),
+		challenger.WithAsterisc(t, sys.RollupConfig, sys.L2GenesisCfg),
+		op_e2e_challenger.WithAlphabet(),
 		op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice),
 	)
 
