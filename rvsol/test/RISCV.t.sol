@@ -5,7 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { RISCV } from "src/RISCV.sol";
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
 import { CommonTest } from "./CommonTest.sol";
-import "@optimism/src/libraries/DisputeTypes.sol";
+import "@optimism/src/dispute/lib/Types.sol";
 
 contract RISCV_Test is CommonTest {
     /// @notice Stores the VM state.
