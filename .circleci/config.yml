@@ -252,10 +252,8 @@ jobs:
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
           working_directory: rvsol
       - run:
-          name: Patch L1 Allocs
-          # allocs-l1.json has the form as # we need json as the form {"accounts": ... }
-          # We need value of "accounts" key for foundry loadAlloc method
-          command: jq .accounts .devnet/allocs-l1.json > allocs-l1-patched.json
+          name: Copy L1 Allocs
+          command: cp .devnet/allocs-l1.json allocs-l1.json
           working_directory: rvsol
       - run:
           name: Generate allocs including asterisc
@@ -263,7 +261,7 @@ jobs:
             ASTERISC_PRESTATE=./prestate-proof.json
             TARGET_L2_DEPLOYMENT_FILE=./devnetL1/.deploy
             TARGET_L2_DEPLOY_CONFIG=./devnetL1.json
-            TARGET_L1_ALLOC=./allocs-l1-patched.json
+            TARGET_L1_ALLOC=./allocs-l1.json
             DEPLOYMENT_OUTFILE=./deployments/devnetL1/.deploy
             STATE_DUMP_PATH=./allocs-l1-asterisc.json
             ./scripts/create_poststate_after_deployment.sh
@@ -275,10 +273,9 @@ jobs:
             jq -s '.[0] * .[1]' ./deployments/devnetL1/.deploy ./devnetL1/.deploy | tee .devnet-asterisc/addresses.json
           working_directory: rvsol
       - run:
-          name: Patch L1 Allocs
-          # we need json as the form {"accounts": ... } for op-e2e
+          name: Copy L1 Allocs
           command: |
-            jq '{accounts: .}' ./allocs-l1-asterisc.json > .devnet-asterisc/allocs-l1.json
+            cp ./allocs-l1-asterisc.json .devnet-asterisc/allocs-l1.json
           working_directory: rvsol
       - run:
           name: Patch .deploy
