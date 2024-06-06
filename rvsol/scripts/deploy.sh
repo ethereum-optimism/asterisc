@@ -2,7 +2,8 @@
 set -eo pipefail
 
 TARGET_L1_RPC_URL="${TARGET_L1_RPC_URL:-"http://localhost:8545"}"
-DEPLOY_PRIVATE_KEY="${DEPLOY_PRIVATE_KEY:-"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"}" # foundry pre-funded account #1
+# foundry pre-funded account #4: gnosis safe's owner(0x90F79bf6EB2c4f870365E785982E1f101E93b906)
+DEPLOY_PRIVATE_KEY="${DEPLOY_PRIVATE_KEY:-"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"}"
 
 if [ -z "${TARGET_L2_DEPLOYMENT_FILE}" ]; then
     echo "TARGET_L2_DEPLOYMENT_FILE is not set. Must point target chain deployment file (optimism/packages/contracts-bedrock/deployments/devnetL1/.deploy)"
