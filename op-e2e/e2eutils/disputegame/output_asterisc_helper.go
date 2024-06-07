@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"path/filepath"
 
-	contractMetrics "github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts/metrics"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/asterisc"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/split"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/asterisc/rvgo/bindings"
-	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/outputs"
 	"github.com/ethereum-optimism/optimism/op-challenger/metrics"
 	op_e2e_challenger "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
@@ -261,12 +259,9 @@ func (g *OutputAsteriscGameHelper) createAsteriscTraceProvider(ctx context.Conte
 	opt = append(opt, options...)
 	cfg := challenger.NewChallengerConfig(g.T, g.System, l2Node, opt...)
 
-	caller := batching.NewMultiCaller(g.System.NodeClient("l1").Client(), batching.DefaultBatchSize)
 	l2Client := g.System.NodeClient(l2Node)
-	contract, err := contracts.NewFaultDisputeGameContract(ctx, contractMetrics.NoopContractMetrics, g.Addr, caller)
-	g.Require.NoError(err)
 
-	prestateBlock, poststateBlock, err := contract.GetBlockRange(ctx)
+	prestateBlock, poststateBlock, err := g.Game.GetBlockRange(ctx)
 	g.Require.NoError(err, "Failed to load block range")
 	rollupClient := g.System.RollupClient(l2Node)
 	prestateProvider := outputs.NewPrestateProvider(rollupClient, prestateBlock)
@@ -286,7 +281,7 @@ func (g *OutputAsteriscGameHelper) createAsteriscTraceProvider(ctx context.Conte
 		return asterisc.NewTraceProviderForTest(logger, metrics.NoopMetrics, cfg, localInputs, subdir, g.MaxDepth(ctx)-splitDepth-1), nil
 	})
 
-	claims, err := contract.GetAllClaims(ctx, rpcblock.Latest)
+	claims, err := g.Game.GetAllClaims(ctx, rpcblock.Latest)
 	g.Require.NoError(err)
 	game := types.NewGameState(claims, g.MaxDepth(ctx))
 
