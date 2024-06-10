@@ -15,7 +15,7 @@ import { DisputeGameFactory } from "@optimism/src/dispute/DisputeGameFactory.sol
 import { DelayedWETH } from "@optimism/src/dispute/weth/DelayedWETH.sol";
 import { AnchorStateRegistry } from "@optimism/src/dispute/AnchorStateRegistry.sol";
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
-import { Safe } from "safe-contracts/Safe.sol";
+import { GnosisSafe as Safe } from "safe-contracts/GnosisSafe.sol";
 import { Enum as SafeOps } from "safe-contracts/common/Enum.sol";
 import "@optimism/src/libraries/DisputeTypes.sol";
 
