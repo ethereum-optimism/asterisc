@@ -17,7 +17,7 @@ import { AnchorStateRegistry } from "@optimism/src/dispute/AnchorStateRegistry.s
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
 import { GnosisSafe as Safe } from "safe-contracts/GnosisSafe.sol";
 import { Enum as SafeOps } from "safe-contracts/common/Enum.sol";
-import "@optimism/src/libraries/DisputeTypes.sol";
+import "@optimism/src/dispute/lib/Types.sol";
 
 contract Deploy is Deployer {
     /// @notice Modifier that wraps a function in broadcasting.
