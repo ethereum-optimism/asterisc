@@ -3,17 +3,16 @@ package faultproofs
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"testing"
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/disputegame"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/utils"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
+	gameTypes "github.com/ethereum-optimism/optimism/op-challenger/game/types"
 	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
 	op_e2e_disputegame "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/disputegame"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/disputegame/preimage"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 
 	op_e2e_challenger "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
@@ -31,7 +30,7 @@ func TestOutputAsteriscGame(t *testing.T) {
 	game := disputeGameFactory.StartOutputAsteriscGame(ctx, "sequencer", 4, common.Hash{0x01})
 	game.LogGameData(ctx)
 
-	game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+	game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 	game.LogGameData(ctx)
 
@@ -73,7 +72,7 @@ func TestOutputAsteriscGame(t *testing.T) {
 
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
-	game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 }
 
 func TestOutputAsterisc_ChallengeAllZeroClaim(t *testing.T) {
@@ -88,7 +87,7 @@ func TestOutputAsterisc_ChallengeAllZeroClaim(t *testing.T) {
 	game.LogGameData(ctx)
 
 	claim := game.DisputeLastBlock(ctx)
-	game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+	game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 	game.DefendClaim(ctx, claim, func(parent *op_e2e_disputegame.ClaimHelper) *op_e2e_disputegame.ClaimHelper {
 		if parent.IsBottomGameRoot(ctx) {
@@ -101,7 +100,7 @@ func TestOutputAsterisc_ChallengeAllZeroClaim(t *testing.T) {
 
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
-	game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 	game.LogGameData(ctx)
 }
 
@@ -126,7 +125,7 @@ func TestOutputAsterisc_PublishAsteriscRootClaim(t *testing.T) {
 			game.DisputeLastBlock(ctx)
 			game.LogGameData(ctx)
 
-			game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+			game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 			splitDepth := game.SplitDepth(ctx)
 			game.WaitForClaimAtDepth(ctx, splitDepth+1)
@@ -161,7 +160,7 @@ func TestOutputAsteriscDisputeGame(t *testing.T) {
 			outputClaim := game.DisputeLastBlock(ctx)
 			splitDepth := game.SplitDepth(ctx)
 
-			game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+			game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 			game.DefendClaim(
 				ctx,
@@ -178,7 +177,7 @@ func TestOutputAsteriscDisputeGame(t *testing.T) {
 			require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
 			game.LogGameData(ctx)
-			game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+			game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 		})
 	}
 }
@@ -196,7 +195,7 @@ func TestOutputAsteriscDefendStep(t *testing.T) {
 	outputRootClaim := game.DisputeLastBlock(ctx)
 	game.LogGameData(ctx)
 
-	game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+	game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 	correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Mallory))
 
@@ -216,7 +215,7 @@ func TestOutputAsteriscDefendStep(t *testing.T) {
 
 	game.WaitForInactivity(ctx, 10, true)
 	game.LogGameData(ctx)
-	require.EqualValues(t, op_e2e_disputegame.StatusChallengerWins, game.Status(ctx))
+	require.EqualValues(t, gameTypes.GameStatusChallengerWon, game.Status(ctx))
 }
 
 func TestOutputAsteriscStepWithLargePreimage(t *testing.T) {
@@ -243,7 +242,7 @@ func TestOutputAsteriscStepWithLargePreimage(t *testing.T) {
 	outputRootClaim := game.DisputeBlock(ctx, l2BlockNumber)
 	game.LogGameData(ctx)
 
-	game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+	game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 	// Wait for the honest challenger to dispute the outputRootClaim.
 	// This creates a root of an execution game that we challenge by
@@ -275,7 +274,7 @@ func TestOutputAsteriscStepWithPreimage(t *testing.T) {
 		outputRootClaim := game.DisputeLastBlock(ctx)
 		game.LogGameData(ctx)
 
-		game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+		game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 		// Wait for the honest challenger to dispute the outputRootClaim. This creates a root of an execution game that we challenge by coercing
 		// a step at a preimage trace index.
@@ -314,7 +313,7 @@ func TestOutputAsteriscStepWithKZGPointEvaluation(t *testing.T) {
 
 		// NOTE: Flake prevention
 		// Ensure that the L1 origin including the point eval tx isn't on the genesis epoch.
-		safeBlock, err := sys.Clients["sequencer"].BlockByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
+		safeBlock, err := wait.ForNextSafeBlock(ctx, sys.NodeClient("sequencer"))
 		require.NoError(t, err)
 		require.NoError(t, wait.ForSafeBlock(ctx, sys.RollupClient("sequencer"), safeBlock.NumberU64()+3))
 
@@ -328,7 +327,7 @@ func TestOutputAsteriscStepWithKZGPointEvaluation(t *testing.T) {
 		outputRootClaim := game.DisputeLastBlock(ctx)
 		game.LogGameData(ctx)
 
-		game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+		game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 		// Wait for the honest challenger to dispute the outputRootClaim. This creates a root of an execution game that we challenge by coercing
 		// a step at a preimage trace index.
@@ -416,7 +415,7 @@ func TestOutputAsteriscProposedOutputRootValid(t *testing.T) {
 			game := disputeGameFactory.StartOutputAsteriscGameWithCorrectRoot(ctx, "sequencer", 1)
 			correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Mallory))
 
-			game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
+			game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 			// Now maliciously play the game and it should be impossible to win
 			game.ChallengeClaim(ctx,
@@ -434,7 +433,7 @@ func TestOutputAsteriscProposedOutputRootValid(t *testing.T) {
 
 			game.WaitForInactivity(ctx, 10, true)
 			game.LogGameData(ctx)
-			require.EqualValues(t, op_e2e_disputegame.StatusDefenderWins, game.Status(ctx))
+			require.EqualValues(t, gameTypes.GameStatusDefenderWon, game.Status(ctx))
 		})
 	}
 }
@@ -465,7 +464,7 @@ func TestOutputAsteriscPoisonedPostState(t *testing.T) {
 	game.LogGameData(ctx)
 
 	// Start the honest challenger
-	game.StartChallenger(ctx, "sequencer", "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+	game.StartChallenger(ctx, "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
 
 	// Start dishonest challenger that posts correct claims
 	for {
@@ -500,7 +499,7 @@ func TestOutputAsteriscPoisonedPostState(t *testing.T) {
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
 	game.LogGameData(ctx)
-	game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 }
 
 func TestDisputeOutputRootBeyondProposedBlock_ValidOutputRoot(t *testing.T) {
@@ -515,7 +514,7 @@ func TestDisputeOutputRootBeyondProposedBlock_ValidOutputRoot(t *testing.T) {
 	game := disputeGameFactory.StartOutputAsteriscGameWithCorrectRoot(ctx, "sequencer", 1)
 	correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 	// Start the honest challenger
-	game.StartChallenger(ctx, "sequencer", "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+	game.StartChallenger(ctx, "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
 
 	claim := game.RootClaim(ctx)
 	// Attack the output root
@@ -549,7 +548,7 @@ func TestDisputeOutputRootBeyondProposedBlock_ValidOutputRoot(t *testing.T) {
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-	game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusDefenderWins)
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusDefenderWon)
 	game.LogGameData(ctx)
 }
 
@@ -566,7 +565,7 @@ func TestDisputeOutputRootBeyondProposedBlock_InvalidOutputRoot(t *testing.T) {
 	correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 	// Start the honest challenger
-	game.StartChallenger(ctx, "sequencer", "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+	game.StartChallenger(ctx, "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
 
 	claim := game.RootClaim(ctx)
 	// Wait for the honest challenger to counter the root
@@ -600,7 +599,7 @@ func TestDisputeOutputRootBeyondProposedBlock_InvalidOutputRoot(t *testing.T) {
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-	game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 	game.LogGameData(ctx)
 }
 
@@ -617,7 +616,7 @@ func TestDisputeOutputRoot_ChangeClaimedOutputRoot(t *testing.T) {
 	correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 	// Start the honest challenger
-	game.StartChallenger(ctx, "sequencer", "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+	game.StartChallenger(ctx, "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
 
 	claim := game.RootClaim(ctx)
 	// Wait for the honest challenger to counter the root
@@ -660,7 +659,7 @@ func TestDisputeOutputRoot_ChangeClaimedOutputRoot(t *testing.T) {
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-	game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 	game.LogGameData(ctx)
 }
 
@@ -707,7 +706,7 @@ func TestInvalidateUnsafeProposal(t *testing.T) {
 			correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 			// Start the honest challenger
-			game.StartChallenger(ctx, "sequencer", "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+			game.StartChallenger(ctx, "Challenger", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
 
 			game.DefendClaim(ctx, game.RootClaim(ctx), func(parent *op_e2e_disputegame.ClaimHelper) *op_e2e_disputegame.ClaimHelper {
 				if parent.IsBottomGameRoot(ctx) {
@@ -720,7 +719,7 @@ func TestInvalidateUnsafeProposal(t *testing.T) {
 			sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 			require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-			game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+			game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 			game.LogGameData(ctx)
 		})
 	}
@@ -769,7 +768,7 @@ func TestInvalidateProposalForFutureBlock(t *testing.T) {
 			correctTrace := game.CreateHonestActor(ctx, "sequencer", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Alice))
 
 			// Start the honest challenger
-			game.StartChallenger(ctx, "sequencer", "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+			game.StartChallenger(ctx, "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
 
 			game.DefendClaim(ctx, game.RootClaim(ctx), func(parent *op_e2e_disputegame.ClaimHelper) *op_e2e_disputegame.ClaimHelper {
 				if parent.IsBottomGameRoot(ctx) {
@@ -782,8 +781,40 @@ func TestInvalidateProposalForFutureBlock(t *testing.T) {
 			sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 			require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-			game.WaitForGameStatus(ctx, op_e2e_disputegame.StatusChallengerWins)
+			game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
 			game.LogGameData(ctx)
 		})
 	}
+}
+
+func TestInvalidateCorrectProposalFutureBlock(t *testing.T) {
+	op_e2e.InitParallel(t)
+	ctx := context.Background()
+	// Spin up the system without the batcher so the safe head doesn't advance
+	sys, l1Client := op_e2e_faultproofs.StartFaultDisputeSystem(t, op_e2e_faultproofs.WithBatcherStopped(), op_e2e_faultproofs.WithSequencerWindowSize(100000))
+	t.Cleanup(sys.Close)
+
+	// Create a dispute game factory helper.
+	disputeGameFactory := disputegame.NewAsteriscFactoryHelper(t, ctx, sys)
+
+	// No batches submitted so safe head is genesis
+	output, err := sys.RollupClient("sequencer").OutputAtBlock(ctx, 0)
+	require.NoError(t, err, "Failed to get output at safe head")
+	// Create a dispute game with an output root that is valid at `safeHead`, but that claims to correspond to block
+	// `safeHead.Number + 10000`. This is dishonest, because this block does not exist yet.
+	game := disputeGameFactory.StartOutputAsteriscGame(ctx, "sequencer", 10_000, common.Hash(output.OutputRoot), op_e2e_disputegame.WithFutureProposal())
+
+	// Start the honest challenger.
+	game.StartChallenger(ctx, "Honest", op_e2e_challenger.WithPrivKey(sys.Cfg.Secrets.Bob))
+
+	game.WaitForL2BlockNumberChallenged(ctx)
+
+	// Time travel past when the game will be resolvable.
+	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
+	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
+
+	// The game should resolve as `CHALLENGER_WINS` always, because the root claim signifies a claim that does not exist
+	// yet in the L2 chain.
+	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
+	game.LogGameData(ctx)
 }
