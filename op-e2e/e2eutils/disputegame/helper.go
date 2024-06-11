@@ -7,15 +7,17 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/asterisc/rvgo/bindings"
-	op_bindings "github.com/ethereum-optimism/optimism/op-bindings/bindings"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts/metrics"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/outputs"
-	faultTypes "github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
+	op_e2e_bindings "github.com/ethereum-optimism/optimism/op-e2e/bindings"
 	op_e2e_challenger "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
 	op_e2e_disputegame "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/disputegame"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/disputegame/preimage"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/transactions"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -43,7 +45,7 @@ func (h *AsteriscFactoryHelper) PreimageHelper(ctx context.Context) *preimage.He
 	opts := &bind.CallOpts{Context: ctx}
 	gameAddr, err := h.Factory.GameImpls(opts, asteriscGameType)
 	h.Require.NoError(err)
-	game, err := op_bindings.NewFaultDisputeGameCaller(gameAddr, h.Client)
+	game, err := op_e2e_bindings.NewFaultDisputeGameCaller(gameAddr, h.Client)
 	h.Require.NoError(err)
 	vmAddr, err := game.Vm(opts)
 	h.Require.NoError(err)
@@ -66,6 +68,7 @@ func (h *AsteriscFactoryHelper) StartOutputAsteriscGame(ctx context.Context, l2N
 	cfg := op_e2e_disputegame.NewGameCfg(opts...)
 	logger := testlog.Logger(h.T, log.LevelInfo).New("role", "OutputAsteriscGameHelper")
 	rollupClient := h.System.RollupClient(l2Node)
+	l2Client := h.System.NodeClient(l2Node)
 
 	extraData := h.CreateBisectionGameExtraData(l2Node, l2BlockNumber, cfg)
 
@@ -81,31 +84,28 @@ func (h *AsteriscFactoryHelper) StartOutputAsteriscGame(ctx context.Context, l2N
 	h.Require.Len(rcpt.Logs, 2, "should have emitted a single DisputeGameCreated event")
 	createdEvent, err := h.Factory.ParseDisputeGameCreated(*rcpt.Logs[1])
 	h.Require.NoError(err)
-	game, err := op_bindings.NewFaultDisputeGame(createdEvent.DisputeProxy, h.Client)
+	game, err := contracts.NewFaultDisputeGameContract(ctx, metrics.NoopContractMetrics, createdEvent.DisputeProxy, batching.NewMultiCaller(h.Client.Client(), batching.DefaultBatchSize))
 	h.Require.NoError(err)
 
-	callOpts := &bind.CallOpts{Context: ctx}
-	prestateBlock, err := game.StartingBlockNumber(callOpts)
+	prestateBlock, poststateBlock, err := game.GetBlockRange(ctx)
 	h.Require.NoError(err, "Failed to load starting block number")
-	poststateBlock, err := game.L2BlockNumber(callOpts)
-	h.Require.NoError(err, "Failed to load l2 block number")
-	splitDepth, err := game.SplitDepth(callOpts)
+	splitDepth, err := game.GetSplitDepth(ctx)
 	h.Require.NoError(err, "Failed to load split depth")
 	l1Head := h.GetL1Head(ctx, game)
 
-	prestateProvider := outputs.NewPrestateProvider(rollupClient, prestateBlock.Uint64())
-	provider := outputs.NewTraceProvider(logger, prestateProvider, rollupClient, l1Head, faultTypes.Depth(splitDepth.Uint64()), prestateBlock.Uint64(), poststateBlock.Uint64())
+	prestateProvider := outputs.NewPrestateProvider(rollupClient, prestateBlock)
+	provider := outputs.NewTraceProvider(logger, prestateProvider, rollupClient, l2Client, l1Head, splitDepth, prestateBlock, poststateBlock)
 
 	return &OutputAsteriscGameHelper{
 		OutputCannonGameHelper: op_e2e_disputegame.OutputCannonGameHelper{
-			OutputGameHelper: *op_e2e_disputegame.NewOutputGameHelper(h.T, h.Require, h.Client, h.Opts, game, h.FactoryAddr, createdEvent.DisputeProxy, provider, h.System),
+			OutputGameHelper: *op_e2e_disputegame.NewOutputGameHelper(h.T, h.Require, h.Client, h.Opts, h.PrivKey, game, h.FactoryAddr, createdEvent.DisputeProxy, provider, h.System),
 		},
 	}
 }
 
 // GetL1Head overrides op_e2e_disputegame.FactoryHelper GetL1Head method
 // Identical to FactoryHelper implementation
-func (h *AsteriscFactoryHelper) GetL1Head(ctx context.Context, game *op_bindings.FaultDisputeGame) eth.BlockID {
+func (h *AsteriscFactoryHelper) GetL1Head(ctx context.Context, game contracts.FaultDisputeGameContract) eth.BlockID {
 	return h.FactoryHelper.GetL1Head(ctx, game)
 }
 

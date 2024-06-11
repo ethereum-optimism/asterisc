@@ -25,13 +25,10 @@ func WithAsterisc(
 	t *testing.T,
 	rollupCfg *rollup.Config,
 	l2Genesis *core.Genesis,
-	rollupEndpoint string,
-	l2Endpoint string,
 ) op_e2e_challenger.Option {
 	return func(c *config.Config) {
 		c.TraceTypes = append(c.TraceTypes, config.TraceTypeAsterisc)
-		c.RollupRpc = rollupEndpoint
-		applyAsteriscConfig(c, t, rollupCfg, l2Genesis, l2Endpoint)
+		applyAsteriscConfig(c, t, rollupCfg, l2Genesis)
 	}
 }
 
@@ -40,10 +37,8 @@ func applyAsteriscConfig(
 	t *testing.T,
 	rollupCfg *rollup.Config,
 	l2Genesis *core.Genesis,
-	l2Endpoint string,
 ) {
 	require := require.New(t)
-	c.L2Rpc = l2Endpoint
 	root := op_e2e_challenger.FindMonorepoRoot(t)
 	c.AsteriscBin = root + "rvgo/bin/asterisc"
 	c.AsteriscServer = root + "rvsol/lib/optimism/op-program/bin/op-program"
@@ -66,19 +61,21 @@ func applyAsteriscConfig(
 func NewChallenger(t *testing.T, ctx context.Context, sys op_e2e_challenger.EndpointProvider, name string, options ...op_e2e_challenger.Option) *op_e2e_challenger.Helper {
 	log := testlog.Logger(t, log.LevelDebug).New("role", name)
 	log.Info("Creating challenger")
-	cfg := NewChallengerConfig(t, sys, options...)
-	chl, err := op_challenger.Main(ctx, log, cfg)
+	cfg := NewChallengerConfig(t, sys, "sequencer", options...)
+	cfg.MetricsConfig.Enabled = false // Don't start the metrics server
+	m := op_e2e_challenger.NewCapturingMetrics()
+	chl, err := op_challenger.Main(ctx, log, cfg, m)
 	require.NoError(t, err, "must init challenger")
 	require.NoError(t, chl.Start(ctx), "must start challenger")
 
-	return op_e2e_challenger.NewHelper(log, t, require.New(t), cfg.Datadir, chl)
+	return op_e2e_challenger.NewHelper(log, t, require.New(t), cfg.Datadir, chl, m)
 }
 
-func NewChallengerConfig(t *testing.T, sys op_e2e_challenger.EndpointProvider, options ...op_e2e_challenger.Option) *config.Config {
+func NewChallengerConfig(t *testing.T, sys op_e2e_challenger.EndpointProvider, l2NodeName string, options ...op_e2e_challenger.Option) *config.Config {
 	// Use the NewConfig method to ensure we pick up any defaults that are set.
 	l1Endpoint := sys.NodeEndpoint("l1")
 	l1Beacon := sys.L1BeaconEndpoint()
-	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, t.TempDir())
+	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, sys.RollupEndpoint(l2NodeName), sys.NodeEndpoint(l2NodeName), t.TempDir())
 	// The devnet can't set the absolute prestate output root because the contracts are deployed in L1 genesis
 	// before the L2 genesis is known.
 	cfg.AllowInvalidPrestate = true

@@ -139,14 +139,16 @@ func TestPrecompiles(t *testing.T) {
 func runAsterisc(t *testing.T, ctx context.Context, sys *op_e2e.System, inputs utils.LocalGameInputs, l2Node string) {
 	l1Endpoint := sys.NodeEndpoint("l1")
 	l1Beacon := sys.L1BeaconEndpoint()
-	asteriscOpts := challenger.WithAsterisc(t, sys.RollupCfg(), sys.L2Genesis(), sys.RollupEndpoint(l2Node), sys.NodeEndpoint(l2Node))
+	rollupEndpoint := sys.RollupEndpoint("sequencer")
+	l2Endpoint := sys.NodeEndpoint("sequencer")
+	asteriscOpts := challenger.WithAsterisc(t, sys.RollupCfg(), sys.L2Genesis())
 	dir := t.TempDir()
 	proofsDir := filepath.Join(dir, "asterisc-proofs")
-	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, dir)
+	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, rollupEndpoint, l2Endpoint, dir)
 	asteriscOpts(&cfg)
 
 	logger := testlog.Logger(t, log.LevelInfo).New("role", "asterisc")
-	executor := asterisc.NewExecutor(logger, metrics.NoopMetrics, &cfg, inputs)
+	executor := asterisc.NewExecutor(logger, metrics.NoopMetrics, &cfg, cfg.AsteriscAbsolutePreState, inputs)
 
 	t.Log("Running asterisc")
 	err := executor.GenerateProof(ctx, proofsDir, math.MaxUint)
@@ -154,6 +156,8 @@ func runAsterisc(t *testing.T, ctx context.Context, sys *op_e2e.System, inputs u
 
 	state, err := parseState(filepath.Join(proofsDir, "final.json.gz"))
 	require.NoError(t, err, "failed to parse state")
+	require.True(t, state.Exited, "asterisc did not exit")
+	require.Zero(t, state.ExitCode, "asterisc failed with exit code %d", state.ExitCode)
 	t.Logf("Completed in %d steps", state.Step)
 }
 
