@@ -1,12 +1,20 @@
 import asyncio
-import websockets
-import requests
 import json
 import os
 
+import eth_abi
+import requests
+import websockets
+
 L1_WS_ENDPOINT = "ws://localhost:8546"
+L1_HTTP_ENDPOINT = "http://localhost:8545"
 L2_HTTP_ENDPOINT = "http://localhost:9545"
-OUTPUT_PROPOSED_TOPIC = "0xa7aaf2512769da4e444e3de247be2564225c2e7a8f74cfe528e46e17d24868e2"
+# event DisputeGameCreated(address indexed disputeProxy, GameType indexed gameType, Claim indexed rootClaim);
+# event DisputeGameCreated(address indexed disputeProxy, uint32 indexed gameType, bytes32 indexed rootClaim);
+DISPUTE_GAME_CREATED_TOPIC = (
+    "0x5b565efe82411da98814f356d0e7bcb8f0219b8d970307c5afb4a6903a8b2e35"
+)
+CREATE_TX_ABI_TYPES = ["uint32", "bytes32", "bytes"]
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -24,24 +32,46 @@ async def subscribe_logs():
         subscription_request = {
             "jsonrpc": "2.0",
             "method": "eth_subscribe",
-            "params": ["logs", {"address": addrs["L2OutputOracleProxy"], "topics": [OUTPUT_PROPOSED_TOPIC]}],
-            "id": 1
+            "params": [
+                "logs",
+                {
+                    "address": addrs["DisputeGameFactoryProxy"],
+                    "topics": [DISPUTE_GAME_CREATED_TOPIC],
+                },
+            ],
+            "id": 1,
         }
 
         await websocket.send(json.dumps(subscription_request))
 
-        print("Waiting OutputProposed logs...")
+        print("Waiting DisputeGameCreated logs...")
         while True:
             message = await websocket.recv()
             res = json.loads(message)
             if "params" in res:
-                result = res["params"]["result"]
-                logs.append({
-                    "outputRoot": result["topics"][1],
-                    "l2BlockNumber": int(result["topics"][3], base=16),
-                    "l1BlockNumber": int(result["blockNumber"], base=16),
-                    "l1BlockHash": result["blockHash"]
-                })
+                event_result = res["params"]["result"]
+                l1_tx_request = {
+                    "jsonrpc": "2.0",
+                    "method": "eth_getTransactionByHash",
+                    "params": [event_result["transactionHash"]],
+                    "id": 1,
+                }
+                try:
+                    res = requests.post(L1_HTTP_ENDPOINT, json=l1_tx_request).json()
+                    calldata = bytes.fromhex(res["result"]["input"][10:])
+                    params = eth_abi.decode_abi(CREATE_TX_ABI_TYPES, calldata)
+                    l2_block_number = int.from_bytes(params[-1], byteorder="big")
+                except Exception as e:
+                    raise Exception(f"Failed to fetch L2 block number: {e}")
+
+                logs.append(
+                    {
+                        "outputRoot": event_result["topics"][3],
+                        "l1BlockHash": event_result["blockHash"],
+                        "l1BlockNumber": int(event_result["blockNumber"], base=16),
+                        "l2BlockNumber": l2_block_number,
+                    }
+                )
             if len(logs) == 2:
                 break
 
@@ -49,12 +79,13 @@ async def subscribe_logs():
         "jsonrpc": "2.0",
         "method": "eth_getBlockByNumber",
         "params": [hex(logs[0]["l2BlockNumber"]), False],
-        "id": 1
+        "id": 1,
     }
     res = requests.post(L2_HTTP_ENDPOINT, json=l2_block_reqeust).json()
 
     global l2_head
     l2_head = res["result"]["hash"]
+
 
 asyncio.run(subscribe_logs())
 
