@@ -104,3 +104,30 @@ jobs:
       - name: Run op-program
         run: tar -xzvf ./preimages.tar.gz && ./local_cmd.sh
         working-directory: tests/op-program-test
+
+  rvgo-abigen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install justfile
+        uses: extractions/setup-just@v2
+        with:
+          just-version: '1.28.0'
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Install abigen
+        run: |
+          wget https://gethstore.blob.core.windows.net/builds/geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz
+          echo "76a04354dba9980fcbc35bece2957b30 geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz" | md5sum -c -
+          tar -xvf geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz
+          sudo mv geth-alltools-linux-amd64-1.13.14-2bd6bd01/abigen /usr/local/bin/
+      - name: Build rvsol
+        run: forge build
+        working-directory: rvsol
+      - name: Check bindings
+        run: |
+          make gen-bindings
+          git diff --exit-code bindings
+        working-directory: rvgo
