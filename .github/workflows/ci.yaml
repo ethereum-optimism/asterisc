@@ -117,10 +117,19 @@ jobs:
           just-version: '1.28.0'
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-      - name: Install abigen
+      - name: Cache geth alltools
+        id: cache-geth
+        uses: actions/cache@v3
+        with:
+          path: geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz
+          key: ${{ runner.os }}-geth-alltools-linux-amd64-1.13.14-2bd6bd01
+      - name: Download geth alltools if not cached
+        if: steps.cache-geth.outputs.cache-hit != 'true'
         run: |
           wget https://gethstore.blob.core.windows.net/builds/geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz
           echo "76a04354dba9980fcbc35bece2957b30 geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz" | md5sum -c -
+      - name: Install abigen
+        run: |
           tar -xvf geth-alltools-linux-amd64-1.13.14-2bd6bd01.tar.gz
           sudo mv geth-alltools-linux-amd64-1.13.14-2bd6bd01/abigen /usr/local/bin/
       - name: Build rvsol
