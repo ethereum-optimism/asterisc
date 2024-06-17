@@ -20,6 +20,13 @@ import { AddressManager } from "@optimism/src/legacy/AddressManager.sol";
 import { Proxy } from "@optimism/src/universal/Proxy.sol";
 import { EIP1967Helper } from "@optimism/test/mocks/EIP1967Helper.sol";
 
+import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
+import { Chains } from "@optimism/scripts/Chains.sol";
+import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
+import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
+import { DelayedWETH } from "@optimism/src/dispute/weth/DelayedWETH.sol";
+import "@optimism/src/dispute/lib/Types.sol";
+
 contract Deploy is Deployer {
     /// @notice Modifier that wraps a function in broadcasting.
     modifier broadcast() {
@@ -41,6 +48,8 @@ contract Deploy is Deployer {
         deployProxies();
         deployImplementations();
         initializeImplementations();
+
+        setAsteriscFaultGameImplementation(false);
     }
 
     /// @notice The create2 salt used for deployment of the contract implementations.
@@ -201,5 +210,66 @@ contract Deploy is Deployer {
         save(_name, address(proxy));
         console.log("   at %s", address(proxy));
         addr_ = address(proxy);
+    }
+
+    /// @notice Loads the riscv absolute prestate from the prestate-proof for devnets otherwise
+    ///         from the config.
+    function loadRiscvAbsolutePrestate() internal returns (Claim riscvAbsolutePrestate_) {
+        if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
+            // Fetch the absolute prestate dump
+            string memory filePath = asteriscPrestatefile;
+            string[] memory commands = new string[](3);
+            commands[0] = "bash";
+            commands[1] = "-c";
+            commands[2] = string.concat("[[ -f ", filePath, " ]] && echo \"present\"");
+            if (vm.ffi(commands).length == 0) {
+                revert("Asterisc prestate dump not found, generate it with `make prestate` in the Asterisc root.");
+            }
+            commands[2] = string.concat("cat ", filePath, " | jq -r .pre");
+            riscvAbsolutePrestate_ = Claim.wrap(abi.decode(vm.ffi(commands), (bytes32)));
+            console.log(
+                "[Asterisc Dispute Game] Using devnet RISCV Absolute prestate: %s",
+                vm.toString(Claim.unwrap(riscvAbsolutePrestate_))
+            );
+        } else {
+            revert("Currently Asterisc only supports local devnet");
+            // TODO: Add Asterisc absolute prestate into OP stack deploy config
+        }
+    }
+
+    /// @notice Sets the implementation for the given fault game type in the `DisputeGameFactory`.
+    function setAsteriscFaultGameImplementation(bool _allowUpgrade) public broadcast {
+        console.log("Setting Asterisc FaultDisputeGame implementation");
+        DelayedWETH weth = DelayedWETH(mustGetChainAddress("DelayedWETHProxy"));
+        // use freshly deployed factory and anchorStateRegister
+        DisputeGameFactory factory = DisputeGameFactory(mustGetAddress("DisputeGameFactoryProxy"));
+        AnchorStateRegistry anchorStateRegistry = AnchorStateRegistry(mustGetAddress("AnchorStateRegistryProxy"));
+
+        if (address(factory.gameImpls(GameTypes.ASTERISC)) != address(0) && !_allowUpgrade) {
+            console.log(
+                "[WARN] DisputeGameFactoryProxy: `FaultDisputeGame` implementation already set for game type: ASTERISC"
+            );
+            return;
+        }
+
+        FaultDisputeGame fdg = new FaultDisputeGame{ salt: _implSalt() }({
+            _gameType: GameTypes.ASTERISC,
+            _absolutePrestate: loadRiscvAbsolutePrestate(),
+            _maxGameDepth: cfg.faultGameMaxDepth(),
+            _splitDepth: cfg.faultGameSplitDepth(),
+            _clockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
+            _maxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
+            _vm: IBigStepper(mustGetAddress("RISCV")),
+            _weth: weth,
+            _anchorStateRegistry: anchorStateRegistry,
+            _l2ChainId: cfg.l2ChainID()
+        });
+
+        factory.setImplementation(GameTypes.ASTERISC, fdg);
+
+        console.log(
+            "DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: ASTERISC | GameType: %s)",
+            vm.toString(GameType.unwrap(GameTypes.ASTERISC))
+        );
     }
 }
