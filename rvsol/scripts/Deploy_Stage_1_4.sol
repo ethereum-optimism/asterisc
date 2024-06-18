@@ -12,7 +12,6 @@ import { AnchorStateRegistry } from "@optimism/src/dispute/AnchorStateRegistry.s
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
 import { RISCV } from "../src/RISCV.sol";
 import { Types } from "@optimism/scripts/Types.sol";
-import { OutputRoot, Hash, GameTypes } from "@optimism/src/dispute/lib/Types.sol";
 import { console2 as console } from "forge-std/console2.sol";
 
 import { ProxyAdmin } from "@optimism/src/universal/ProxyAdmin.sol";
@@ -23,8 +22,6 @@ import { EIP1967Helper } from "@optimism/test/mocks/EIP1967Helper.sol";
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
 import { Chains } from "@optimism/scripts/Chains.sol";
 import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
-import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
-import { DelayedWETH } from "@optimism/src/dispute/weth/DelayedWETH.sol";
 import "@optimism/src/dispute/lib/Types.sol";
 
 contract Deploy is Deployer {
