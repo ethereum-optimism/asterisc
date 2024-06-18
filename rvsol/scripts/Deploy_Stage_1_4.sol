@@ -271,5 +271,7 @@ contract Deploy is Deployer {
             "DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: ASTERISC | GameType: %s)",
             vm.toString(GameType.unwrap(GameTypes.ASTERISC))
         );
+
+        factory.setInitBond(GameTypes.ASTERISC, 0.08 ether);
     }
 }
