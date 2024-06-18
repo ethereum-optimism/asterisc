@@ -49,7 +49,7 @@ contract Deploy is Deployer {
         deployImplementations();
         initializeImplementations();
 
-        setAsteriscFaultGameImplementation(false);
+        setAsteriscFaultGameImplementation({ _allowUpgrade: false });
     }
 
     /// @notice The create2 salt used for deployment of the contract implementations.
