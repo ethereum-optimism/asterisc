@@ -19,8 +19,9 @@ import { Chains } from "@optimism/scripts/Chains.sol";
 import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 import "@optimism/src/dispute/lib/Types.sol";
 import { console2 as console } from "forge-std/console2.sol";
+import { StdAssertions } from "forge-std/StdAssertions.sol";
 
-contract Deploy is Deployer {
+contract Deploy is Deployer, StdAssertions {
     /// @notice Modifier that wraps a function in broadcasting.
     modifier broadcast() {
         vm.startBroadcast(msg.sender);
@@ -44,6 +45,9 @@ contract Deploy is Deployer {
         initializeImplementations();
 
         setAsteriscFaultGameImplementation({ _allowUpgrade: false });
+
+        postDeployAssertions();
+        printConfigReview();
     }
 
     /// @notice The create2 salt used for deployment of the contract implementations.
@@ -274,5 +278,69 @@ contract Deploy is Deployer {
         );
 
         factory.setInitBond(GameTypes.ASTERISC, 0.08 ether);
+    }
+
+    /// @notice Checks that the deployed system is configured correctly.
+    function postDeployAssertions() internal {
+        // Ensure that `useFaultProofs` is set to `true`.
+        assertTrue(cfg.useFaultProofs());
+
+        ProxyAdmin proxyAdmin = ProxyAdmin(mustGetAddress("ProxyAdmin"));
+        assertEq(address(proxyAdmin.owner()), msg.sender);
+
+        // Ensure the contracts are owned by the correct entities.
+        address dgfProxyAddr = mustGetAddress("DisputeGameFactoryProxy");
+        DisputeGameFactory dgfProxy = DisputeGameFactory(dgfProxyAddr);
+        assertEq(address(dgfProxy.owner()), msg.sender);
+
+        PreimageOracle oracle = PreimageOracle(mustGetChainAddress("PreimageOracle"));
+        assertEq(oracle.minProposalSize(), cfg.preimageOracleMinProposalSize());
+        assertEq(oracle.challengePeriod(), cfg.preimageOracleChallengePeriod());
+
+        RISCV riscv = RISCV(mustGetAddress("RISCV"));
+        assertEq(address(riscv.oracle()), address(oracle));
+
+        // Check the AnchorStateRegistry configuration.
+        AnchorStateRegistry asr = AnchorStateRegistry(mustGetAddress("AnchorStateRegistryProxy"));
+        (Hash root, uint256 l2BlockNumber) = asr.anchors(GameTypes.ASTERISC);
+        assertEq(root.raw(), cfg.faultGameGenesisOutputRoot());
+        assertEq(l2BlockNumber, cfg.faultGameGenesisBlock());
+
+        // Check the FaultDisputeGame configuration.
+        FaultDisputeGame gameImpl = FaultDisputeGame(payable(address(dgfProxy.gameImpls(GameTypes.ASTERISC))));
+        assertEq(gameImpl.maxGameDepth(), cfg.faultGameMaxDepth());
+        assertEq(gameImpl.splitDepth(), cfg.faultGameSplitDepth());
+        assertEq(gameImpl.clockExtension().raw(), cfg.faultGameClockExtension());
+        assertEq(gameImpl.maxClockDuration().raw(), cfg.faultGameMaxClockDuration());
+        if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
+            console.log("Cannot check absolute prestate because used locally generated prestate");
+        } else {
+            assertEq(gameImpl.absolutePrestate().raw(), bytes32(cfg.faultGameAbsolutePrestate()));
+        }
+        address wethProxyAddr = mustGetChainAddress("DelayedWETHProxy");
+        assertEq(address(gameImpl.weth()), wethProxyAddr);
+        assertEq(address(gameImpl.anchorStateRegistry()), address(asr));
+        assertEq(address(gameImpl.vm()), address(riscv));
+    }
+
+    /// @notice Prints a review of the fault proof configuration section of the deploy config.
+    function printConfigReview() internal view {
+        console.log(unicode"📖 FaultDisputeGame Config Overview (chainid: %d)", block.chainid);
+        console.log("    0. Use Fault Proofs: %s", cfg.useFaultProofs() ? "true" : "false");
+        console.log("    1. Absolute Prestate: %x", cfg.faultGameAbsolutePrestate());
+        if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
+            console.log("    - Deployment did not use prestate provided by config");
+        }
+        console.log("    2. Max Depth: %d", cfg.faultGameMaxDepth());
+        console.log("    3. Output / Execution split Depth: %d", cfg.faultGameSplitDepth());
+        console.log("    4. Clock Extension (seconds): %d", cfg.faultGameClockExtension());
+        console.log("    5. Max Clock Duration (seconds): %d", cfg.faultGameMaxClockDuration());
+        console.log("    6. L2 Genesis block number: %d", cfg.faultGameGenesisBlock());
+        console.log("    7. L2 Genesis output root: %x", uint256(cfg.faultGameGenesisOutputRoot()));
+        console.log("    8. Proof Maturity Delay (seconds): ", cfg.proofMaturityDelaySeconds());
+        console.log("    9. Dispute Game Finality Delay (seconds): ", cfg.disputeGameFinalityDelaySeconds());
+        console.log("   10. Respected Game Type: ", cfg.respectedGameType());
+        console.log("   11. Preimage Oracle Min Proposal Size (bytes): ", cfg.preimageOracleMinProposalSize());
+        console.log("   12. Preimage Oracle Challenge Period (seconds): ", cfg.preimageOracleChallengePeriod());
     }
 }
