@@ -101,3 +101,9 @@ devnet-clean:
 	rm -rf packages/contracts-bedrock/deployments
 	rm -rf packages/contracts-bedrock/deploy-config
 .PHONY: devnet-clean
+
+reproducible-prestate:
+	@docker build --output ./bin/ --progress plain -f Dockerfile.repro .
+	@echo "Absolute prestate hash:"
+	@cat ./bin/prestate-proof.json | jq -r .pre
+.PHONY: reproducible-prestate

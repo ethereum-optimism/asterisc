@@ -20,6 +20,10 @@ workflows:
           requires: ["asterisc-prestate"]
       - op-e2e-asterisc-tests:
           requires: ["devnet-allocs-including-asterisc"]
+      - prestate-reproducibility:
+          matrix:
+            parameters:
+              version: ["1.1.0", "1.2.0"]
 
 jobs:
   pnpm-monorepo:
@@ -360,3 +364,38 @@ jobs:
           when: always
       - store_test_results:
           path: /tmp/test-results
+
+  prestate-reproducibility:
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    parameters:
+      version:
+        type: string
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Fetch submodules for asterisc
+          command: git submodule update --init
+      - run:
+          name: Switch to tag
+          command: |
+            cd rvsol/lib/optimism
+            git fetch
+            git checkout "op-program/v<<parameters.version>>"
+            git submodule update --init --recursive
+      - run:
+          name: Build prestate
+          command: make reproducible-prestate
+      - run:
+          name: Verify prestate
+          command: |
+            EXPECTED_PRESTATE_HASH=$(jq -r '.["op-program"]["<<parameters.version>>"]' ./prestates.json)
+            ACTUAL=$(jq -r .pre ./bin/prestate-proof.json)
+            echo "Expected: ${EXPECTED_PRESTATE_HASH}"
+            echo "Actual:   ${ACTUAL}"
+            if [[ "${EXPECTED_PRESTATE_HASH}" != "${ACTUAL}" ]]
+            then
+              echo "Prestate did not match expected"
+              exit 1
+            fi
