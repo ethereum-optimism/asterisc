@@ -1,0 +1,51 @@
+FROM golang:1.21.3-alpine3.18 as builder
+
+RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash
+
+COPY ./go.mod /app/go.mod
+COPY ./go.sum /app/go.sum
+
+WORKDIR /app
+
+RUN echo "go mod cache: $(go env GOMODCACHE)"
+RUN echo "go build cache: $(go env GOCACHE)"
+
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
+
+COPY . /app
+
+# We avoid copying the full .git dir into the build for just some metadata.
+# Instead, specify:
+# --build-arg GIT_COMMIT=$(git rev-parse HEAD)
+# --build-arg GIT_DATE=$(git show -s --format='%ct')
+ARG GIT_COMMIT
+ARG GIT_DATE
+
+ARG ASTERISC_VERSION=v0.0.0
+ARG OP_PROGRAM_VERSION=v0.0.0
+
+ARG TARGETOS TARGETARCH
+
+# Build the asterisc, op-program, and op-program-client-riscv.elf binaries.
+RUN --mount=type=cache,target=/root/.cache/go-build cd rvgo && make build  \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="ASTERISC_VERSION"
+RUN --mount=type=cache,target=/root/.cache/go-build cd rvsol/lib/optimism/op-program && make op-program-host  \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_PROGRAM_VERSION"
+RUN --mount=type=cache,target=/root/.cache/go-build cd rvsol/lib/optimism/op-program && make op-program-client-riscv  \
+    GOOS=linux GOARCH=mips GOMIPS=softfloat GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_PROGRAM_VERSION"
+
+# Run the op-program-client-riscv.elf binary directly through cannon's load-elf subcommand.
+RUN /app/rvgo/bin/asterisc load-elf --path /app/rvsol/lib/optimism/op-program/bin/op-program-client-riscv.elf --out /app/prestate.json --meta ""
+
+# Generate the prestate proof containing the absolute pre-state hash.
+RUN /app/rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input /app/prestate.json --meta "" --proof-fmt '/app/%d.json' --output ""
+RUN mv /app/0.json /app/prestate-proof.json
+
+# Exports files to the specified output location.
+# Writing files to host requires buildkit to be enabled.
+# e.g. `BUILDKIT=1 docker build ...`
+FROM scratch AS export-stage
+COPY --from=builder /app/rvsol/lib/optimism/op-program/bin/op-program .
+COPY --from=builder /app/rvsol/lib/optimism/op-program/bin/op-program-client-riscv.elf .
+COPY --from=builder /app/prestate.json .
+COPY --from=builder /app/prestate-proof.json .
