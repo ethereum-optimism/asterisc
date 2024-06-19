@@ -11,6 +11,7 @@ remappings = [
   '@openzeppelin/contracts/=lib/optimism/packages/contracts-bedrock/lib/openzeppelin-contracts/contracts',
   '@lib-keccak/=lib/optimism/packages/contracts-bedrock/lib/lib-keccak/contracts/lib',
   '@solady/=lib/optimism/packages/contracts-bedrock/lib/solady/src',
+  '@rari-capital/solmate=lib/optimism/packages/contracts-bedrock/lib/solmate',
   'safe-contracts/=lib/optimism/packages/contracts-bedrock/lib/safe-contracts/contracts',
 
   # We need these remappings to use the Optimism monorepo contracts as a library.
