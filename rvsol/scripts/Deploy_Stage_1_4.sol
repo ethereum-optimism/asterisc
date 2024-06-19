@@ -1,28 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import { Deployer } from "scripts/Deployer.sol";
-import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
-
 import { Config } from "scripts/Config.sol";
-
+import { Deployer } from "scripts/Deployer.sol";
+import { RISCV } from "../src/RISCV.sol";
+import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 import { DisputeGameFactory } from "@optimism/src/dispute/DisputeGameFactory.sol";
 import { DelayedWETH } from "@optimism/src/dispute/weth/DelayedWETH.sol";
 import { AnchorStateRegistry } from "@optimism/src/dispute/AnchorStateRegistry.sol";
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
-import { RISCV } from "../src/RISCV.sol";
 import { Types } from "@optimism/scripts/Types.sol";
-import { console2 as console } from "forge-std/console2.sol";
-
 import { ProxyAdmin } from "@optimism/src/universal/ProxyAdmin.sol";
 import { AddressManager } from "@optimism/src/legacy/AddressManager.sol";
 import { Proxy } from "@optimism/src/universal/Proxy.sol";
 import { EIP1967Helper } from "@optimism/test/mocks/EIP1967Helper.sol";
-
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
 import { Chains } from "@optimism/scripts/Chains.sol";
 import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 import "@optimism/src/dispute/lib/Types.sol";
+import { console2 as console } from "forge-std/console2.sol";
 
 contract Deploy is Deployer {
     /// @notice Modifier that wraps a function in broadcasting.
@@ -37,9 +33,10 @@ contract Deploy is Deployer {
         name_ = "Deploy_Stage_1_4";
     }
 
+    /// @notice Deploy all of the L1 contracts necessary for a Stage 1.4 Deployment.
+    ///         Intentionally not using Safe contracts for brevity.
+    //          Do not need to deploy AddressManager because no legacy contracts deployed.
     function run() public {
-        // Intentionally not using Safe contracts for brevity
-        // We do not need AddressManager because no legacies
         deployProxyAdmin();
 
         deployProxies();
@@ -143,6 +140,8 @@ contract Deploy is Deployer {
         require(DisputeGameFactory(disputeGameFactoryProxy).owner() == msg.sender);
     }
 
+    // @notice Initialize the AnchorStateRegistry
+    //         Only initialize anchors for asterisc
     function initializeAnchorStateRegistry() public broadcast {
         console.log("Upgrading and initializing AnchorStateRegistry");
         address anchorStateRegistryProxy = mustGetAddress("AnchorStateRegistryProxy");
@@ -167,6 +166,8 @@ contract Deploy is Deployer {
         console.log("AnchorStateRegistry version: %s", version);
     }
 
+    /// @dev Asserts that for a given contract the value of a storage slot at an offset is 1.
+    ///      From ChainAssertions.sol
     function assertSlotValueIsOne(address _contractAddress, uint256 _slot, uint256 _offset) internal view {
         bytes32 slotVal = vm.load(_contractAddress, bytes32(_slot));
         require(
@@ -175,6 +176,7 @@ contract Deploy is Deployer {
         );
     }
 
+    /// @notice Call the Proxy Admin's upgrade and call method
     function _upgradeAndCall(address _proxy, address _implementation, bytes memory _innerCallData) internal {
         ProxyAdmin proxyAdmin = ProxyAdmin(mustGetAddress("ProxyAdmin"));
         proxyAdmin.upgradeAndCall(payable(_proxy), _implementation, _innerCallData);
