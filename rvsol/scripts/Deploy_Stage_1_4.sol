@@ -231,8 +231,10 @@ contract Deploy is Deployer {
                 vm.toString(Claim.unwrap(riscvAbsolutePrestate_))
             );
         } else {
-            revert("Currently Asterisc only supports local devnet");
-            // TODO: Add Asterisc absolute prestate into OP stack deploy config
+            console.log(
+                "[Asterisc Dispute Game] Using absolute prestate from config: %x", cfg.faultGameAbsolutePrestate()
+            );
+            riscvAbsolutePrestate_ = Claim.wrap(bytes32(cfg.faultGameAbsolutePrestate()));
         }
     }
 
