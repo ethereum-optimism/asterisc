@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import { Vm } from "forge-std/Vm.sol";
+import { Vm } from "@forge-std/Vm.sol";
 
-import { Chains } from "scripts/Chains.sol";
+import { Chains } from "scripts/lib/Chains.sol";
 
 /// @title Config
 library Config {

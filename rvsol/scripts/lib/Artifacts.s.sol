@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import { console2 as console } from "forge-std/console2.sol";
-import { stdJson } from "forge-std/StdJson.sol";
-import { Vm } from "forge-std/Vm.sol";
-import { Config } from "scripts/Config.sol";
+import { console2 as console } from "@forge-std/console2.sol";
+import { stdJson } from "@forge-std/StdJson.sol";
+import { Vm } from "@forge-std/Vm.sol";
+import { Config } from "scripts/lib/Config.sol";
 
 /// @notice Represents a deployment. Is serialized to JSON as a key/value
 ///         pair. Can be accessed from within scripts.

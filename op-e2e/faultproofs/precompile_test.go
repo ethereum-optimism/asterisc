@@ -11,8 +11,8 @@ import (
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
-	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/asterisc"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/utils"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/vm"
 	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 
@@ -148,7 +148,7 @@ func runAsterisc(t *testing.T, ctx context.Context, sys *op_e2e.System, inputs u
 	asteriscOpts(&cfg)
 
 	logger := testlog.Logger(t, log.LevelInfo).New("role", "asterisc")
-	executor := asterisc.NewExecutor(logger, metrics.NoopMetrics, &cfg, cfg.AsteriscAbsolutePreState, inputs)
+	executor := vm.NewExecutor(logger, metrics.NoopMetrics, cfg.Asterisc, cfg.AsteriscAbsolutePreState, inputs)
 
 	t.Log("Running asterisc")
 	err := executor.GenerateProof(ctx, proofsDir, math.MaxUint)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { Test } from "forge-std/Test.sol";
+import { Test } from "@forge-std/Test.sol";
 import { RISCV } from "src/RISCV.sol";
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
 import { CommonTest } from "./CommonTest.sol";

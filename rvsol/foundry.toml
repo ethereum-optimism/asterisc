@@ -18,8 +18,9 @@ remappings = [
   'src/dispute=lib/optimism/packages/contracts-bedrock/src/dispute',
   'src/libraries=lib/optimism/packages/contracts-bedrock/src/libraries',
   
-  'forge-std/=lib/forge-std/src',
+  '@forge-std/=lib/forge-std/src',
   'ds-test/=lib/forge-std/lib/ds-test/src',
+  'forge-std/=lib/optimism/packages/contracts-bedrock/lib/forge-std/src',
 ]
 
 ffi = true

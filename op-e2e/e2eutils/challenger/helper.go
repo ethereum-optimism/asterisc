@@ -40,22 +40,22 @@ func applyAsteriscConfig(
 ) {
 	require := require.New(t)
 	root := op_e2e_challenger.FindMonorepoRoot(t)
-	c.AsteriscBin = root + "rvgo/bin/asterisc"
-	c.AsteriscServer = root + "rvsol/lib/optimism/op-program/bin/op-program"
+	c.Asterisc.VmBin = root + "rvgo/bin/asterisc"
+	c.Asterisc.Server = root + "rvsol/lib/optimism/op-program/bin/op-program"
 	c.AsteriscAbsolutePreState = root + "rvgo/bin/prestate.json"
-	c.AsteriscSnapshotFreq = 10_000_000
+	c.Asterisc.SnapshotFreq = 10_000_000
 
 	genesisBytes, err := json.Marshal(l2Genesis)
 	require.NoError(err, "marshall l2 genesis config")
 	genesisFile := filepath.Join(c.Datadir, "l2-genesis.json")
 	require.NoError(os.WriteFile(genesisFile, genesisBytes, 0o644))
-	c.AsteriscL2GenesisPath = genesisFile
+	c.Asterisc.L2GenesisPath = genesisFile
 
 	rollupBytes, err := json.Marshal(rollupCfg)
 	require.NoError(err, "marshall rollup config")
 	rollupFile := filepath.Join(c.Datadir, "rollup.json")
 	require.NoError(os.WriteFile(rollupFile, rollupBytes, 0o644))
-	c.AsteriscRollupConfigPath = rollupFile
+	c.Asterisc.RollupConfigPath = rollupFile
 }
 
 func NewChallenger(t *testing.T, ctx context.Context, sys op_e2e_challenger.EndpointProvider, name string, options ...op_e2e_challenger.Option) *op_e2e_challenger.Helper {
@@ -96,12 +96,12 @@ func NewChallengerConfig(t *testing.T, sys op_e2e_challenger.EndpointProvider, l
 	require.NotEmpty(t, cfg.TxMgrConfig.PrivateKey, "Missing private key for TxMgrConfig")
 	require.NoError(t, cfg.Check(), "op-challenger config should be valid")
 
-	if cfg.AsteriscBin != "" {
-		_, err := os.Stat(cfg.AsteriscBin)
+	if cfg.Asterisc.VmBin != "" {
+		_, err := os.Stat(cfg.Asterisc.VmBin)
 		require.NoError(t, err, "asterisc should be built. Make sure you've run make")
 	}
-	if cfg.AsteriscServer != "" {
-		_, err := os.Stat(cfg.AsteriscServer)
+	if cfg.Asterisc.Server != "" {
+		_, err := os.Stat(cfg.Asterisc.Server)
 		require.NoError(t, err, "op-program should be built. Make sure you've run make prestate")
 	}
 	if cfg.AsteriscAbsolutePreState != "" {

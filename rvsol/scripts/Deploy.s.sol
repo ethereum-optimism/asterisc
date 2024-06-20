@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import { Script } from "forge-std/Script.sol";
-import { console2 as console } from "forge-std/console2.sol";
+import { Script } from "@forge-std/Script.sol";
+import { console2 as console } from "@forge-std/console2.sol";
 
-import { Chains } from "scripts/Chains.sol";
-import { Config } from "scripts/Config.sol";
-import { Deployer } from "scripts/Deployer.sol";
+import { Chains } from "scripts/lib/Chains.sol";
+import { Config } from "scripts/lib/Config.sol";
+import { Deployer } from "scripts/lib/Deployer.sol";
 import { RISCV } from "../src/RISCV.sol";
 
 import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
