@@ -37,10 +37,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build cd rvsol/lib/optimism/op-pro
 # Run the op-program-client-riscv.elf binary directly through asterisc's load-elf subcommand.
 RUN /app/rvgo/bin/asterisc load-elf --path /app/rvsol/lib/optimism/op-program/bin/op-program-client-riscv.elf --out /app/prestate.json --meta ""
 
-# Generate the prestate proof containing the absolute pre-state hash.
-RUN /app/rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input /app/prestate.json --meta "" --proof-fmt '/app/%d.json' --output ""
-RUN mv /app/0.json /app/prestate-proof.json
-
 # Exports files to the specified output location.
 # Writing files to host requires buildkit to be enabled.
 # e.g. `BUILDKIT=1 docker build ...`
@@ -48,4 +44,3 @@ FROM scratch AS export-stage
 COPY --from=builder /app/rvsol/lib/optimism/op-program/bin/op-program .
 COPY --from=builder /app/rvsol/lib/optimism/op-program/bin/op-program-client-riscv.elf .
 COPY --from=builder /app/prestate.json .
-COPY --from=builder /app/prestate-proof.json .
