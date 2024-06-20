@@ -16,3 +16,6 @@ packages/contracts-bedrock
 
 # jetbrains
 .idea/
+
+venv
+.venv

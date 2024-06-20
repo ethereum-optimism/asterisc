@@ -59,7 +59,7 @@ async def subscribe_logs():
                 try:
                     res = requests.post(L1_HTTP_ENDPOINT, json=l1_tx_request).json()
                     calldata = bytes.fromhex(res["result"]["input"][10:])
-                    params = eth_abi.decode_abi(CREATE_TX_ABI_TYPES, calldata)
+                    params = eth_abi.decode(CREATE_TX_ABI_TYPES, calldata)
                     l2_block_number = int.from_bytes(params[-1], byteorder="big")
                 except Exception as e:
                     raise Exception(f"Failed to fetch L2 block number: {e}")
