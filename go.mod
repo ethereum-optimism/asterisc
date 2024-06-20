@@ -7,9 +7,7 @@ toolchain go1.21.1
 replace github.com/ethereum/go-ethereum v1.13.15 => github.com/ethereum-optimism/op-geth v1.101315.2-rc.1
 
 require (
-	github.com/ethereum-optimism/optimism v1.7.7-0.20240610184752-058f39811490
-	github.com/ethereum-optimism/optimism/op-bindings v0.10.14
-	github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240610174713-583ceb57407d
+	github.com/ethereum-optimism/optimism v1.7.8-0.20240621000037-457f33f4fdda
 	github.com/ethereum/go-ethereum v1.13.15
 	github.com/holiman/uint256 v1.2.4
 	github.com/pkg/profile v1.7.0
@@ -19,7 +17,7 @@ require (
 )
 
 require (
-	github.com/DataDog/zstd v1.5.2 // indirect
+	github.com/DataDog/zstd v1.5.5 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/VictoriaMetrics/fastcache v1.12.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
@@ -57,6 +55,7 @@ require (
 	github.com/dop251/goja v0.0.0-20230806174421-c933cf95e127 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/ethereum-optimism/go-ethereum-hdwallet v0.1.3 // indirect
+	github.com/ethereum-optimism/superchain-registry/superchain v0.0.0-20240614103325-d8902381f5d8 // indirect
 	github.com/ethereum/c-kzg-4844 v0.4.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
@@ -92,7 +91,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/hashicorp/golang-lru/arc/v2 v2.0.7 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/hashicorp/raft v1.6.1 // indirect
+	github.com/hashicorp/raft v1.7.0 // indirect
 	github.com/hashicorp/raft-boltdb v0.0.0-20231211162105-6c830fa4535e // indirect
 	github.com/holiman/billy v0.0.0-20240216141850-2abb0c79d3c4 // indirect
 	github.com/holiman/bloomfilter/v2 v2.0.3 // indirect
@@ -107,7 +106,7 @@ require (
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
-	github.com/klauspost/compress v1.17.8 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/koron/go-ssdp v0.0.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
