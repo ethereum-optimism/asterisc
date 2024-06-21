@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
@@ -1100,7 +1101,7 @@ func FuzzStatePreimageWrite(f *testing.F) {
 		expectedRegisters[10] = count
 		expectedRegisters[11] = 0
 
-		var expectedKey [32]byte
+		var expectedKey common.Hash
 		// slice preimage key by count
 		for i := uint64(0); i < count; i++ {
 			expectedKey[i+32-count] = preimageKey[i]

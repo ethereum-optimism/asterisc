@@ -6,11 +6,9 @@ import (
 	"time"
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
-	"github.com/ethereum-optimism/asterisc/rvgo/bindings"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts/metrics"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/outputs"
-	op_e2e_bindings "github.com/ethereum-optimism/optimism/op-e2e/bindings"
 	op_e2e_challenger "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
 	op_e2e_disputegame "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/disputegame"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/disputegame/preimage"
@@ -45,15 +43,14 @@ func (h *AsteriscFactoryHelper) PreimageHelper(ctx context.Context) *preimage.He
 	opts := &bind.CallOpts{Context: ctx}
 	gameAddr, err := h.Factory.GameImpls(opts, asteriscGameType)
 	h.Require.NoError(err)
-	game, err := op_e2e_bindings.NewFaultDisputeGameCaller(gameAddr, h.Client)
+	caller := batching.NewMultiCaller(h.Client.Client(), batching.DefaultBatchSize)
+	game, err := contracts.NewFaultDisputeGameContract(ctx, metrics.NoopContractMetrics, gameAddr, caller)
 	h.Require.NoError(err)
-	vmAddr, err := game.Vm(opts)
+	vm, err := game.Vm(ctx)
 	h.Require.NoError(err)
-	vm, err := bindings.NewRISCVCaller(vmAddr, h.Client)
+	oracle, err := vm.Oracle(ctx)
 	h.Require.NoError(err)
-	oracleAddr, err := vm.Oracle(opts)
-	h.Require.NoError(err)
-	return preimage.NewHelper(h.T, h.Opts, h.Client, oracleAddr)
+	return preimage.NewHelper(h.T, h.PrivKey, h.Client, oracle)
 }
 
 func (h *AsteriscFactoryHelper) StartOutputAsteriscGameWithCorrectRoot(ctx context.Context, l2Node string, l2BlockNumber uint64, opts ...op_e2e_disputegame.GameOpt) *OutputAsteriscGameHelper {

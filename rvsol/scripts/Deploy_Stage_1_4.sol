@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import { Config } from "scripts/Config.sol";
-import { Deployer } from "scripts/Deployer.sol";
+import { Config } from "scripts/lib/Config.sol";
+import { Deployer } from "scripts/lib/Deployer.sol";
 import { RISCV } from "../src/RISCV.sol";
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 import { DisputeGameFactory } from "@optimism/src/dispute/DisputeGameFactory.sol";

@@ -18,6 +18,7 @@ cp ./rvgo/bin/asterisc $script_dir/
 # Build op-program
 cd $optimism_dir
 git_commit_hash=$(git rev-parse HEAD)
+make cannon-prestate
 make -C op-program op-program-client-riscv
 make -C op-program op-program-host
 cp op-program/bin/op-program-client-riscv.elf $script_dir/

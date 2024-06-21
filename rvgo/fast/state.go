@@ -22,8 +22,8 @@ const (
 type VMState struct {
 	Memory *Memory `json:"memory"`
 
-	PreimageKey    [32]byte `json:"preimageKey"`
-	PreimageOffset uint64   `json:"preimageOffset"`
+	PreimageKey    common.Hash `json:"preimageKey"`
+	PreimageOffset uint64      `json:"preimageOffset"`
 
 	PC uint64 `json:"pc"`
 
@@ -53,8 +53,8 @@ type VMState struct {
 
 	// VMState must hold these values because if not, we must ask FPVM again to
 	// compute these values.
-	Witness   []byte   `json:"witness,omitempty"`
-	StateHash [32]byte `json:"stateHash,omitempty"`
+	Witness   []byte      `json:"witness,omitempty"`
+	StateHash common.Hash `json:"stateHash,omitempty"`
 }
 
 func NewVMState() *VMState {

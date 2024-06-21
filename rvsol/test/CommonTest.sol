@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { Test } from "forge-std/Test.sol";
-import { Vm } from "forge-std/Vm.sol";
+import { Test } from "@forge-std/Test.sol";
+import { Vm } from "@forge-std/Vm.sol";
 
 /// @title FFIInterface
 /// @notice This contract is set into state using `etch` and therefore must not have constructor logic.

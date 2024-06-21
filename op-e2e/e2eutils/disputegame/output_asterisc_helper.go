@@ -70,7 +70,7 @@ func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node
 	prestateProvider := outputs.NewPrestateProvider(rollupClient, prestateBlock)
 	l1Head := g.GetL1Head(ctx)
 	accessor, err := outputs.NewOutputAsteriscTraceAccessor(
-		logger, metrics.NoopMetrics, cfg, l2Client, prestateProvider, cfg.AsteriscAbsolutePreState, rollupClient, dir, l1Head, splitDepth, prestateBlock, poststateBlock)
+		logger, metrics.NoopMetrics, cfg.Asterisc, l2Client, prestateProvider, cfg.AsteriscAbsolutePreState, rollupClient, dir, l1Head, splitDepth, prestateBlock, poststateBlock)
 	g.Require.NoError(err, "Failed to create output asterisc trace accessor")
 	return op_e2e_disputegame.NewOutputHonestHelper(g.T, g.Require, &g.OutputGameHelper, g.Game, accessor)
 }
