@@ -105,5 +105,5 @@ devnet-clean:
 reproducible-prestate:
 	@docker build --output ./bin/ --progress plain -f Dockerfile.repro .
 	@echo "Absolute prestate hash:"
-	@cat ./bin/prestate-proof.json | jq -r .pre
+	@cat ./bin/prestate.json | jq -r .stateHash
 .PHONY: reproducible-prestate
