@@ -6,11 +6,14 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-input_file="../rvsol/lib/optimism/packages/contracts-bedrock/deploy-config/$1.json"
+l2=$(echo "$1" | cut -d"-" -f1)
+l1=$(echo "$1" | cut -d"-" -f2)
+
+input_file="../rvsol/lib/optimism/packages/contracts-bedrock/deploy-config/$l1.json"
 output_file="deploy-config/$1.json"
 
 if [ ! -f "$input_file" ]; then
-  echo "Deploy config: $1.json does not exist at monorepo."
+  echo "Deploy config: $l1.json does not exist at monorepo."
   exit 1
 fi
 
