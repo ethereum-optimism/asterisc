@@ -26,8 +26,6 @@ set_key_value() {
 }
 
 output_file_content=$(cat "$input_file")
-# proxyAdminOwner will be the deployer of asterisc. Remove original one
-output_file_content=$(echo "$output_file_content" | jq "del(.proxyAdminOwner)" )
 
 output_file_content=$(echo "$output_file_content" | set_key_value "faultGameGenesisOutputRoot" $fault_game_genesis_output_root )
 output_file_content=$(echo "$output_file_content" | set_key_value "faultGameAbsolutePrestate" $fault_game_absolute_prestate )
