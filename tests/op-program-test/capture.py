@@ -94,11 +94,12 @@ local_cmd = f'''#!/bin/bash
 ./asterisc run \\
   --info-at '%10000000' \\
   --proof-at never \\
-  --input ./state.json \\
+  --input ./test-data/state.json \\
+  --meta ./test-data/meta.json \\
   -- \\
   ./op-program \\
-  --rollup.config ./chain-artifacts/rollup.json \\
-  --l2.genesis ./chain-artifacts/genesis-l2.json \\
+  --rollup.config ./test-data/chain-artifacts/rollup.json \\
+  --l2.genesis ./test-data/chain-artifacts/genesis-l2.json \\
   --l1.trustrpc \\
   --l1.rpckind debug_geth \\
   --l1.head {logs[1]["l1BlockHash"]} \\
@@ -106,7 +107,7 @@ local_cmd = f'''#!/bin/bash
   --l2.outputroot {logs[0]["outputRoot"]} \\
   --l2.claim {logs[1]["outputRoot"]} \\
   --l2.blocknumber {logs[1]["l2BlockNumber"]} \\
-  --datadir ./preimages \\
+  --datadir ./test-data/preimages \\
   --log.format terminal \\
   --server'''
 

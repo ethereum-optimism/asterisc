@@ -28,8 +28,9 @@ cp op-program/bin/op-program $script_dir/
 make devnet-up
 
 # Copy devnet artifacts
-cp .devnet/rollup.json $script_dir/chain-artifacts/
-cp .devnet/genesis-l2.json $script_dir/chain-artifacts/
+mkdir -p $script_dir/test-data/chain-artifacts
+cp .devnet/rollup.json $script_dir/test-data/chain-artifacts/
+cp .devnet/genesis-l2.json $script_dir/test-data/chain-artifacts/
 
 # Load op-program RISCV binary
 cd $script_dir
@@ -39,13 +40,15 @@ cd $script_dir
 $absolute_python_path capture.py
 
 # Capture preimages
-rm -f ./preimages.tar.gz
-mkdir ./preimages
+rm -f ./test-data.tar.gz
+mkdir -p ./test-data/preimages
+mv state.json ./test-data/
+mv meta.json ./test-data/
 ./capture_cmd.sh
-tar -czvf preimages.tar.gz ./preimages
+tar -czvf test-data.tar.gz ./test-data
 
 # Clean up
-rm -r ./preimages ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./out.json
+rm -r ./test-data ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./out.json
 
 # Write optimism version
 echo $git_commit_hash > VERSION
