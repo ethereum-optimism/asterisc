@@ -1,0 +1,8 @@
+{
+    "op-sepolia": {
+        "op-program": "1.1.0"
+    },
+    "op-mainnet": {
+        "op-program": "1.0.0"
+    }
+}
