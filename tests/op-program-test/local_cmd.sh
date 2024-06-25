@@ -3,18 +3,19 @@
 ./asterisc run \
   --info-at '%10000000' \
   --proof-at never \
-  --input ./state.json \
+  --input ./test-data/state.json \
+  --meta ./test-data/meta.json \
   -- \
   ./op-program \
-  --rollup.config ./chain-artifacts/rollup.json \
-  --l2.genesis ./chain-artifacts/genesis-l2.json \
+  --rollup.config ./test-data/chain-artifacts/rollup.json \
+  --l2.genesis ./test-data/chain-artifacts/genesis-l2.json \
   --l1.trustrpc \
   --l1.rpckind debug_geth \
-  --l1.head 0x52a2f6b4e022b51f00c262926f43383a216a957c3c3b9463b15866663da8bf44 \
-  --l2.head 0x4f0fe0525f90bf9012628a1dd1213b24751862005aa78d6b417897c56f88e440 \
-  --l2.outputroot 0x6035a4f175d1e45fded771eec8306357ccabe37de26abcdb51711395543305a4 \
-  --l2.claim 0x2d2db457102d783867103b7e7e6e1dce9e5bd6465f44ecd5e870c721b93be429 \
+  --l1.head 0xde3fdc5ac10696af68240e1b503b2adc9546fad649142b0cb8bc77eee0dd4bf8 \
+  --l2.head 0xeebb4bfeb240e7eb927277eb3055a64e640764b612d3074582ce815e0cc5f2ef \
+  --l2.outputroot 0x628b7f5289f8d67203b36f14474eb616a5a5b7a97d9636d125eb142ffe463d12 \
+  --l2.claim 0x6546c2b1d660ac6b1e8a2e2bc68d4b992a0508e3ff481d0b68988dd9423a47f4 \
   --l2.blocknumber 13 \
-  --datadir ./preimages \
+  --datadir ./test-data/preimages \
   --log.format terminal \
   --server
