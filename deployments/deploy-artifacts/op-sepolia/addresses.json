@@ -1,0 +1,9 @@
+{
+    "AnchorStateRegistry": "0xB93884E2C21a78d036f213eA4f77Eb7e94147065",
+    "AnchorStateRegistryProxy": "0x1a31b297355a30752D5E2A4AC3e9DC47D02485c2",
+    "DisputeGameFactory": "0x872507195C86Da21A9db7b9eD2589d21f20CB61E",
+    "DisputeGameFactoryProxy": "0x1307f44beDCdCaeA0716abb2016c1792ed310f46",
+    "ProxyAdmin": "0x2F4613Aa09634CD07f39b3ee91FB9b1ca57b94C1",
+    "RISCV": "0xfD70c0391eC0308445c2BE83F85689aF72946332",
+    "FaultDisputeGame": "0x71838a0d3b3226842166619338ab3218c62bb4a1"
+}

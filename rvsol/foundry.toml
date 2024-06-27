@@ -17,7 +17,13 @@ remappings = [
   # We need these remappings to use the Optimism monorepo contracts as a library.
   'src/dispute=lib/optimism/packages/contracts-bedrock/src/dispute',
   'src/libraries=lib/optimism/packages/contracts-bedrock/src/libraries',
-  
+
+  # required for etherscan contract verification
+  'src/L1=lib/optimism/packages/contracts-bedrock/src/L1',
+  'src/legacy=lib/optimism/packages/contracts-bedrock/src/legacy',
+  'src/universal=lib/optimism/packages/contracts-bedrock/src/universal',
+  'src/cannon=lib/optimism/packages/contracts-bedrock/src/cannon',
+
   '@forge-std/=lib/forge-std/src',
   'ds-test/=lib/forge-std/lib/ds-test/src',
   'forge-std/=lib/optimism/packages/contracts-bedrock/lib/forge-std/src',
