@@ -1,0 +1,138 @@
+== Logs ==
+  Writing artifact to ./op-asterisc/rvsol/deployments/sepolia/.deploy
+  Loading chain addresses from ../deployments/addresses/op-sepolia.json
+  Loading AnchorStateRegistryProxy: 0x218CD9489199F321E1177b56385d333c5B598629
+  Loading DelayedWETHProxy: 0xF3D833949133e4E4D3551343494b34079598EA5a
+  Loading PreimageOracle: 0x627F825CBd48c4102d36f287be71f4234426b9e4
+  DeployConfig: reading file ./op-asterisc/rvsol/deploy-config.json
+  Deploying ProxyAdmin
+  Saving ProxyAdmin: 0x2F4613Aa09634CD07f39b3ee91FB9b1ca57b94C1
+  ProxyAdmin deployed at 0x2F4613Aa09634CD07f39b3ee91FB9b1ca57b94C1
+  Deploying proxies
+  Deploying ERC1967 proxy for DisputeGameFactoryProxy
+  Saving DisputeGameFactoryProxy: 0x1307f44beDCdCaeA0716abb2016c1792ed310f46
+     at 0x1307f44beDCdCaeA0716abb2016c1792ed310f46
+  Deploying ERC1967 proxy for AnchorStateRegistryProxy
+  Saving AnchorStateRegistryProxy: 0x1a31b297355a30752D5E2A4AC3e9DC47D02485c2
+     at 0x1a31b297355a30752D5E2A4AC3e9DC47D02485c2
+  Deploying implementations
+  Deploying DisputeGameFactory implementation
+  Saving DisputeGameFactory: 0x872507195C86Da21A9db7b9eD2589d21f20CB61E
+  DisputeGameFactory deployed at 0x872507195C86Da21A9db7b9eD2589d21f20CB61E
+  Deploying RISCV implementation
+  Saving RISCV: 0xfD70c0391eC0308445c2BE83F85689aF72946332
+  RISCV deployed at 0xfD70c0391eC0308445c2BE83F85689aF72946332
+  Deploying AnchorStateRegistry implementation
+  Saving AnchorStateRegistry: 0xB93884E2C21a78d036f213eA4f77Eb7e94147065
+  AnchorStateRegistry deployed at 0xB93884E2C21a78d036f213eA4f77Eb7e94147065
+  Initializing implementations
+  Upgrading and initializing DisputeGameFactory
+  DisputeGameFactory version: 1.0.0
+  Upgrading and initializing AnchorStateRegistry
+  AnchorStateRegistry version: 1.0.0
+  Setting Asterisc FaultDisputeGame implementation
+  [Asterisc Dispute Game] Using absolute prestate from config: 0x338dc64405def7e3b9ce8f5076b422a846d831832617d227f13baf219cb5406
+  DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: ASTERISC | GameType: 2)
+  📖 FaultDisputeGame Config Overview (chainid: 11155111)
+      0. Use Fault Proofs: true
+      1. Absolute Prestate: 0x338dc64405def7e3b9ce8f5076b422a846d831832617d227f13baf219cb5406
+      2. Max Depth: 73
+      3. Output / Execution split Depth: 30
+      4. Clock Extension (seconds): 10800
+      5. Max Clock Duration (seconds): 302400
+      6. L2 Genesis block number: 13575670
+      7. L2 Genesis output root: 0x9c936758ad38eb03f2c1bce0b008dfc208e8c540695c3c0e5fd54022a6a2d1c
+      8. Proof Maturity Delay (seconds):  604800
+      9. Dispute Game Finality Delay (seconds):  302400
+     10. Respected Game Type:  0
+     11. Preimage Oracle Min Proposal Size (bytes):  126000
+     12. Preimage Oracle Challenge Period (seconds):  86400
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 11155111
+
+Estimated gas price: 2.168458604 gwei
+
+Estimated total gas used for script: 17127444
+
+Estimated amount required: 0.037140153306328176 ETH
+
+==========================
+
+##### sepolia
+✅  [Success]Hash: 0xde8dae7833e02434f34dba97947f41178ff2d26d31c2819efad7979fb45e8274
+Block: 6178890
+Paid: 0.007051167537975379 ETH (5098223 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xfa88613640a46b04371bc2f4e5bdc24e2ce26db152a2ac58474c3f4289127825
+Contract Address: 0x1307f44beDCdCaeA0716abb2016c1792ed310f46
+Block: 6178890
+Paid: 0.000738204756583658 ETH (533746 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xbc0e3a9bbbc759345e6e1b9c7511f696903f0954ae8d57069e772f30abdea9f9
+Block: 6178890
+Paid: 0.002626709185426508 ETH (1899196 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xf5f6f4904a6e272ce0c4a2d795b687bd252c7ca31d6e7b4e57f086ec50a85dc5
+Block: 6178890
+Paid: 0.000181453817826281 ETH (131197 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xf441f4a30407992f0746f1e27471730bb36d1ed0f5a1c20b6b3b61fc757774d4
+Block: 6178890
+Paid: 0.001111448027811849 ETH (803613 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xaac1810ddff7aea6771501b4c43c453b9ca4e59afe4300ade2cba62378d24834
+Block: 6178890
+Paid: 0.000153134204010333 ETH (110721 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x0a0acd501e1ccba720d7c016c81a597361a655efb3bab0b1111d6e40e4bd53f7
+Contract Address: 0x2F4613Aa09634CD07f39b3ee91FB9b1ca57b94C1
+Block: 6178890
+Paid: 0.002064684624502682 ETH (1492834 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x9829d0917d6b04150d2f0481e06a18eee753eab6dddf24b6229663c56358224c
+Block: 6178890
+Paid: 0.001798621880363126 ETH (1300462 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xcb98e08a91f8e3fe204482dafe780a6dcd0474c71afdb4df19d4bbc97310b18b
+Block: 6178890
+Paid: 0.000073064493000044 ETH (52828 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xc829f0a23d6284ad2afb0b2cf00edb5be4b30f78758ced945b9122088bad5273
+Block: 6178890
+Paid: 0.000072761602033757 ETH (52609 gas * 1.383063773 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x86b9a74e39188472fe3e90e1aa4d820d0ca7a8baf6e617dc7dcc3be85ba2febf
+Contract Address: 0x1a31b297355a30752D5E2A4AC3e9DC47D02485c2
+Block: 6178890
+Paid: 0.000738204756583658 ETH (533746 gas * 1.383063773 gwei)
+
+✅ Sequence #1 on sepolia | Total Paid: 0.016609454886117275 ETH (12009175 gas * avg 1.383063773 gwei)
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
