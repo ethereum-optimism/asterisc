@@ -15,6 +15,19 @@ Deployer Address(EOA): `0x7DaE43a953C40d371C4bE9963FdD250398a4915A`
 | FaultDisputeGame (impl)    | [`0x71838a0d3b3226842166619338ab3218c62bb4a1`](https://sepolia.etherscan.io/address/0x71838a0d3b3226842166619338ab3218c62bb4a1#code) |
 | ProxyAdmin    | [`0x2F4613Aa09634CD07f39b3ee91FB9b1ca57b94C1`](https://sepolia.etherscan.io/address/0x2F4613Aa09634CD07f39b3ee91FB9b1ca57b94C1#code) |
 
+**Deployment Command**
+
+```sh
+# At project root
+cd rvsol/scripts
+
+TARGET_L1_RPC_URL=[L1_RPC] \
+TARGET_L2_DEPLOYMENT_FILE=../deployments/addresses/op-sepolia.json \
+TARGET_L2_DEPLOY_CONFIG=../deployments/deploy-config/op-sepolia.json \
+DEPLOY_PRIVATE_KEY=[PRIVATE_KEY] \
+./scripts/deploy_stage_1_4.sh
+```
+
 **Version**
 - FPVM release: https://github.com/ethereum-optimism/asterisc/releases/tag/v1.0.0
 - Monorepo commit hash: [`457f33f4fdda9373dcf2839619ebf67182ee5057`](https://github.com/ethereum-optimism/optimism/tree/457f33f4fdda9373dcf2839619ebf67182ee5057)
