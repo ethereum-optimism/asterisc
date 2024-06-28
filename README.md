@@ -2,13 +2,9 @@
 
 Asterisc is an alternative fault-proof VM for OP Stack that proves execution of a RISC-V program with an interactive fraud-proof.
 
-The interface of the Asterisk binary is essentially the same as Cannon for op-challenger compatibility; therefore, the binary commands implementation is based on [Cannon](https://github.com/ethereum-optimism/optimism/tree/develop/cannon).
+The interface of the Asterisc binary is essentially the same as Cannon for op-challenger compatibility; therefore, the binary commands implementation is based on [Cannon](https://github.com/ethereum-optimism/optimism/tree/develop/cannon).
 
 *Deploy/run this at your own risk, this is highly experimental software*
-
-## Work in progress
-
-This project is a work in progress. Maybe 80% complete.
 
 ## Getting started
 
@@ -16,6 +12,54 @@ This project is a work in progress. Maybe 80% complete.
 - Build the smart-contracts with foundry.
 - Compile the `tests/go-tests` (see [`Makefile`](./tests/go-tests/Makefile)) for binaries used by Go tests.
 - Run the `rvgo` tests. All onchain and offchain execution is covered by standard RISC-V unit-tests
+
+## Deployment
+
+### Local Devnet
+
+- Spawn local devnet by running `make devnet-up` at `rvsol/lib/optimism`
+- Run asterisc deployment script `deploy.sh` at `rvsol/scripts`
+
+### Sepolia
+
+Check [deployments/README.md](deployments/README.md) for details.
+
+## Testing
+
+All test suites can be ran refering to CI pipelines.
+
+### rvgo-tests
+
+Checks correctness of fast and slow mode. Also differential fuzz tests with EVM mode. To run locally,
+
+```sh
+make bin bin/simple bin/minimal
+cd rvsol
+forge build
+cd ..
+go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
+make fuzz
+```
+
+### rvsol-tests
+
+Checks correctness of `RISCV.sol`. To run locally,
+
+```sh
+go build
+cd rvsol
+forge test -vvv --ffi
+```
+
+### op-e2e
+
+Checks that `RISCV.sol` + asterisc can be used as a fault proof VM for OP Stack. To run locally,
+
+```sh
+make devnet-allocs
+cd op-e2e
+go test -v ./faultproofs -timeout 3600s
+```
 
 ## How does it work?
 
