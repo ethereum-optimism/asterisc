@@ -26,17 +26,16 @@ Check [deployments/README.md](deployments/README.md) for details.
 
 ## Testing
 
-All test suites can be ran refering to CI pipelines.
+All test suites can be ran referring to CI pipelines.
 
 ### rvgo-tests
 
 Checks correctness of fast and slow mode. Also differential fuzz tests with EVM mode. To run locally,
 
 ```sh
-make bin bin/simple bin/minimal
-cd rvsol
-forge build
-cd ..
+(cd rvsol && forge build)
+(cd tests/go-tests && make bin bin/simple bin/minimal)
+
 go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
 make fuzz
 ```
@@ -46,7 +45,8 @@ make fuzz
 Checks correctness of `RISCV.sol`. To run locally,
 
 ```sh
-go build
+(cd rvgo/scripts/go-ffi && go build)
+
 cd rvsol
 forge test -vvv --ffi
 ```
@@ -57,6 +57,7 @@ Checks that `RISCV.sol` + asterisc can be used as a fault proof VM for OP Stack.
 
 ```sh
 make devnet-allocs
+
 cd op-e2e
 go test -v ./faultproofs -timeout 3600s
 ```
