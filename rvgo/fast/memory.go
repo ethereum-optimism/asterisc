@@ -200,7 +200,8 @@ func (m *Memory) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &pages); err != nil {
 		return err
 	}
-	//m.nodes = make(map[uint64]*[32]byte)
+	m.branchFactors = [5]uint64{BF1, BF2, BF3, BF4, BF5}
+	m.radix = &RadixNodeLevel1{}
 	m.pages = make(map[uint64]*CachedPage)
 	m.lastPageKeys = [2]uint64{^uint64(0), ^uint64(0)}
 	m.lastPage = [2]*CachedPage{nil, nil}
