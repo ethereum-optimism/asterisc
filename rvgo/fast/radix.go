@@ -350,86 +350,97 @@ func (m *Memory) GenerateProof5(node *RadixNodeLevel5, addr, target uint64) [][3
 
 	return proofs
 }
-func (m *Memory) MerkleProof(addr uint64) (out [ProofLen * 32]byte) {
-	var proofs [][32]byte
+func (m *Memory) MerkleProof(addr uint64) [ProofLen * 32]byte {
+	var proofs [60][32]byte
+	proofIndex := 0 // Start from the beginning, as we're building the proof from page to root
 
 	branchPaths := m.addressToBranchPath(addr)
 
+	// Page-level proof
+	pageGindex := PageSize>>5 + (addr&PageAddrMask)>>5
+	pageIndex := addr >> PageAddrSize
+
+	if p, ok := m.pages[pageIndex]; ok {
+		proofs[proofIndex] = p.MerkleizeSubtree(pageGindex)
+		proofIndex++
+		for idx := pageGindex; idx > 1; idx /= 2 {
+			sibling := idx ^ 1
+			proofs[proofIndex] = p.MerkleizeSubtree(uint64(sibling))
+			proofIndex++
+		}
+	} else {
+		fillZeroHashes(proofs[:], proofIndex, proofIndex+7, 12)
+		proofIndex += 8
+	}
+
+	// Level 5
+	currentLevel5 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]].Children[branchPaths[2]].Children[branchPaths[3]]
+	if currentLevel5 != nil {
+		branch5 := branchPaths[4]
+		levelProofs := m.GenerateProof5(currentLevel5, addr>>(pageKeySize-BF1-BF2-BF3-BF4), branch5)
+		copy(proofs[proofIndex:proofIndex+12], levelProofs)
+		proofIndex += 12
+	} else {
+		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 22)
+		return encodeProofs(proofs)
+	}
+
+	// Level 4
+	currentLevel4 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]].Children[branchPaths[2]]
+	if currentLevel4 != nil {
+		branch4 := branchPaths[3]
+		levelProofs := m.GenerateProof4(currentLevel4, addr>>(pageKeySize-BF1-BF2-BF3), branch4)
+		copy(proofs[proofIndex:proofIndex+10], levelProofs)
+		proofIndex += 10
+	} else {
+		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 32)
+		return encodeProofs(proofs)
+	}
+
+	// Level 3
+	currentLevel3 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]]
+	if currentLevel3 != nil {
+		branch3 := branchPaths[2]
+		levelProofs := m.GenerateProof3(currentLevel3, addr>>(pageKeySize-BF1-BF2), branch3)
+		copy(proofs[proofIndex:proofIndex+10], levelProofs)
+		proofIndex += 10
+	} else {
+		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 42)
+		return encodeProofs(proofs)
+	}
+
+	// Level 2
+	currentLevel2 := m.radix.Children[branchPaths[0]]
+	if currentLevel2 != nil {
+		branch2 := branchPaths[1]
+		levelProofs := m.GenerateProof2(currentLevel2, addr>>(pageKeySize-BF1), branch2)
+		copy(proofs[proofIndex:proofIndex+10], levelProofs)
+		proofIndex += 10
+	} else {
+		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 52)
+		return encodeProofs(proofs)
+	}
+
+	// Level 1
 	currentLevel1 := m.radix
 	branch1 := branchPaths[0]
+	levelProofs := m.GenerateProof1(currentLevel1, 0, branch1)
+	copy(proofs[proofIndex:proofIndex+10], levelProofs)
 
-	proofs = m.GenerateProof1(currentLevel1, 0, branch1)
+	return encodeProofs(proofs)
+}
 
-	if currentLevel1.Children[branch1] == nil {
-		// append proofs
+func fillZeroHashes(proofs [][32]byte, start, end int, startingBitDepth int) {
+	for i := start; i <= end; i++ {
+		proofs[i] = zeroHashes[startingBitDepth-(i-start)]
 	}
+}
 
-	currentLevel2 := currentLevel1.Children[branch1]
-	branch2 := branchPaths[1]
-	//addr = branch1
-	proofs = append(m.GenerateProof2(currentLevel2, addr>>(pageKeySize-BF1), branch2), proofs...)
-
-	if currentLevel2.Children[branch2] == nil {
-		return
-	}
-
-	currentLevel3 := currentLevel2.Children[branch2]
-	branch3 := branchPaths[2]
-	//addr >>= BF2
-	//addr |= branch2
-	proofs = append(m.GenerateProof3(currentLevel3, addr>>(pageKeySize-BF1-BF2), branch3), proofs...)
-
-	if currentLevel3.Children[branch3] == nil {
-		return
-	}
-
-	currentLevel4 := currentLevel3.Children[branch3]
-	branch4 := branchPaths[3]
-	//addr >>= BF3
-	//addr |= branch3
-	proofs = append(m.GenerateProof4(currentLevel4, addr>>(pageKeySize-BF1-BF2-BF3), branch4), proofs...)
-
-	if currentLevel4.Children[branch4] == nil {
-		return
-	}
-
-	currentLevel5 := currentLevel4.Children[branch4]
-	branch5 := branchPaths[4]
-	//addr >>= BF4
-	//addr |= branch4
-	proofs = append(m.GenerateProof5(currentLevel5, addr>>(pageKeySize-BF1-BF2-BF3-BF4), branch5), proofs...)
-
-	//addr |= branch5
-	var subproofs [][32]byte
-	pageGindex := PageSize>>5 + (addr&PageAddrMask)>>5 //(1 << 7) | (addr & ((1 << 7) - 1))
-
-	for idx := pageGindex; idx > 1; idx /= 2 {
-		sibling := idx ^ 1
-		if p, ok := m.pages[addr>>PageAddrSize]; ok {
-			subproofs = append(subproofs, p.MerkleizeSubtree(uint64(sibling)))
-		} else {
-			subproofs = append(subproofs, zeroHashes[64-5+1-idx])
-		}
-
-	}
-	proofs = append(subproofs, proofs...)
-
-	if p, ok := m.pages[addr>>PageAddrSize]; ok {
-		proofs = append([][32]byte{p.MerkleizeSubtree(pageGindex)}, proofs...)
-	}
-	//
-	//for idx, proof := range proofs {
-	//	print(idx)
-	//	print(" : ")
-	//	print(string(proof[:]))
-	//	print("\n")
-	//}
-
-	// encode the proof
+func encodeProofs(proofs [60][32]byte) [ProofLen * 32]byte {
+	var out [ProofLen * 32]byte
 	for i := 0; i < ProofLen; i++ {
 		copy(out[i*32:(i+1)*32], proofs[i][:])
 	}
-
 	return out
 }
 
