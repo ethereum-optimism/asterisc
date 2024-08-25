@@ -167,10 +167,10 @@ func TestMemoryMerkleProof(t *testing.T) {
 	t.Run("large addresses", func(t *testing.T) {
 		m := NewMemory()
 		addresses := []uint64{
-			0x3FFFFFFFFFFFC,
-			0x3FFFFFFFFFFFD,
-			0x3FFFFFFFFFFFE,
-			0x3FFFFFFFFFFF,
+			0x10_00_00_00_00_00_00_00,
+			0x10_00_00_00_00_00_00_02,
+			0x10_00_00_00_00_00_00_04,
+			0x10_00_00_00_00_00_00_06,
 		}
 		for i, addr := range addresses {
 			m.SetUnaligned(addr, []byte{byte(i + 1)})
@@ -181,6 +181,70 @@ func TestMemoryMerkleProof(t *testing.T) {
 			verifyProof(t, root, proof, addr)
 		}
 	})
+}
+func TestMerkleProofWithPartialPaths(t *testing.T) {
+	testCases := []struct {
+		name        string
+		setupMemory func(*Memory)
+		proofAddr   uint64
+	}{
+		{
+			name: "Path ends at level 1",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_00_00_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x20_00_00_00_00_00_00_00,
+		},
+		{
+			name: "Path ends at level 2",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_00_00_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x11_00_00_00_00_00_00_00,
+		},
+		{
+			name: "Path ends at level 3",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_00_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x10_11_00_00_00_00_00_00,
+		},
+		{
+			name: "Path ends at level 4",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_10_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x10_10_11_00_00_00_00_00,
+		},
+		{
+			name: "Full path to level 5, page doesn't exist",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_10_10_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x10_10_10_10_10_00_00_00, // Different page in the same level 5 node
+		},
+		{
+			name: "Path ends at level 3, check different page offsets",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_00_00_00_00_00_00, []byte{1})
+				m.SetUnaligned(0x10_10_00_00_00_00_10_00, []byte{2})
+			},
+			proofAddr: 0x10_10_00_00_00_00_20_00, // Different offset in the same page
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewMemory()
+			tc.setupMemory(m)
+
+			proof := m.MerkleProof(tc.proofAddr)
+
+			// Check that the proof is filled correctly
+			verifyProof(t, m.MerkleRoot(), proof, tc.proofAddr)
+			//checkProof(t, proof, tc.expectedDepth)
+		})
+	}
 }
 
 func verifyProof(t *testing.T, expectedRoot [32]byte, proof [ProofLen * 32]byte, addr uint64) {

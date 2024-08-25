@@ -13,20 +13,6 @@ const (
 	BF5 = 12
 )
 
-type RadixNode interface {
-	merkleize(m *Memory, addr, gindex uint64) [32]byte
-	//getChild(index uint64) RadixNode
-	//setChild(index uint64, child RadixNode)
-	invalidateHashes(branch uint64)
-}
-
-//func (n *baseRadixNode) invalidateHashes(branch uint64) {
-//	for index := branch + (1 << 10); index > 0; index /= 2 {
-//		n.HashCache[index] = false
-//		n.Hashes[index] = [32]byte{}
-//	}
-//}
-
 type RadixNodeLevel1 struct {
 	Children  [1 << BF1]*RadixNodeLevel2
 	Hashes    [2 * 1 << BF1][32]byte
@@ -171,6 +157,9 @@ func (m *Memory) MerkleizeNodeLevel2(node *RadixNodeLevel2, addr, gindex uint64)
 	}
 
 	depth := uint64(bits.Len64(gindex))
+	if node == nil {
+		return zeroHashes[64-5+1-depth]
+	}
 
 	if node.HashCache[gindex] {
 		if node.Hashes[gindex] == [32]byte{} {
@@ -350,50 +339,30 @@ func (m *Memory) GenerateProof5(node *RadixNodeLevel5, addr, target uint64) [][3
 
 	return proofs
 }
+
 func (m *Memory) MerkleProof(addr uint64) [ProofLen * 32]byte {
 	var proofs [60][32]byte
-	proofIndex := 0 // Start from the beginning, as we're building the proof from page to root
 
 	branchPaths := m.addressToBranchPath(addr)
 
-	// Page-level proof
-	pageGindex := PageSize>>5 + (addr&PageAddrMask)>>5
-	pageIndex := addr >> PageAddrSize
+	// Level 1
+	proofIndex := BF1
+	currentLevel1 := m.radix
+	branch1 := branchPaths[0]
 
-	if p, ok := m.pages[pageIndex]; ok {
-		proofs[proofIndex] = p.MerkleizeSubtree(pageGindex)
-		proofIndex++
-		for idx := pageGindex; idx > 1; idx /= 2 {
-			sibling := idx ^ 1
-			proofs[proofIndex] = p.MerkleizeSubtree(uint64(sibling))
-			proofIndex++
-		}
-	} else {
-		fillZeroHashes(proofs[:], proofIndex, proofIndex+7, 12)
-		proofIndex += 8
-	}
+	levelProofs := m.GenerateProof1(currentLevel1, 0, branch1)
+	copy(proofs[60-proofIndex:60], levelProofs)
 
-	// Level 5
-	currentLevel5 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]].Children[branchPaths[2]].Children[branchPaths[3]]
-	if currentLevel5 != nil {
-		branch5 := branchPaths[4]
-		levelProofs := m.GenerateProof5(currentLevel5, addr>>(pageKeySize-BF1-BF2-BF3-BF4), branch5)
-		copy(proofs[proofIndex:proofIndex+12], levelProofs)
-		proofIndex += 12
-	} else {
-		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 22)
-		return encodeProofs(proofs)
-	}
+	// Level 2
+	currentLevel2 := m.radix.Children[branchPaths[0]]
+	if currentLevel2 != nil {
+		branch2 := branchPaths[1]
+		proofIndex += BF2
+		levelProofs := m.GenerateProof2(currentLevel2, addr>>(PageAddrSize+BF5+BF4+BF3+BF2), branch2)
+		copy(proofs[60-proofIndex:60-proofIndex+BF2], levelProofs)
 
-	// Level 4
-	currentLevel4 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]].Children[branchPaths[2]]
-	if currentLevel4 != nil {
-		branch4 := branchPaths[3]
-		levelProofs := m.GenerateProof4(currentLevel4, addr>>(pageKeySize-BF1-BF2-BF3), branch4)
-		copy(proofs[proofIndex:proofIndex+10], levelProofs)
-		proofIndex += 10
 	} else {
-		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 32)
+		fillZeroHashes(proofs[:], 0, 60-proofIndex)
 		return encodeProofs(proofs)
 	}
 
@@ -401,38 +370,65 @@ func (m *Memory) MerkleProof(addr uint64) [ProofLen * 32]byte {
 	currentLevel3 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]]
 	if currentLevel3 != nil {
 		branch3 := branchPaths[2]
-		levelProofs := m.GenerateProof3(currentLevel3, addr>>(pageKeySize-BF1-BF2), branch3)
-		copy(proofs[proofIndex:proofIndex+10], levelProofs)
-		proofIndex += 10
+		proofIndex += BF3
+		levelProofs := m.GenerateProof3(currentLevel3, addr>>(PageAddrSize+BF5+BF4+BF3), branch3)
+		copy(proofs[60-proofIndex:60-proofIndex+BF3], levelProofs)
+
 	} else {
-		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 42)
+		fillZeroHashes(proofs[:], 0, 60-proofIndex)
 		return encodeProofs(proofs)
 	}
 
-	// Level 2
-	currentLevel2 := m.radix.Children[branchPaths[0]]
-	if currentLevel2 != nil {
-		branch2 := branchPaths[1]
-		levelProofs := m.GenerateProof2(currentLevel2, addr>>(pageKeySize-BF1), branch2)
-		copy(proofs[proofIndex:proofIndex+10], levelProofs)
-		proofIndex += 10
+	// Level 4
+	currentLevel4 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]].Children[branchPaths[2]]
+	if currentLevel4 != nil {
+		branch4 := branchPaths[3]
+		levelProofs := m.GenerateProof4(currentLevel4, addr>>(PageAddrSize+BF5+BF4), branch4)
+		proofIndex += BF4
+		copy(proofs[60-proofIndex:60-proofIndex+BF4], levelProofs)
 	} else {
-		fillZeroHashes(proofs[:], proofIndex, proofIndex+9, 52)
+		fillZeroHashes(proofs[:], 0, 60-proofIndex)
 		return encodeProofs(proofs)
 	}
 
-	// Level 1
-	currentLevel1 := m.radix
-	branch1 := branchPaths[0]
-	levelProofs := m.GenerateProof1(currentLevel1, 0, branch1)
-	copy(proofs[proofIndex:proofIndex+10], levelProofs)
+	// Level 5
+	currentLevel5 := m.radix.Children[branchPaths[0]].Children[branchPaths[1]].Children[branchPaths[2]].Children[branchPaths[3]]
+	if currentLevel5 != nil {
+		branch5 := branchPaths[4]
+		levelProofs := m.GenerateProof5(currentLevel5, addr>>(PageAddrSize+BF5), branch5)
+		proofIndex += BF5
+		copy(proofs[60-proofIndex:60-proofIndex+BF5], levelProofs)
+	} else {
+		fillZeroHashes(proofs[:], 0, 60-proofIndex)
+		return encodeProofs(proofs)
+	}
+
+	// Page-level proof
+	pageGindex := PageSize>>5 + (addr&PageAddrMask)>>5
+	pageIndex := addr >> PageAddrSize
+
+	proofIndex = 0
+	if p, ok := m.pages[pageIndex]; ok {
+		proofs[proofIndex] = p.MerkleizeSubtree(pageGindex)
+		for idx := pageGindex; idx > 1; idx /= 2 {
+			sibling := idx ^ 1
+			proofIndex++
+			proofs[proofIndex] = p.MerkleizeSubtree(uint64(sibling))
+		}
+	} else {
+		fillZeroHashes(proofs[:], 0, 7)
+	}
 
 	return encodeProofs(proofs)
 }
 
-func fillZeroHashes(proofs [][32]byte, start, end int, startingBitDepth int) {
+func fillZeroHashes(proofs [][32]byte, start, end int) {
+	if start == 0 {
+		proofs[0] = zeroHashes[0]
+		start++
+	}
 	for i := start; i <= end; i++ {
-		proofs[i] = zeroHashes[startingBitDepth-(i-start)]
+		proofs[i] = zeroHashes[i-1]
 	}
 }
 
@@ -472,24 +468,31 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 	if currentLevel1.Children[branch1] == nil {
 		currentLevel1.Children[branch1] = &RadixNodeLevel2{}
 	}
+	currentLevel1.invalidateHashes(branchPaths[0])
 	currentLevel2 := currentLevel1.Children[branch1]
 
 	branch2 := branchPaths[1]
 	if currentLevel2.Children[branch2] == nil {
 		currentLevel2.Children[branch2] = &RadixNodeLevel3{}
 	}
+	currentLevel2.invalidateHashes(branchPaths[1])
 	currentLevel3 := currentLevel2.Children[branch2]
 
 	branch3 := branchPaths[2]
 	if currentLevel3.Children[branch3] == nil {
 		currentLevel3.Children[branch3] = &RadixNodeLevel4{}
 	}
+	currentLevel3.invalidateHashes(branchPaths[2])
 	currentLevel4 := currentLevel3.Children[branch3]
 
 	branch4 := branchPaths[3]
 	if currentLevel4.Children[branch4] == nil {
 		currentLevel4.Children[branch4] = &RadixNodeLevel5{}
 	}
+	currentLevel4.invalidateHashes(branchPaths[3])
+
+	currentLevel5 := currentLevel4.Children[branchPaths[3]]
+	currentLevel5.invalidateHashes(branchPaths[4])
 
 	// For Level 5, we don't need to allocate a child node
 
