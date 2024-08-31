@@ -56,9 +56,9 @@ type Memory struct {
 }
 
 func NewMemory() *Memory {
+	node := &RadixNodeLevel1{}
 	return &Memory{
-		//nodes:         make(map[uint64]*[32]byte),
-		radix:         &RadixNodeLevel1{},
+		radix:         node,
 		pages:         make(map[uint64]*CachedPage),
 		branchFactors: [5]uint64{BF1, BF2, BF3, BF4, BF5},
 		lastPageKeys:  [2]uint64{^uint64(0), ^uint64(0)}, // default to invalid keys, to not match any pages
