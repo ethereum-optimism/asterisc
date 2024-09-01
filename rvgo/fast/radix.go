@@ -14,68 +14,86 @@ const (
 )
 
 type RadixNodeLevel1 struct {
-	Children  [1 << BF1]*RadixNodeLevel2
-	Hashes    [1 << BF1][32]byte
-	HashCache [1 << BF1]bool
+	Children   [1 << BF1]*RadixNodeLevel2
+	Hashes     [1 << BF1][32]byte
+	HashExists [(1 << BF1) / 64]uint64
+	HashValid  [(1 << BF1) / 64]uint64
 }
 
 type RadixNodeLevel2 struct {
-	Children  [1 << BF2]*RadixNodeLevel3
-	Hashes    [1 << BF2][32]byte
-	HashCache [1 << BF2]bool
+	Children   [1 << BF2]*RadixNodeLevel3
+	Hashes     [1 << BF2][32]byte
+	HashExists [(1 << BF2) / 64]uint64
+	HashValid  [(1 << BF2) / 64]uint64
 }
 
 type RadixNodeLevel3 struct {
-	Children  [1 << BF3]*RadixNodeLevel4
-	Hashes    [1 << BF3][32]byte
-	HashCache [1 << BF3]bool
+	Children   [1 << BF3]*RadixNodeLevel4
+	Hashes     [1 << BF3][32]byte
+	HashExists [(1 << BF3) / 64]uint64
+	HashValid  [(1 << BF3) / 64]uint64
 }
 
 type RadixNodeLevel4 struct {
-	Children  [1 << BF4]*RadixNodeLevel5
-	Hashes    [1 << BF4][32]byte
-	HashCache [1 << BF4]bool
+	Children   [1 << BF4]*RadixNodeLevel5
+	Hashes     [1 << BF4][32]byte
+	HashExists [(1 << BF4) / 64]uint64
+	HashValid  [(1 << BF4) / 64]uint64
 }
 
 type RadixNodeLevel5 struct {
-	Hashes    [1 << BF5][32]byte
-	HashCache [1 << BF5]bool
+	Hashes     [1 << BF5][32]byte
+	HashExists [(1 << BF5) / 64]uint64
+	HashValid  [(1 << BF5) / 64]uint64
 }
 
 func (n *RadixNodeLevel1) invalidateHashes(branch uint64) {
 	branch = (branch + 1<<BF1) / 2
-	for index := branch; index > 0; index /= 2 {
-		n.HashCache[index] = false
-		n.Hashes[index] = [32]byte{}
+	for index := branch; index > 0; index >>= 1 {
+		hashIndex := index >> 6
+		hashBit := index & 63
+		n.HashExists[hashIndex] |= 1 << hashBit
+		n.HashValid[hashIndex] &= ^(1 << hashBit)
 	}
 }
 func (n *RadixNodeLevel2) invalidateHashes(branch uint64) {
 	branch = (branch + 1<<BF2) / 2
-	for index := branch; index > 0; index /= 2 {
-		n.HashCache[index] = false
-		n.Hashes[index] = [32]byte{}
+	for index := branch; index > 0; index >>= 1 {
+		hashIndex := index >> 6
+		hashBit := index & 63
+		n.HashExists[hashIndex] |= 1 << hashBit
+		n.HashValid[hashIndex] &= ^(1 << hashBit)
 	}
 }
 func (n *RadixNodeLevel3) invalidateHashes(branch uint64) {
 	branch = (branch + 1<<BF3) / 2
-	for index := branch; index > 0; index /= 2 {
-		n.HashCache[index] = false
-		n.Hashes[index] = [32]byte{}
+	for index := branch; index > 0; index >>= 1 {
+		hashIndex := index >> 6
+		hashBit := index & 63
+		n.HashExists[hashIndex] |= 1 << hashBit
+		n.HashValid[hashIndex] &= ^(1 << hashBit)
+
 	}
 }
 func (n *RadixNodeLevel4) invalidateHashes(branch uint64) {
 	branch = (branch + 1<<BF4) / 2
-	for index := branch; index > 0; index /= 2 {
-		n.HashCache[index] = false
-		n.Hashes[index] = [32]byte{}
+	for index := branch; index > 0; index >>= 1 {
+		hashIndex := index >> 6
+		hashBit := index & 63
+		n.HashExists[hashIndex] |= 1 << hashBit
+		n.HashValid[hashIndex] &= ^(1 << hashBit)
+
 	}
 }
 
 func (n *RadixNodeLevel5) invalidateHashes(branch uint64) {
 	branch = (branch + 1<<BF5) / 2
-	for index := branch; index > 0; index /= 2 {
-		n.HashCache[index] = false
-		n.Hashes[index] = [32]byte{}
+	for index := branch; index > 0; index >>= 1 {
+		hashIndex := index >> 6
+		hashBit := index & 63
+		n.HashExists[hashIndex] |= 1 << hashBit
+		n.HashValid[hashIndex] &= ^(1 << hashBit)
+
 	}
 }
 
@@ -123,62 +141,63 @@ func (m *Memory) Invalidate(addr uint64) {
 }
 
 func (m *Memory) MerkleizeNodeLevel1(node *RadixNodeLevel1, addr, gindex uint64) [32]byte {
-	if gindex > 2*1<<BF1-1 {
-		return [32]byte{}
-	}
 
 	depth := uint64(bits.Len64(gindex))
 
 	if depth <= BF1 {
-		if node.HashCache[gindex] {
-			if node.Hashes[gindex] == [32]byte{} {
-				return zeroHashes[64-5+1-depth]
-			} else {
+		hashIndex := gindex >> 6
+		hashBit := gindex & 63
+
+		if (node.HashExists[hashIndex] & (1 << hashBit)) != 0 {
+			if (node.HashValid[hashIndex] & (1 << hashBit)) != 0 {
 				return node.Hashes[gindex]
+			} else {
+				left := m.MerkleizeNodeLevel1(node, addr, gindex<<1)
+				right := m.MerkleizeNodeLevel1(node, addr, (gindex<<1)|1)
+
+				r := HashPair(left, right)
+				node.Hashes[gindex] = r
+				//node.HashExists[hashIndex] |= 1 << hashBit
+				node.HashValid[hashIndex] |= 1 << hashBit
+				return r
 			}
-		}
-
-		left := m.MerkleizeNodeLevel1(node, addr, gindex<<1)
-		right := m.MerkleizeNodeLevel1(node, addr, (gindex<<1)|1)
-
-		r := HashPair(left, right)
-		node.Hashes[gindex] = r
-		node.HashCache[gindex] = true
-		return r
-	} else {
-		childIndex := gindex - 1<<BF1
-		if node.Children[childIndex] == nil {
+		} else {
 			return zeroHashes[64-5+1-depth]
 		}
-		addr <<= BF1
-		addr |= childIndex
-		return m.MerkleizeNodeLevel2(node.Children[childIndex], addr, 1)
+
 	}
+	childIndex := gindex - 1<<BF1
+	if node.Children[childIndex] == nil {
+		return zeroHashes[64-5+1-depth]
+	}
+	addr <<= BF1
+	addr |= childIndex
+	return m.MerkleizeNodeLevel2(node.Children[childIndex], addr, 1)
 }
 
 func (m *Memory) MerkleizeNodeLevel2(node *RadixNodeLevel2, addr, gindex uint64) [32]byte {
-	if gindex > 2*1<<BF2 {
-		return [32]byte{}
-	}
 
 	depth := uint64(bits.Len64(gindex))
 
 	if depth <= BF2 {
-		if node.HashCache[gindex] {
-			if node.Hashes[gindex] == [32]byte{} {
-				return zeroHashes[64-5+1-(depth+BF1)]
-			} else {
+		hashIndex := gindex >> 6
+		hashBit := gindex & 63
+
+		if (node.HashExists[hashIndex] & (1 << hashBit)) != 0 {
+			if (node.HashValid[hashIndex] & (1 << hashBit)) != 0 {
 				return node.Hashes[gindex]
+			} else {
+				left := m.MerkleizeNodeLevel2(node, addr, gindex<<1)
+				right := m.MerkleizeNodeLevel2(node, addr, (gindex<<1)|1)
+
+				r := HashPair(left, right)
+				node.Hashes[gindex] = r
+				node.HashValid[hashIndex] |= 1 << hashBit
+				return r
 			}
+		} else {
+			return zeroHashes[64-5+1-(depth+BF1)]
 		}
-
-		left := m.MerkleizeNodeLevel2(node, addr, gindex<<1)
-		right := m.MerkleizeNodeLevel2(node, addr, (gindex<<1)|1)
-
-		r := HashPair(left, right)
-		node.Hashes[gindex] = r
-		node.HashCache[gindex] = true
-		return r
 	}
 
 	childIndex := gindex - 1<<BF2
@@ -191,27 +210,27 @@ func (m *Memory) MerkleizeNodeLevel2(node *RadixNodeLevel2, addr, gindex uint64)
 	return m.MerkleizeNodeLevel3(node.Children[childIndex], addr, 1)
 }
 func (m *Memory) MerkleizeNodeLevel3(node *RadixNodeLevel3, addr, gindex uint64) [32]byte {
-	if gindex > 2*1<<BF3 {
-		return [32]byte{}
-	}
 
 	depth := uint64(bits.Len64(gindex))
 
 	if depth <= BF3 {
-		if node.HashCache[gindex] {
-			if node.Hashes[gindex] == [32]byte{} {
-				return zeroHashes[64-5+1-(depth+BF1+BF2)]
-			} else {
-				return node.Hashes[gindex]
-			}
-		}
+		hashIndex := gindex >> 6
+		hashBit := gindex & 63
 
-		left := m.MerkleizeNodeLevel3(node, addr, gindex<<1)
-		right := m.MerkleizeNodeLevel3(node, addr, (gindex<<1)|1)
-		r := HashPair(left, right)
-		node.Hashes[gindex] = r
-		node.HashCache[gindex] = true
-		return r
+		if (node.HashExists[hashIndex] & (1 << hashBit)) != 0 {
+			if (node.HashValid[hashIndex] & (1 << hashBit)) != 0 {
+				return node.Hashes[gindex]
+			} else {
+				left := m.MerkleizeNodeLevel3(node, addr, gindex<<1)
+				right := m.MerkleizeNodeLevel3(node, addr, (gindex<<1)|1)
+				r := HashPair(left, right)
+				node.Hashes[gindex] = r
+				node.HashValid[hashIndex] |= 1 << hashBit
+				return r
+			}
+		} else {
+			return zeroHashes[64-5+1-(depth+BF1+BF2)]
+		}
 	}
 
 	childIndex := gindex - 1<<BF3
@@ -225,27 +244,27 @@ func (m *Memory) MerkleizeNodeLevel3(node *RadixNodeLevel3, addr, gindex uint64)
 }
 
 func (m *Memory) MerkleizeNodeLevel4(node *RadixNodeLevel4, addr, gindex uint64) [32]byte {
-	if gindex > 2*1<<BF4 {
-		return [32]byte{}
-	}
 
 	depth := uint64(bits.Len64(gindex))
 
 	if depth <= BF4 {
-		if node.HashCache[gindex] {
-			if node.Hashes[gindex] == [32]byte{} {
-				return zeroHashes[64-5+1-(depth+BF1+BF2+BF3)]
-			} else {
+		hashIndex := gindex >> 6
+		hashBit := gindex & 63
+		if (node.HashExists[hashIndex] & (1 << hashBit)) != 0 {
+			if (node.HashValid[hashIndex] & (1 << hashBit)) != 0 {
 				return node.Hashes[gindex]
-			}
-		}
-		left := m.MerkleizeNodeLevel4(node, addr, gindex<<1)
-		right := m.MerkleizeNodeLevel4(node, addr, (gindex<<1)|1)
+			} else {
+				left := m.MerkleizeNodeLevel4(node, addr, gindex<<1)
+				right := m.MerkleizeNodeLevel4(node, addr, (gindex<<1)|1)
 
-		r := HashPair(left, right)
-		node.Hashes[gindex] = r
-		node.HashCache[gindex] = true
-		return r
+				r := HashPair(left, right)
+				node.Hashes[gindex] = r
+				node.HashValid[hashIndex] |= 1 << hashBit
+				return r
+			}
+		} else {
+			return zeroHashes[64-5+1-(depth+BF1+BF2+BF3)]
+		}
 	}
 
 	childIndex := gindex - 1<<BF4
@@ -270,27 +289,29 @@ func (m *Memory) MerkleizeNodeLevel5(node *RadixNodeLevel5, addr, gindex uint64)
 		}
 	}
 
-	if node.HashCache[gindex] {
-		if node.Hashes[gindex] == [32]byte{} {
-			return zeroHashes[64-5+1-(depth+40)]
-		} else {
+	hashIndex := gindex >> 6
+	hashBit := gindex & 63
+
+	if (node.HashExists[hashIndex] & (1 << hashBit)) != 0 {
+		if (node.HashValid[hashIndex] & (1 << hashBit)) != 0 {
 			return node.Hashes[gindex]
+		} else {
+			left := m.MerkleizeNodeLevel5(node, addr, gindex<<1)
+			right := m.MerkleizeNodeLevel5(node, addr, (gindex<<1)|1)
+			r := HashPair(left, right)
+			node.Hashes[gindex] = r
+			node.HashValid[hashIndex] |= 1 << hashBit
+			return r
 		}
+	} else {
+		return zeroHashes[64-5+1-(depth+40)]
 	}
-
-	left := m.MerkleizeNodeLevel5(node, addr, gindex<<1)
-	right := m.MerkleizeNodeLevel5(node, addr, (gindex<<1)|1)
-	r := HashPair(left, right)
-	node.Hashes[gindex] = r
-	node.HashCache[gindex] = true
-	return r
-
 }
 
 func (m *Memory) GenerateProof1(node *RadixNodeLevel1, addr, target uint64) [][32]byte {
 	var proofs [][32]byte
 
-	for idx := target + 1<<BF1; idx > 1; idx /= 2 {
+	for idx := target + 1<<BF1; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs = append(proofs, m.MerkleizeNodeLevel1(node, addr, sibling))
 	}
@@ -301,7 +322,7 @@ func (m *Memory) GenerateProof1(node *RadixNodeLevel1, addr, target uint64) [][3
 func (m *Memory) GenerateProof2(node *RadixNodeLevel2, addr, target uint64) [][32]byte {
 	var proofs [][32]byte
 
-	for idx := target + 1<<BF2; idx > 1; idx /= 2 {
+	for idx := target + 1<<BF2; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs = append(proofs, m.MerkleizeNodeLevel2(node, addr, sibling))
 	}
@@ -312,7 +333,7 @@ func (m *Memory) GenerateProof2(node *RadixNodeLevel2, addr, target uint64) [][3
 func (m *Memory) GenerateProof3(node *RadixNodeLevel3, addr, target uint64) [][32]byte {
 	var proofs [][32]byte
 
-	for idx := target + 1<<BF3; idx > 1; idx /= 2 {
+	for idx := target + 1<<BF3; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs = append(proofs, m.MerkleizeNodeLevel3(node, addr, sibling))
 	}
@@ -322,7 +343,7 @@ func (m *Memory) GenerateProof3(node *RadixNodeLevel3, addr, target uint64) [][3
 func (m *Memory) GenerateProof4(node *RadixNodeLevel4, addr, target uint64) [][32]byte {
 	var proofs [][32]byte
 
-	for idx := target + 1<<BF4; idx > 1; idx /= 2 {
+	for idx := target + 1<<BF4; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs = append(proofs, m.MerkleizeNodeLevel4(node, addr, sibling))
 	}
@@ -333,7 +354,7 @@ func (m *Memory) GenerateProof4(node *RadixNodeLevel4, addr, target uint64) [][3
 func (m *Memory) GenerateProof5(node *RadixNodeLevel5, addr, target uint64) [][32]byte {
 	var proofs [][32]byte
 
-	for idx := target + 1<<BF5; idx > 1; idx /= 2 {
+	for idx := target + 1<<BF5; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs = append(proofs, m.MerkleizeNodeLevel5(node, addr, sibling))
 	}
@@ -411,7 +432,7 @@ func (m *Memory) MerkleProof(addr uint64) [ProofLen * 32]byte {
 	proofIndex = 0
 	if p, ok := m.pages[pageIndex]; ok {
 		proofs[proofIndex] = p.MerkleizeSubtree(pageGindex)
-		for idx := pageGindex; idx > 1; idx /= 2 {
+		for idx := pageGindex; idx > 1; idx >>= 1 {
 			sibling := idx ^ 1
 			proofIndex++
 			proofs[proofIndex] = p.MerkleizeSubtree(uint64(sibling))
