@@ -1,0 +1,20 @@
+FROM golang:1.21.1-alpine3.18 AS builder
+WORKDIR /build
+ARG ASTERISC_TAG
+
+# Copy the context into the container
+ADD . .
+
+# Install deps
+RUN apk add --no-cache git make bash
+
+# Clone and build Asterisc @ `ASTERISC_TAG`
+RUN make && \
+  cp rvgo/bin/asterisc /asterisc-bin
+
+FROM alpine:3.18 AS export
+
+RUN apk add --no-cache bash
+SHELL ["/bin/bash", "-c"]
+
+COPY --from=builder /asterisc-bin /asterisc-bin
