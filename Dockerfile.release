@@ -1,6 +1,5 @@
 FROM golang:1.21.1-alpine3.18 AS builder
 WORKDIR /build
-ARG ASTERISC_TAG
 
 # Copy the context into the container
 ADD . .
@@ -8,12 +7,10 @@ ADD . .
 # Install deps
 RUN apk add --no-cache git make bash
 
-# Clone and build Asterisc @ `ASTERISC_TAG`
-RUN make
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build make
 
 FROM alpine:3.18 AS export
 
 RUN apk add --no-cache bash
-SHELL ["/bin/bash", "-c"]
-
 COPY --from=builder /build/rvgo/bin/asterisc /usr/local/bin/asterisc
+ENTRYPOINT ["asterisc"]
