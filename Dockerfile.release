@@ -9,12 +9,11 @@ ADD . .
 RUN apk add --no-cache git make bash
 
 # Clone and build Asterisc @ `ASTERISC_TAG`
-RUN make && \
-  cp rvgo/bin/asterisc /asterisc-bin
+RUN make
 
 FROM alpine:3.18 AS export
 
 RUN apk add --no-cache bash
 SHELL ["/bin/bash", "-c"]
 
-COPY --from=builder /asterisc-bin /asterisc-bin
+COPY --from=builder /build/rvgo/bin/asterisc /usr/local/bin/asterisc
