@@ -6,135 +6,11 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	mathrand "math/rand"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-const (
-	smallDataset  = 1_000
-	mediumDataset = 100_000
-	largeDataset  = 1_000_000
-)
-
-func BenchmarkMemoryOperations(b *testing.B) {
-	benchmarks := []struct {
-		name string
-		fn   func(b *testing.B, m *Memory)
-	}{
-		{"RandomReadWrite_Small", benchRandomReadWrite(smallDataset)},
-		{"RandomReadWrite_Medium", benchRandomReadWrite(mediumDataset)},
-		{"RandomReadWrite_Large", benchRandomReadWrite(largeDataset)},
-		{"SequentialReadWrite_Small", benchSequentialReadWrite(smallDataset)},
-		{"SequentialReadWrite_Large", benchSequentialReadWrite(largeDataset)},
-		{"SparseMemoryUsage", benchSparseMemoryUsage},
-		{"DenseMemoryUsage", benchDenseMemoryUsage},
-		{"SmallFrequentUpdates", benchSmallFrequentUpdates},
-		{"MerkleProofGeneration_Small", benchMerkleProofGeneration(smallDataset)},
-		{"MerkleProofGeneration_Large", benchMerkleProofGeneration(largeDataset)},
-		{"MerkleRootCalculation_Small", benchMerkleRootCalculation(smallDataset)},
-		{"MerkleRootCalculation_Large", benchMerkleRootCalculation(largeDataset)},
-	}
-
-	for _, bm := range benchmarks {
-		b.Run(bm.name, func(b *testing.B) {
-			m := NewMemory()
-			b.ResetTimer()
-			bm.fn(b, m)
-		})
-	}
-}
-
-func benchRandomReadWrite(size int) func(b *testing.B, m *Memory) {
-	return func(b *testing.B, m *Memory) {
-		addresses := make([]uint64, size)
-		for i := range addresses {
-			addresses[i] = mathrand.Uint64()
-		}
-		data := make([]byte, 8)
-
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			addr := addresses[i%len(addresses)]
-			if i%2 == 0 {
-				m.SetUnaligned(addr, data)
-			} else {
-				m.GetUnaligned(addr, data)
-			}
-		}
-	}
-}
-
-func benchSequentialReadWrite(size int) func(b *testing.B, m *Memory) {
-	return func(b *testing.B, m *Memory) {
-		data := make([]byte, 8)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			addr := uint64(i % size)
-			if i%2 == 0 {
-				m.SetUnaligned(addr, data)
-			} else {
-				m.GetUnaligned(addr, data)
-			}
-		}
-	}
-}
-
-func benchSparseMemoryUsage(b *testing.B, m *Memory) {
-	data := make([]byte, 8)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		addr := uint64(i) * 1000000 // Large gaps between addresses
-		m.SetUnaligned(addr, data)
-	}
-}
-
-func benchDenseMemoryUsage(b *testing.B, m *Memory) {
-	data := make([]byte, 8)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		addr := uint64(i) * 8 // Contiguous 8-byte allocations
-		m.SetUnaligned(addr, data)
-	}
-}
-
-func benchSmallFrequentUpdates(b *testing.B, m *Memory) {
-	data := make([]byte, 1)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		addr := mathrand.Uint64() % 1000000 // Confined to a smaller range
-		m.SetUnaligned(addr, data)
-	}
-}
-
-func benchMerkleProofGeneration(size int) func(b *testing.B, m *Memory) {
-	return func(b *testing.B, m *Memory) {
-		// Setup: allocate some memory
-		for i := 0; i < size; i++ {
-			m.SetUnaligned(uint64(i)*8, []byte{byte(i)})
-		}
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			addr := uint64(mathrand.Intn(size) * 8)
-			_ = m.MerkleProof(addr)
-		}
-	}
-}
-
-func benchMerkleRootCalculation(size int) func(b *testing.B, m *Memory) {
-	return func(b *testing.B, m *Memory) {
-		// Setup: allocate some memory
-		for i := 0; i < size; i++ {
-			m.SetUnaligned(uint64(i)*8, []byte{byte(i)})
-		}
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = m.MerkleRoot()
-		}
-	}
-}
 
 func TestMemoryMerkleProof(t *testing.T) {
 	t.Run("nearly empty tree", func(t *testing.T) {
@@ -419,30 +295,35 @@ func TestMemoryMerkleRoot(t *testing.T) {
 		require.Equal(t, zeroHashes[64-5], root, "zero still")
 	})
 
-	//t.Run("random few pages", func(t *testing.T) {
-	//	m := NewMemory()
-	//	m.SetUnaligned(PageSize*3, []byte{1})
-	//	m.SetUnaligned(PageSize*5, []byte{42})
-	//	m.SetUnaligned(PageSize*6, []byte{123})
-	//	p3 := m.MerkleizeNode(m.radix, (1<<PageKeySize)|3, 0)
-	//	p5 := m.MerkleizeNode(m.radix, (1<<PageKeySize)|5, 0)
-	//	p6 := m.MerkleizeNode(m.radix, (1<<PageKeySize)|6, 0)
-	//	z := zeroHashes[PageAddrSize-5]
-	//	r1 := HashPair(
-	//		HashPair(
-	//			HashPair(z, z),  // 0,1
-	//			HashPair(z, p3), // 2,3
-	//		),
-	//		HashPair(
-	//			HashPair(z, p5), // 4,5
-	//			HashPair(p6, z), // 6,7
-	//		),
-	//	)
-	//	r2 := m.MerkleizeNode(m.radix, 1<<(PageKeySize-3), 0)
-	//	r3 := m.MerkleizeNode3(m.radix, 1, 0)
-	//	require.Equal(t, r1, r2, "expecting manual page combination to match subtree merkle func")
-	//	require.Equal(t, r3, r2, "expecting manual page combination to match subtree merkle func")
-	//})
+	t.Run("random few pages", func(t *testing.T) {
+		m := NewMemory()
+		m.SetUnaligned(PageSize*3, []byte{1})
+		m.SetUnaligned(PageSize*5, []byte{42})
+		m.SetUnaligned(PageSize*6, []byte{123})
+
+		p0 := m.MerkleizeNodeLevel1(m.radix, 0, 8)
+		p1 := m.MerkleizeNodeLevel1(m.radix, 0, 9)
+		p2 := m.MerkleizeNodeLevel1(m.radix, 0, 10)
+		p3 := m.MerkleizeNodeLevel1(m.radix, 0, 11)
+		p4 := m.MerkleizeNodeLevel1(m.radix, 0, 12)
+		p5 := m.MerkleizeNodeLevel1(m.radix, 0, 13)
+		p6 := m.MerkleizeNodeLevel1(m.radix, 0, 14)
+		p7 := m.MerkleizeNodeLevel1(m.radix, 0, 15)
+
+		r1 := HashPair(
+			HashPair(
+				HashPair(p0, p1), // 0,1
+				HashPair(p2, p3), // 2,3
+			),
+			HashPair(
+				HashPair(p4, p5), // 4,5
+				HashPair(p6, p7), // 6,7
+			),
+		)
+		r2 := m.MerkleizeNodeLevel1(m.radix, 0, 1)
+		require.Equal(t, r1, r2, "expecting manual page combination to match subtree merkle func")
+	})
+
 	t.Run("invalidate page", func(t *testing.T) {
 		m := NewMemory()
 		m.SetUnaligned(0xF000, []byte{0})

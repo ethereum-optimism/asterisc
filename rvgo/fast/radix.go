@@ -141,7 +141,6 @@ func (m *Memory) Invalidate(addr uint64) {
 }
 
 func (m *Memory) MerkleizeNodeLevel1(node *RadixNodeLevel1, addr, gindex uint64) [32]byte {
-
 	depth := uint64(bits.Len64(gindex))
 
 	if depth <= BF1 {
@@ -157,15 +156,18 @@ func (m *Memory) MerkleizeNodeLevel1(node *RadixNodeLevel1, addr, gindex uint64)
 
 				r := HashPair(left, right)
 				node.Hashes[gindex] = r
-				//node.HashExists[hashIndex] |= 1 << hashBit
 				node.HashValid[hashIndex] |= 1 << hashBit
 				return r
 			}
 		} else {
 			return zeroHashes[64-5+1-depth]
 		}
-
 	}
+
+	if depth > BF1<<1 {
+		panic("gindex too deep")
+	}
+
 	childIndex := gindex - 1<<BF1
 	if node.Children[childIndex] == nil {
 		return zeroHashes[64-5+1-depth]
@@ -198,6 +200,10 @@ func (m *Memory) MerkleizeNodeLevel2(node *RadixNodeLevel2, addr, gindex uint64)
 		} else {
 			return zeroHashes[64-5+1-(depth+BF1)]
 		}
+	}
+
+	if depth > BF2<<1 {
+		panic("gindex too deep")
 	}
 
 	childIndex := gindex - 1<<BF2
@@ -233,6 +239,10 @@ func (m *Memory) MerkleizeNodeLevel3(node *RadixNodeLevel3, addr, gindex uint64)
 		}
 	}
 
+	if depth > BF3<<1 {
+		panic("gindex too deep")
+	}
+
 	childIndex := gindex - 1<<BF3
 	if node.Children[childIndex] == nil {
 		return zeroHashes[64-5+1-(depth+BF1+BF2)]
@@ -265,6 +275,10 @@ func (m *Memory) MerkleizeNodeLevel4(node *RadixNodeLevel4, addr, gindex uint64)
 		} else {
 			return zeroHashes[64-5+1-(depth+BF1+BF2+BF3)]
 		}
+	}
+
+	if depth > BF4<<1 {
+		panic("gindex too deep")
 	}
 
 	childIndex := gindex - 1<<BF4
@@ -382,7 +396,6 @@ func (m *Memory) MerkleProof(addr uint64) [ProofLen * 32]byte {
 		proofIndex += BF2
 		levelProofs := m.GenerateProof2(currentLevel2, addr>>(PageAddrSize+BF5+BF4+BF3+BF2), branch2)
 		copy(proofs[60-proofIndex:60-proofIndex+BF2], levelProofs)
-
 	} else {
 		fillZeroHashes(proofs[:], 0, 60-proofIndex)
 		return encodeProofs(proofs)
@@ -395,7 +408,6 @@ func (m *Memory) MerkleProof(addr uint64) [ProofLen * 32]byte {
 		proofIndex += BF3
 		levelProofs := m.GenerateProof3(currentLevel3, addr>>(PageAddrSize+BF5+BF4+BF3), branch3)
 		copy(proofs[60-proofIndex:60-proofIndex+BF3], levelProofs)
-
 	} else {
 		fillZeroHashes(proofs[:], 0, 60-proofIndex)
 		return encodeProofs(proofs)
