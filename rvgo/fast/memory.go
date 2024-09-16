@@ -43,8 +43,8 @@ type Memory struct {
 
 	pages map[uint64]*CachedPage
 
-	radix         *RadixNodeLevel1
-	branchFactors [5]uint64
+	radix         *L1
+	branchFactors [10]uint64
 
 	// Note: since we don't de-alloc pages, we don't do ref-counting.
 	// Once a page exists, it doesn't leave memory
@@ -56,11 +56,11 @@ type Memory struct {
 }
 
 func NewMemory() *Memory {
-	node := &RadixNodeLevel1{}
+	node := &L1{}
 	return &Memory{
 		radix:         node,
 		pages:         make(map[uint64]*CachedPage),
-		branchFactors: [5]uint64{BF1, BF2, BF3, BF4, BF5},
+		branchFactors: [10]uint64{4, 4, 4, 4, 4, 4, 4, 8, 8, 8},
 		lastPageKeys:  [2]uint64{^uint64(0), ^uint64(0)}, // default to invalid keys, to not match any pages
 	}
 }
@@ -200,8 +200,9 @@ func (m *Memory) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &pages); err != nil {
 		return err
 	}
-	m.branchFactors = [5]uint64{BF1, BF2, BF3, BF4, BF5}
-	m.radix = &RadixNodeLevel1{}
+
+	m.branchFactors = [10]uint64{4, 4, 4, 4, 4, 4, 4, 8, 8, 8}
+	m.radix = &L1{}
 	m.pages = make(map[uint64]*CachedPage)
 	m.lastPageKeys = [2]uint64{^uint64(0), ^uint64(0)}
 	m.lastPage = [2]*CachedPage{nil, nil}

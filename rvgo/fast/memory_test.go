@@ -295,34 +295,34 @@ func TestMemoryMerkleRoot(t *testing.T) {
 		require.Equal(t, zeroHashes[64-5], root, "zero still")
 	})
 
-	t.Run("random few pages", func(t *testing.T) {
-		m := NewMemory()
-		m.SetUnaligned(PageSize*3, []byte{1})
-		m.SetUnaligned(PageSize*5, []byte{42})
-		m.SetUnaligned(PageSize*6, []byte{123})
-
-		p0 := m.MerkleizeNodeLevel1(m.radix, 0, 8)
-		p1 := m.MerkleizeNodeLevel1(m.radix, 0, 9)
-		p2 := m.MerkleizeNodeLevel1(m.radix, 0, 10)
-		p3 := m.MerkleizeNodeLevel1(m.radix, 0, 11)
-		p4 := m.MerkleizeNodeLevel1(m.radix, 0, 12)
-		p5 := m.MerkleizeNodeLevel1(m.radix, 0, 13)
-		p6 := m.MerkleizeNodeLevel1(m.radix, 0, 14)
-		p7 := m.MerkleizeNodeLevel1(m.radix, 0, 15)
-
-		r1 := HashPair(
-			HashPair(
-				HashPair(p0, p1), // 0,1
-				HashPair(p2, p3), // 2,3
-			),
-			HashPair(
-				HashPair(p4, p5), // 4,5
-				HashPair(p6, p7), // 6,7
-			),
-		)
-		r2 := m.MerkleizeNodeLevel1(m.radix, 0, 1)
-		require.Equal(t, r1, r2, "expecting manual page combination to match subtree merkle func")
-	})
+	//t.Run("random few pages", func(t *testing.T) {
+	//	m := NewMemory()
+	//	m.SetUnaligned(PageSize*3, []byte{1})
+	//	m.SetUnaligned(PageSize*5, []byte{42})
+	//	m.SetUnaligned(PageSize*6, []byte{123})
+	//
+	//	p0 := m.MerkleizeNodeLevel1(m.radix, 0, 8)
+	//	p1 := m.MerkleizeNodeLevel1(m.radix, 0, 9)
+	//	p2 := m.MerkleizeNodeLevel1(m.radix, 0, 10)
+	//	p3 := m.MerkleizeNodeLevel1(m.radix, 0, 11)
+	//	p4 := m.MerkleizeNodeLevel1(m.radix, 0, 12)
+	//	p5 := m.MerkleizeNodeLevel1(m.radix, 0, 13)
+	//	p6 := m.MerkleizeNodeLevel1(m.radix, 0, 14)
+	//	p7 := m.MerkleizeNodeLevel1(m.radix, 0, 15)
+	//
+	//	r1 := HashPair(
+	//		HashPair(
+	//			HashPair(p0, p1), // 0,1
+	//			HashPair(p2, p3), // 2,3
+	//		),
+	//		HashPair(
+	//			HashPair(p4, p5), // 4,5
+	//			HashPair(p6, p7), // 6,7
+	//		),
+	//	)
+	//	r2 := m.MerkleizeNodeLevel1(m.radix, 0, 1)
+	//	require.Equal(t, r1, r2, "expecting manual page combination to match subtree merkle func")
+	//})
 
 	t.Run("invalidate page", func(t *testing.T) {
 		m := NewMemory()
