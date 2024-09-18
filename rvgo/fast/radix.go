@@ -47,10 +47,6 @@ func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
 		n.HashExists |= 1 << hashBit
 		n.HashValid &= ^(1 << hashBit)
 	}
-
-	if n.Children[childIdx] != nil {
-		(*n.Children[childIdx]).InvalidateNode(addr)
-	}
 }
 
 func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
@@ -64,22 +60,11 @@ func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
 		n.HashExists[hashIndex] |= 1 << hashBit
 		n.HashValid[hashIndex] &= ^(1 << hashBit)
 	}
-
-	if n.Children[childIdx] != nil {
-		(*n.Children[childIdx]).InvalidateNode(addr)
-	}
 }
 
 func (m *Memory) InvalidateNode(addr uint64) {
-	// find page, and invalidate addr within it
 	if p, ok := m.pageLookup(addr >> PageAddrSize); ok {
-		prevValid := p.Ok[1]
 		p.Invalidate(addr & PageAddrMask)
-		if !prevValid { // if the page was already invalid before, then nodes to mem-root will also still be.
-			return
-		}
-	} else { // no page? nothing to invalidate
-		return
 	}
 }
 
@@ -269,80 +254,150 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 	p := &CachedPage{Data: new(Page)}
 	m.pages[pageIndex] = p
 
-	branchPaths := m.addressToBranchPath(pageIndex << PageAddrSize)
-	currentLevel1 := m.radix
-	branch1 := branchPaths[0]
-	if (*currentLevel1).Children[branch1] == nil {
+	addr := pageIndex << PageAddrSize
+	branchPaths := m.addressToBranchPath(addr)
+
+	radixLevel1 := m.radix
+	if (*radixLevel1).Children[branchPaths[0]] == nil {
 		node := &SmallRadixNode[L3]{Depth: 4}
-		(*currentLevel1).Children[branch1] = &node
+		(*radixLevel1).Children[branchPaths[0]] = &node
 	}
-	currentLevel2 := (*currentLevel1).Children[branch1]
+	radixLevel1.InvalidateNode(addr)
 
-	branch2 := branchPaths[1]
-	if (*currentLevel2).Children[branch2] == nil {
+	radixLevel2 := (*radixLevel1).Children[branchPaths[0]]
+	if (*radixLevel2).Children[branchPaths[1]] == nil {
 		node := &SmallRadixNode[L4]{Depth: 8}
-		(*currentLevel2).Children[branch2] = &node
+		(*radixLevel2).Children[branchPaths[1]] = &node
 	}
-	currentLevel3 := (*currentLevel2).Children[branch2]
+	(*radixLevel2).InvalidateNode(addr)
 
-	branch3 := branchPaths[2]
-	if (*currentLevel3).Children[branch3] == nil {
+	radixLevel3 := (*radixLevel2).Children[branchPaths[1]]
+	if (*radixLevel3).Children[branchPaths[2]] == nil {
 		node := &SmallRadixNode[L5]{Depth: 12}
-		(*currentLevel3).Children[branch3] = &node
+		(*radixLevel3).Children[branchPaths[2]] = &node
 	}
-	currentLevel4 := (*currentLevel3).Children[branch3]
+	(*radixLevel3).InvalidateNode(addr)
 
-	branch4 := branchPaths[3]
-	if (*currentLevel4).Children[branch4] == nil {
+	radixLevel4 := (*radixLevel3).Children[branchPaths[2]]
+	if (*radixLevel4).Children[branchPaths[3]] == nil {
 		node := &SmallRadixNode[L6]{Depth: 16}
-		(*currentLevel4).Children[branch4] = &node
+		(*radixLevel4).Children[branchPaths[3]] = &node
 	}
-	currentLevel5 := (*currentLevel4).Children[branch4]
+	(*radixLevel4).InvalidateNode(addr)
 
-	branch5 := branchPaths[4]
-	if (*currentLevel5).Children[branch5] == nil {
+	radixLevel5 := (*radixLevel4).Children[branchPaths[3]]
+	if (*radixLevel5).Children[branchPaths[4]] == nil {
 		node := &SmallRadixNode[L7]{Depth: 20}
-		(*currentLevel5).Children[branch5] = &node
+		(*radixLevel5).Children[branchPaths[4]] = &node
 	}
-	currentLevel6 := (*currentLevel5).Children[branch5]
+	(*radixLevel5).InvalidateNode(addr)
 
-	branch6 := branchPaths[5]
-	if (*currentLevel6).Children[branch6] == nil {
+	radixLevel6 := (*radixLevel5).Children[branchPaths[4]]
+	if (*radixLevel6).Children[branchPaths[5]] == nil {
 		node := &SmallRadixNode[L8]{Depth: 24}
-		(*currentLevel6).Children[branch6] = &node
+		(*radixLevel6).Children[branchPaths[5]] = &node
 	}
-	currentLevel7 := (*currentLevel6).Children[branch6]
+	(*radixLevel6).InvalidateNode(addr)
 
-	branch7 := branchPaths[6]
-	if (*currentLevel7).Children[branch7] == nil {
+	radixLevel7 := (*radixLevel6).Children[branchPaths[5]]
+	if (*radixLevel7).Children[branchPaths[6]] == nil {
 		node := &LargeRadixNode[L9]{Depth: 28}
-		(*currentLevel7).Children[branch7] = &node
+		(*radixLevel7).Children[branchPaths[6]] = &node
 	}
-	currentLevel8 := (*currentLevel7).Children[branch7]
+	(*radixLevel7).InvalidateNode(addr)
 
-	branch8 := branchPaths[7]
-	if (*currentLevel8).Children[branch8] == nil {
+	radixLevel8 := (*radixLevel7).Children[branchPaths[6]]
+	if (*radixLevel8).Children[branchPaths[7]] == nil {
 		node := &LargeRadixNode[L10]{Depth: 36}
-		(*currentLevel8).Children[branch8] = &node
+		(*radixLevel8).Children[branchPaths[7]] = &node
 	}
-	currentLevel9 := (*currentLevel8).Children[branch8]
+	(*radixLevel8).InvalidateNode(addr)
 
-	branch9 := branchPaths[8]
-	if (*currentLevel9).Children[branch9] == nil {
+	radixLevel9 := (*radixLevel8).Children[branchPaths[7]]
+	if (*radixLevel9).Children[branchPaths[8]] == nil {
 		node := &LargeRadixNode[L11]{Depth: 44}
-		(*currentLevel9).Children[branch9] = &node
+		(*radixLevel9).Children[branchPaths[8]] = &node
 	}
-	currentLevel10 := (*currentLevel9).Children[branch9]
+	(*radixLevel9).InvalidateNode(addr)
 
-	branch10 := branchPaths[9]
+	radixLevel10 := (*radixLevel9).Children[branchPaths[8]]
+	(*radixLevel10).InvalidateNode(addr)
+	(*radixLevel10).Children[branchPaths[9]] = &m
 
-	(*currentLevel10).Children[branch10] = &m
-
-	m.Invalidate(pageIndex << PageAddrSize)
+	m.InvalidateNode(addr)
 
 	return p
 }
 
 func (m *Memory) Invalidate(addr uint64) {
-	m.radix.InvalidateNode(addr)
+	// find page, and invalidate addr within it
+	if p, ok := m.pageLookup(addr >> PageAddrSize); ok {
+		prevValid := p.Ok[1]
+		if !prevValid { // if the page was already invalid before, then nodes to mem-root will also still be.
+			return
+		}
+	} else { // no page? nothing to invalidate
+		return
+	}
+
+	branchPaths := m.addressToBranchPath(addr)
+
+	currentLevel1 := m.radix
+	currentLevel1.InvalidateNode(addr)
+
+	radixLevel2 := (*m.radix).Children[branchPaths[0]]
+	if radixLevel2 == nil {
+		return
+	}
+	(*radixLevel2).InvalidateNode(addr)
+
+	radixLevel3 := (*radixLevel2).Children[branchPaths[1]]
+	if radixLevel3 == nil {
+		return
+	}
+	(*radixLevel3).InvalidateNode(addr)
+
+	radixLevel4 := (*radixLevel3).Children[branchPaths[2]]
+	if radixLevel4 == nil {
+		return
+	}
+	(*radixLevel4).InvalidateNode(addr)
+
+	radixLevel5 := (*radixLevel4).Children[branchPaths[3]]
+	if radixLevel5 == nil {
+		return
+	}
+	(*radixLevel5).InvalidateNode(addr)
+
+	radixLevel6 := (*radixLevel5).Children[branchPaths[4]]
+	if radixLevel6 == nil {
+		return
+	}
+	(*radixLevel6).InvalidateNode(addr)
+
+	radixLevel7 := (*radixLevel6).Children[branchPaths[5]]
+	if radixLevel7 == nil {
+		return
+	}
+	(*radixLevel7).InvalidateNode(addr)
+
+	radixLevel8 := (*radixLevel7).Children[branchPaths[6]]
+	if radixLevel8 == nil {
+		return
+	}
+	(*radixLevel8).InvalidateNode(addr)
+
+	radixLevel9 := (*radixLevel8).Children[branchPaths[7]]
+	if radixLevel9 == nil {
+		return
+	}
+	(*radixLevel9).InvalidateNode(addr)
+
+	radixLevel10 := (*radixLevel9).Children[branchPaths[8]]
+	if radixLevel10 == nil {
+		return
+	}
+	(*radixLevel10).InvalidateNode(addr)
+
+	m.InvalidateNode(addr)
 }
