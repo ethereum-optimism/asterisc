@@ -54,16 +54,8 @@ func (g *OutputAsteriscGameHelper) StartChallenger(
 	return c
 }
 
-type honestActorConfig struct {
-	prestateBlock  uint64
-	poststateBlock uint64
-	challengerOpts []op_e2e_challenger.Option
-}
-
-type HonestActorOpt func(cfg *honestActorConfig)
-
 // CreateHonestActor overrides op_e2e_disputegame.OutputCannonGameHelper CreateHonestActor method
-func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node string, options ...HonestActorOpt) *op_e2e_disputegame.OutputHonestHelper {
+func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node string, options ...op_e2e_disputegame.HonestActorOpt) *op_e2e_disputegame.OutputHonestHelper {
 	logger := testlog.Logger(g.T, log.LevelInfo).New("role", "HonestHelper", "game", g.Addr)
 	l2Client := g.System.NodeClient(l2Node)
 
@@ -71,21 +63,21 @@ func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node
 	g.Require.NoError(err, "Failed to load block range")
 	splitDepth := g.SplitDepth(ctx)
 	rollupClient := g.System.RollupClient(l2Node)
-	actorCfg := &honestActorConfig{
-		prestateBlock:  realPrestateBlock,
-		poststateBlock: realPostStateBlock,
-		challengerOpts: g.defaultChallengerOptions(),
+	actorCfg := &op_e2e_disputegame.HonestActorConfig{
+		PrestateBlock:  realPrestateBlock,
+		PoststateBlock: realPostStateBlock,
+		ChallengerOpts: g.defaultChallengerOptions(),
 	}
 	for _, option := range options {
 		option(actorCfg)
 	}
 
-	cfg := challenger.NewChallengerConfig(g.T, g.System, l2Node, actorCfg.challengerOpts...)
+	cfg := challenger.NewChallengerConfig(g.T, g.System, l2Node, actorCfg.ChallengerOpts...)
 	dir := filepath.Join(cfg.Datadir, "honest")
-	prestateProvider := outputs.NewPrestateProvider(rollupClient, actorCfg.prestateBlock)
+	prestateProvider := outputs.NewPrestateProvider(rollupClient, actorCfg.PrestateBlock)
 	l1Head := g.GetL1Head(ctx)
 	accessor, err := outputs.NewOutputAsteriscTraceAccessor(
-		logger, metrics.NoopMetrics, cfg.Asterisc, vm.NewOpProgramServerExecutor(), l2Client, prestateProvider, cfg.AsteriscAbsolutePreState, rollupClient, dir, l1Head, splitDepth, actorCfg.prestateBlock, actorCfg.poststateBlock)
+		logger, metrics.NoopMetrics, cfg.Asterisc, vm.NewOpProgramServerExecutor(), l2Client, prestateProvider, cfg.AsteriscAbsolutePreState, rollupClient, dir, l1Head, splitDepth, actorCfg.PrestateBlock, actorCfg.PoststateBlock)
 	g.Require.NoError(err, "Failed to create output asterisc trace accessor")
 	return op_e2e_disputegame.NewOutputHonestHelper(g.T, g.Require, &g.OutputGameHelper, g.Game, accessor)
 }
