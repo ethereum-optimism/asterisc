@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
