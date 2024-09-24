@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/vm"
 	"io"
 	"math/big"
 	"path/filepath"
@@ -53,24 +54,38 @@ func (g *OutputAsteriscGameHelper) StartChallenger(
 	return c
 }
 
-// CreateHonestActor overrides op_e2e_disputegame.OutputCannonGameHelper CreateHonestActor method
-func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node string, options ...op_e2e_challenger.Option) *op_e2e_disputegame.OutputHonestHelper {
-	opts := g.defaultChallengerOptions()
-	opts = append(opts, options...)
-	cfg := challenger.NewChallengerConfig(g.T, g.System, l2Node, opts...)
+type honestActorConfig struct {
+	prestateBlock  uint64
+	poststateBlock uint64
+	challengerOpts []op_e2e_challenger.Option
+}
 
+type HonestActorOpt func(cfg *honestActorConfig)
+
+// CreateHonestActor overrides op_e2e_disputegame.OutputCannonGameHelper CreateHonestActor method
+func (g *OutputAsteriscGameHelper) CreateHonestActor(ctx context.Context, l2Node string, options ...HonestActorOpt) *op_e2e_disputegame.OutputHonestHelper {
 	logger := testlog.Logger(g.T, log.LevelInfo).New("role", "HonestHelper", "game", g.Addr)
 	l2Client := g.System.NodeClient(l2Node)
 
-	prestateBlock, poststateBlock, err := g.Game.GetBlockRange(ctx)
+	realPrestateBlock, realPostStateBlock, err := g.Game.GetBlockRange(ctx)
 	g.Require.NoError(err, "Failed to load block range")
-	dir := filepath.Join(cfg.Datadir, "honest")
 	splitDepth := g.SplitDepth(ctx)
 	rollupClient := g.System.RollupClient(l2Node)
-	prestateProvider := outputs.NewPrestateProvider(rollupClient, prestateBlock)
+	actorCfg := &honestActorConfig{
+		prestateBlock:  realPrestateBlock,
+		poststateBlock: realPostStateBlock,
+		challengerOpts: g.defaultChallengerOptions(),
+	}
+	for _, option := range options {
+		option(actorCfg)
+	}
+
+	cfg := challenger.NewChallengerConfig(g.T, g.System, l2Node, actorCfg.challengerOpts...)
+	dir := filepath.Join(cfg.Datadir, "honest")
+	prestateProvider := outputs.NewPrestateProvider(rollupClient, actorCfg.prestateBlock)
 	l1Head := g.GetL1Head(ctx)
 	accessor, err := outputs.NewOutputAsteriscTraceAccessor(
-		logger, metrics.NoopMetrics, cfg.Asterisc, l2Client, prestateProvider, cfg.AsteriscAbsolutePreState, rollupClient, dir, l1Head, splitDepth, prestateBlock, poststateBlock)
+		logger, metrics.NoopMetrics, cfg.Asterisc, vm.NewOpProgramServerExecutor(), l2Client, prestateProvider, cfg.AsteriscAbsolutePreState, rollupClient, dir, l1Head, splitDepth, actorCfg.prestateBlock, actorCfg.poststateBlock)
 	g.Require.NoError(err, "Failed to create output asterisc trace accessor")
 	return op_e2e_disputegame.NewOutputHonestHelper(g.T, g.Require, &g.OutputGameHelper, g.Game, accessor)
 }
@@ -109,7 +124,7 @@ func (g *OutputAsteriscGameHelper) ChallengeToPreimageLoad(ctx context.Context, 
 	if preloadPreimage {
 		_, _, preimageData, err := provider.GetStepData(ctx, types.NewPosition(execDepth, big.NewInt(int64(targetTraceIndex))))
 		g.Require.NoError(err)
-		g.UploadPreimage(ctx, preimageData, challengerKey)
+		g.UploadPreimage(ctx, preimageData)
 		g.WaitForPreimageInOracle(ctx, preimageData)
 	}
 
@@ -272,7 +287,7 @@ func (g *OutputAsteriscGameHelper) createAsteriscTraceProvider(ctx context.Conte
 		localContext = outputs.CreateLocalContext(pre, post)
 		dir := filepath.Join(cfg.Datadir, "asterisc-trace")
 		subdir := filepath.Join(dir, localContext.Hex())
-		return asterisc.NewTraceProviderForTest(logger, metrics.NoopMetrics, cfg, localInputs, subdir, g.MaxDepth(ctx)-splitDepth-1), nil
+		return asterisc.NewTraceProviderForTest(logger, metrics.NoopMetrics.VmMetrics(types.TraceTypeAsterisc.String()), cfg, localInputs, subdir, g.MaxDepth(ctx)-splitDepth-1), nil
 	})
 
 	claims, err := g.Game.GetAllClaims(ctx, rpcblock.Latest)
