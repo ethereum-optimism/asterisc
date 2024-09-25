@@ -9,23 +9,103 @@ parameters:
 workflows:
   main:
     jobs:
-      - pnpm-monorepo
+      - contracts-bedrock-build
       - go-mod-download-monorepo
       - go-mod-download-asterisc
       - op-program-riscv:
-          requires: ["go-mod-download-monorepo"]
+          requires:
+            - go-mod-download-monorepo
       - asterisc-prestate:
-          requires: ["go-mod-download-asterisc", "op-program-riscv", "pnpm-monorepo"]
+          requires:
+            - go-mod-download-asterisc
+            - op-program-riscv
+            - contracts-bedrock-build
       - devnet-allocs-including-asterisc:
-          requires: ["asterisc-prestate"]
+          requires:
+            - asterisc-prestate
       - op-e2e-asterisc-tests:
-          requires: ["devnet-allocs-including-asterisc"]
+          requires:
+            - devnet-allocs-including-asterisc
       - prestate-reproducibility:
           matrix:
             parameters:
               version: ["1.0.0", "1.1.0", "1.2.0"]
 
+commands:
+  checkout-with-monorepo:
+    steps:
+      - checkout
+      - run:
+          name: Fetch submodules for asterisc
+          # This will also fetch monorepo's submodule.
+          # Therefore we do not have to call `make submodules` at monorepo root
+          command: git submodule update --init --recursive
+  install-contracts-dependencies:
+    description: "Install the dependencies for the smart contracts"
+    steps:
+      - run:
+          command: just install
+          working_directory: rvsol/lib/optimism/packages/contracts-bedrock
+
 jobs:
+  contracts-bedrock-build:
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
+    steps:
+      - checkout-with-monorepo
+      - run:
+          name: Check L1 geth version
+          command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
+          working_directory: rvsol/lib/optimism
+      - install-contracts-dependencies
+      - restore_cache:
+          name: Restore Go modules cache
+          keys:
+            - gomod-contracts-build-{{ checksum "go.sum" }}
+            - gomod-contracts-build-
+      - restore_cache:
+          name: Restore Go build cache
+          keys:
+            - golang-build-cache-contracts-build-{{ checksum "go.sum" }}
+            - golang-build-cache-contracts-build-
+      - run:
+          name: Print forge version
+          command: forge --version
+      - run:
+          name: Pull artifacts
+          command: bash scripts/ops/pull-artifacts.sh
+          working_directory: rvsol/lib/optimism/packages/contracts-bedrock
+      - run:
+          name: Build contracts
+          command: forge build --deny-warnings --skip test
+          environment:
+            FOUNDRY_PROFILE: ci
+          working_directory: rvsol/lib/optimism/packages/contracts-bedrock
+      - run:
+          name: Generate default allocs
+          command: make devnet-allocs
+          working_directory: rvsol/lib/optimism
+      - save_cache:
+          name: Save Go modules cache
+          key: gomod-contracts-build-{{ checksum "go.sum" }}
+          paths:
+            - "/go/pkg/mod"
+      - save_cache:
+          name: Save Go build cache
+          key: golang-build-cache-contracts-build-{{ checksum "go.sum" }}
+          paths:
+            - "/root/.cache/go-build"
+      - persist_to_workspace:
+          root: rvsol/lib/optimism
+          paths:
+            - "packages/contracts-bedrock/cache"
+            - "packages/contracts-bedrock/artifacts"
+            - "packages/contracts-bedrock/forge-artifacts"
+            - "packages/contracts-bedrock/deploy-config/devnetL1.json"
+            - "packages/contracts-bedrock/deployments/devnetL1"
+            - ".devnet"
+
   pnpm-monorepo:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
@@ -104,10 +184,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
     steps:
-      - checkout
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
+      - checkout-with-monorepo
       - restore_cache:
           key: gomod>-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache for monorepo
@@ -169,10 +246,7 @@ jobs:
         description: The key of restore_cache and save_cache.
         type: string
     steps:
-      - checkout
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
+      - checkout-with-monorepo
       - restore_cache:
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache
@@ -230,12 +304,9 @@ jobs:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
     steps:
-      - checkout
+      - checkout-with-monorepo
       - attach_workspace:
           at: /tmp/workspace
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
       - run:
           name: Forge build
           # We first build here to avoid `failed to read artifact source file` foundry error while running forge script
@@ -320,12 +391,9 @@ jobs:
     resource_class: xlarge
     parallelism: 4
     steps:
-      - checkout
+      - checkout-with-monorepo
       - attach_workspace:
           at: /tmp/workspace
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
       - restore_cache:
           name: Restore Go modules cache for monorepo
           # this go mod cache will be populated from go-mod-download-monorepo step
