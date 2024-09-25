@@ -18,6 +18,7 @@ remappings = [
   'src/dispute=lib/optimism/packages/contracts-bedrock/src/dispute',
   'src/libraries=lib/optimism/packages/contracts-bedrock/src/libraries',
   'scripts/libraries=lib/optimism/packages/contracts-bedrock/scripts/libraries',
+  'test/mocks=lib/optimism/packages/contracts-bedrock/test/mocks',
 
   # required for etherscan contract verification
   'src/L1=lib/optimism/packages/contracts-bedrock/src/L1',

@@ -13,6 +13,7 @@ import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
 import { IDisputeGameFactory } from "@optimism/src/dispute/interfaces/IDisputeGameFactory.sol";
 import { IDisputeGame } from "@optimism/src/dispute/interfaces/IDisputeGame.sol";
+import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
 import { IDelayedWETH } from "@optimism/src/dispute/interfaces/IDelayedWETH.sol";
 import { IAnchorStateRegistry } from "@optimism/src/dispute/interfaces/IAnchorStateRegistry.sol";
 import { GnosisSafe as Safe } from "safe-contracts/GnosisSafe.sol";
@@ -70,7 +71,7 @@ contract Deploy is Deployer {
     /// @notice Deploy RISCV
     function deployRiscv() public broadcast returns (address addr_) {
         console.log("Deploying RISCV implementation");
-        RISCV riscv = new RISCV{ salt: _implSalt() }(IPreimageOracle(mustGetChainAddress("PreimageOracle")));
+        RISCV riscv = new RISCV{ salt: _implSalt() }(IPreimageOracle(mustGetAddress("PreimageOracle")));
         save("RISCV", address(riscv));
         console.log("RISCV deployed at %s", address(riscv));
         addr_ = address(riscv);
@@ -101,27 +102,6 @@ contract Deploy is Deployer {
         }
     }
 
-    /// @notice Make a call from the Safe contract to an arbitrary address with arbitrary data
-    function _callViaSafe(address _target, bytes memory _data) internal {
-        Safe safe = Safe(mustGetChainAddress("SystemOwnerSafe"));
-
-        // This is the signature format used the caller is also the signer.
-        bytes memory signature = abi.encodePacked(uint256(uint160(msg.sender)), bytes32(0), uint8(1));
-
-        safe.execTransaction({
-            to: _target,
-            value: 0,
-            data: _data,
-            operation: SafeOps.Operation.Call,
-            safeTxGas: 0,
-            baseGas: 0,
-            gasPrice: 0,
-            gasToken: address(0),
-            refundReceiver: payable(address(0)),
-            signatures: signature
-        });
-    }
-
     /// @notice Sets the implementation for the given fault game type in the `DisputeGameFactory`.
     function setAsteriscFaultGameImplementation(bool _allowUpgrade) public broadcast {
         console.log("Setting Asterisc FaultDisputeGame implementation");
@@ -144,6 +124,27 @@ contract Deploy is Deployer {
         });
     }
 
+    /// @notice Make a call from the Safe contract to an arbitrary address with arbitrary data
+    function _callViaSafe(address _target, bytes memory _data) internal {
+        Safe safe = Safe(mustGetAddress("SystemOwnerSafe"));
+
+        // This is the signature format used the caller is also the signer.
+        bytes memory signature = abi.encodePacked(uint256(uint160(msg.sender)), bytes32(0), uint8(1));
+
+        safe.execTransaction({
+            to: _target,
+            value: 0,
+            data: _data,
+            operation: SafeOps.Operation.Call,
+            safeTxGas: 0,
+            baseGas: 0,
+            gasPrice: 0,
+            gasToken: address(0),
+            refundReceiver: payable(address(0)),
+            signatures: signature
+        });
+    }
+
     /// @notice Sets the implementation for the given fault game type in the `DisputeGameFactory`.
     function _setFaultGameImplementation(
         IDisputeGameFactory _factory,
@@ -161,34 +162,30 @@ contract Deploy is Deployer {
         }
 
         uint32 rawGameType = GameType.unwrap(_params.gameType);
-        _factory.setImplementation(
-            _params.gameType,
-            IDisputeGame(
-                _deploy(
-                    "RISCV",
-                    abi.encode(
-                        _params.gameType,
-                        _params.absolutePrestate,
-                        _params.maxGameDepth,
-                        cfg.faultGameSplitDepth(),
-                        cfg.faultGameClockExtension(),
-                        _params.maxClockDuration,
-                        _params.faultVm,
-                        _params.weth,
-                        _params.anchorStateRegistry,
-                        cfg.l2ChainID(),
-                        cfg.l2OutputOracleProposer(),
-                        cfg.l2OutputOracleChallenger()
-                    )
+        IDisputeGame dg = IDisputeGame(
+            _deploy(
+                "FaultDisputeGame",
+                string.concat("FaultDisputeGame_", vm.toString(rawGameType)),
+                abi.encode(
+                    _params.gameType,
+                    _params.absolutePrestate,
+                    _params.maxGameDepth,
+                    cfg.faultGameSplitDepth(),
+                    cfg.faultGameClockExtension(),
+                    _params.maxClockDuration,
+                    _params.faultVm,
+                    _params.weth,
+                    _params.anchorStateRegistry,
+                    cfg.l2ChainID()
                 )
             )
         );
 
-        string memory gameTypeString = "Asterisc";
+        bytes memory data = abi.encodeCall(IDisputeGameFactory.setImplementation, (_params.gameType, dg));
+        _callViaSafe(address(_factory), data);
 
         console.log(
-            "DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: %s | GameType: %s)",
-            gameTypeString,
+            "DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: Asterisc | GameType: %s)",
             vm.toString(rawGameType)
         );
     }
