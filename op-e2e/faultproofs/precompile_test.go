@@ -2,6 +2,10 @@ package faultproofs
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"math"
 	"math/big"
 	"path/filepath"
@@ -9,7 +13,6 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/disputegame"
-	"github.com/ethereum-optimism/optimism/cannon/mipsevm/versions"
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/utils"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/vm"
@@ -264,9 +267,23 @@ func runAsterisc(t *testing.T, ctx context.Context, sys *e2esys.System, inputs u
 	err := executor.DoGenerateProof(ctx, proofsDir, math.MaxUint, math.MaxUint, extraVmArgs...)
 	require.NoError(t, err, "failed to generate proof")
 
-	state, err := versions.LoadStateFromFile(vm.FinalStatePath(proofsDir, cfg.Asterisc.BinarySnapshots))
+	state, err := parseState(filepath.Join(proofsDir, "final.json.gz"))
 	require.NoError(t, err, "failed to parse state")
-	require.True(t, state.GetExited(), "asterisc did not exit")
-	require.Zero(t, state.GetExitCode(), "asterisc failed with exit code %d", state.GetExitCode())
-	t.Logf("Completed in %d steps", state.GetStep())
+	require.True(t, state.Exited, "asterisc did not exit")
+	require.Zero(t, state.ExitCode, "asterisc failed with exit code %d", state.ExitCode)
+	t.Logf("Completed in %d steps", state.Step)
+}
+
+func parseState(path string) (*fast.VMState, error) {
+	file, err := ioutil.OpenDecompressed(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot open state file (%v): %w", path, err)
+	}
+	defer file.Close()
+	var state fast.VMState
+	err = json.NewDecoder(file).Decode(&state)
+	if err != nil {
+		return nil, fmt.Errorf("invalid asterisc state (%v): %w", path, err)
+	}
+	return &state, nil
 }
