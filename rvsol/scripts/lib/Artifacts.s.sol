@@ -16,10 +16,10 @@ import { Process } from "scripts/libraries/Process.sol";
 
 /// @notice Represents a deployment. Is serialized to JSON as a key/value
 ///         pair. Can be accessed from within scripts.
-    struct Deployment {
-        string name;
-        address payable addr;
-    }
+struct Deployment {
+    string name;
+    address payable addr;
+}
 
 /// @title Artifacts
 /// @notice Useful for accessing deployment artifacts from within scripts.
@@ -244,7 +244,7 @@ abstract contract Artifacts {
             // AddressManager, which would work if the proxy is ResolvedDelegateProxy like L1CrossDomainMessengerProxy.
             if (contractAddress == address(0)) {
                 contractAddress =
-                                        IAddressManager(mustGetAddress("AddressManager")).getAddress(string.concat("OVM_", _contractName));
+                    IAddressManager(mustGetAddress("AddressManager")).getAddress(string.concat("OVM_", _contractName));
             }
         } else {
             contractAddress = mustGetAddress(_contractName);

@@ -324,12 +324,13 @@ contract Deploy is Deployer, StdAssertions {
         });
     }
     /// @notice Sets the implementation for the given fault game type in the `DisputeGameFactory`.
+
     function _setFaultGameImplementation(
         IDisputeGameFactory _factory,
         bool _allowUpgrade,
         FaultDisputeGameParams memory _params
     )
-    internal
+        internal
     {
         if (address(_factory.gameImpls(_params.gameType)) != address(0) && !_allowUpgrade) {
             console.log(
