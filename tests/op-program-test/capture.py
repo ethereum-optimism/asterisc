@@ -111,7 +111,7 @@ local_cmd = f'''#!/bin/bash
   --log.format terminal \\
   --server'''
 
-capture_cmd = local_cmd + " --l1 http://127.0.0.1:8545 --l2 http://127.0.0.1:9545"
+capture_cmd = local_cmd + " --l1 http://127.0.0.1:8545 --l1.beacon http://127.0.0.1:5052 --l2 http://127.0.0.1:9545"
 
 # Script to capture preimages from the local devnet
 with open(os.path.join(current_dir, "capture_cmd.sh"), "w") as f:
