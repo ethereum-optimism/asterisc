@@ -191,7 +191,7 @@ func Run(ctx *cli.Context) error {
 		}
 
 		if snapshotAt(state) {
-			if err := jsonutil.WriteJSON(state, ioutil.ToAtomicFile(fmt.Sprintf(snapshotFmt, step), OutFilePerm)); err != nil {
+			if err := jsonutil.WriteJSON(state, ioutil.ToStdOutOrFileOrNoop(fmt.Sprintf(snapshotFmt, step), OutFilePerm)); err != nil {
 				return fmt.Errorf("failed to write state snapshot: %w", err)
 			}
 		}
@@ -221,7 +221,7 @@ func Run(ctx *cli.Context) error {
 				proof.OracleValue = witness.PreimageValue
 				proof.OracleOffset = witness.PreimageOffset
 			}
-			if err := jsonutil.WriteJSON(proof, ioutil.ToAtomicFile(fmt.Sprintf(proofFmt, step), OutFilePerm)); err != nil {
+			if err := jsonutil.WriteJSON(proof, ioutil.ToStdOutOrFileOrNoop(fmt.Sprintf(proofFmt, step), OutFilePerm)); err != nil {
 				return fmt.Errorf("failed to write proof data: %w", err)
 			}
 		} else {
@@ -255,7 +255,7 @@ func Run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to set witness and stateHash: %w", err)
 	}
 
-	if err := jsonutil.WriteJSON(state, ioutil.ToAtomicFile(ctx.Path(cannon.RunOutputFlag.Name), OutFilePerm)); err != nil {
+	if err := jsonutil.WriteJSON(state, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.RunOutputFlag.Name), OutFilePerm)); err != nil {
 		return fmt.Errorf("failed to write state output: %w", err)
 	}
 	return nil

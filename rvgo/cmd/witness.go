@@ -32,7 +32,7 @@ func Witness(ctx *cli.Context) error {
 		Witness:   witness,
 		StateHash: stateHash,
 	}
-	if err := jsonutil.WriteJSON(witnessOutput, ioutil.ToAtomicFile(output, OutFilePerm)); err != nil {
+	if err := jsonutil.WriteJSON(witnessOutput, ioutil.ToStdOutOrFileOrNoop(output, OutFilePerm)); err != nil {
 		return fmt.Errorf("failed to write witness output %w", err)
 	}
 	fmt.Println(stateHash.Hex())
