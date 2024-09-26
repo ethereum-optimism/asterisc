@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum-optimism/asterisc/rvgo/fast"
-	"github.com/ethereum-optimism/optimism/op-service/ioutil"
+
 	"math"
 	"math/big"
 	"path/filepath"
@@ -13,18 +12,20 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/disputegame"
+	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/utils"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/vm"
+	"github.com/ethereum-optimism/optimism/op-challenger/metrics"
 	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
 	op_e2e_challenger "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	op_e2e_faultproofs "github.com/ethereum-optimism/optimism/op-e2e/faultproofs"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
-
-	"github.com/ethereum-optimism/optimism/op-challenger/metrics"
+	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
