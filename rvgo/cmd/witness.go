@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"

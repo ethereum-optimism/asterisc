@@ -3,8 +3,9 @@ package fast
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/ethereum-optimism/optimism/cannon/serialize"
 	"io"
+
+	"github.com/ethereum-optimism/optimism/cannon/serialize"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"

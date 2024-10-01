@@ -3,6 +3,7 @@ package cmd
 import (
 	"debug/elf"
 	"fmt"
+
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/ethereum-optimism/optimism/cannon/serialize"
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
