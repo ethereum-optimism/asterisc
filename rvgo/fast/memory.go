@@ -330,10 +330,10 @@ func (m *Memory) SetMemoryRange(addr uint64, r io.Reader) error {
 // The format is a simple concatenation of fields, with prefixed item count for repeating items and using big endian
 // encoding for numbers.
 //
-// len(PageCount)    uint32
+// len(PageCount)    uint64
 // For each page (order is arbitrary):
 //
-//	page index          uint32
+//	page index          uint64
 //	page Data           [PageSize]byte
 func (m *Memory) Serialize(out io.Writer) error {
 	if err := binary.Write(out, binary.BigEndian, uint64(m.PageCount())); err != nil {
