@@ -68,8 +68,8 @@ fuzz-mac:
 OP_PROGRAM_PATH ?= $(MONOREPO_ROOT)/op-program/bin-riscv/op-program-client-riscv.elf
 
 prestate: build-rvgo op-program-riscv
-	./rvgo/bin/asterisc load-elf --path $(OP_PROGRAM_PATH) --out ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json
-	./rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json --proof-fmt './rvgo/bin/%d.json' --output ""
+	./rvgo/bin/asterisc load-elf --path $(OP_PROGRAM_PATH) --out ./rvgo/bin/prestate.bin.gz --meta ./rvgo/bin/meta.json
+	./rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input ./rvgo/bin/prestate.bin.gz --meta ./rvgo/bin/meta.json --proof-fmt './rvgo/bin/%d.json' --output ""
 	mv ./rvgo/bin/0.json ./rvgo/bin/prestate-proof.json
 .PHONY: prestate
 

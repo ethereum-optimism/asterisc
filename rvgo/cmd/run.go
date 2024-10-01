@@ -14,6 +14,7 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
+	"github.com/ethereum-optimism/optimism/cannon/serialize"
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
@@ -191,7 +192,7 @@ func Run(ctx *cli.Context) error {
 		}
 
 		if snapshotAt(state) {
-			if err := jsonutil.WriteJSON(state, ioutil.ToStdOutOrFileOrNoop(fmt.Sprintf(snapshotFmt, step), OutFilePerm)); err != nil {
+			if err := serialize.Write(fmt.Sprintf(snapshotFmt, step), state, OutFilePerm); err != nil {
 				return fmt.Errorf("failed to write state snapshot: %w", err)
 			}
 		}
@@ -255,7 +256,7 @@ func Run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to set witness and stateHash: %w", err)
 	}
 
-	if err := jsonutil.WriteJSON(state, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.RunOutputFlag.Name), OutFilePerm)); err != nil {
+	if err := serialize.Write[*fast.VMState](ctx.Path(cannon.RunOutputFlag.Name), state, OutFilePerm); err != nil {
 		return fmt.Errorf("failed to write state output: %w", err)
 	}
 	return nil
