@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
+	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/urfave/cli/v2"
 
@@ -36,10 +37,10 @@ func LoadELF(ctx *cli.Context) error {
 	if err := state.SetWitnessAndStateHash(); err != nil {
 		return fmt.Errorf("failed to set witness and stateHash: %w", err)
 	}
-	if err := jsonutil.WriteJSON[*Metadata](ctx.Path(cannon.LoadELFMetaFlag.Name), meta, OutFilePerm); err != nil {
+	if err := jsonutil.WriteJSON[*Metadata](meta, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.LoadELFMetaFlag.Name), OutFilePerm)); err != nil {
 		return fmt.Errorf("failed to output metadata: %w", err)
 	}
-	return jsonutil.WriteJSON[*fast.VMState](ctx.Path(cannon.LoadELFOutFlag.Name), state, OutFilePerm)
+	return jsonutil.WriteJSON[*fast.VMState](state, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.LoadELFOutFlag.Name), OutFilePerm))
 }
 
 var LoadELFCommand = &cli.Command{

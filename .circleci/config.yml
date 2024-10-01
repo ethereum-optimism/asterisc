@@ -4,32 +4,35 @@ parameters:
   ci_builder_image:
     type: string
     # depends with rvsol/lib/optimism submodule version
-    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.47.3
+    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.51.0
 
 workflows:
   main:
     jobs:
-      - pnpm-monorepo
+      - contracts-bedrock-build
       - go-mod-download-monorepo
       - go-mod-download-asterisc
       - op-program-riscv:
-          requires: ["go-mod-download-monorepo"]
+          requires:
+            - go-mod-download-monorepo
       - asterisc-prestate:
-          requires: ["go-mod-download-asterisc", "op-program-riscv", "pnpm-monorepo"]
+          requires:
+            - go-mod-download-asterisc
+            - op-program-riscv
+            - contracts-bedrock-build
       - devnet-allocs-including-asterisc:
-          requires: ["asterisc-prestate"]
+          requires:
+            - asterisc-prestate
       - op-e2e-asterisc-tests:
-          requires: ["devnet-allocs-including-asterisc"]
+          requires:
+            - devnet-allocs-including-asterisc
       - prestate-reproducibility:
           matrix:
             parameters:
               version: ["1.0.0", "1.1.0", "1.2.0"]
 
-jobs:
-  pnpm-monorepo:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    resource_class: xlarge
+commands:
+  checkout-with-monorepo:
     steps:
       - checkout
       - run:
@@ -37,76 +40,77 @@ jobs:
           # This will also fetch monorepo's submodule.
           # Therefore we do not have to call `make submodules` at monorepo root
           command: git submodule update --init --recursive
+  install-contracts-dependencies:
+    description: "Install the dependencies for the smart contracts"
+    steps:
+      - run:
+          command: just install
+          working_directory: rvsol/lib/optimism/packages/contracts-bedrock
+
+jobs:
+  contracts-bedrock-build:
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
+    steps:
+      - checkout-with-monorepo
       - run:
           name: Check L1 geth version
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
           working_directory: rvsol/lib/optimism
+      - install-contracts-dependencies
       - restore_cache:
-          name: Restore PNPM Package Cache
+          name: Restore Go modules cache
           keys:
-            - pnpm-packages-v2-{{ checksum "rvsol/lib/optimism/pnpm-lock.yaml" }}
+            - gomod-contracts-build-{{ checksum "go.sum" }}
+            - gomod-contracts-build-
       - restore_cache:
-          name: Restore Go modules cache for monorepo
-          # this go mod cache will be populated from go-mod-download-monorepo step
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
-      # Fetch node_modules into the pnpm store
-      # This will cache node_modules based on pnpm-lock so other steps can instantly install them with `pnpm install --prefer-offline`
-      # --prefer-offline installs node_modules instantly by just reading from cache if it exists rather than fetching from network
-      # when installing node_modules pnpm simply adds symlinks instead of copying the files which is why it is pretty much instant to run --prefer-offline
-      # this allows a caching strategy of only checking pnpm-lockfile so we don't have to keep it in sync with our packages
-      # For more information see https://pnpm.io/cli/fetch
+          name: Restore Go build cache
+          keys:
+            - golang-build-cache-contracts-build-{{ checksum "go.sum" }}
+            - golang-build-cache-contracts-build-
       - run:
-          name: Fetch dependencies
-          command: pnpm fetch --frozen-lockfile --prefer-offline
-          working_directory: rvsol/lib/optimism
-      - save_cache:
-          name: Save PNPM Package Cache
-          key: pnpm-packages-v2-{{ checksum "rvsol/lib/optimism/pnpm-lock.yaml" }}
-          paths:
-            - "rvsol/lib/optimism/node_modules"
-      - run:
-          name: Install dependencies
-          command: pnpm install:ci:offline
-          working_directory: rvsol/lib/optimism
-      - run:
-          name: print forge version
+          name: Print forge version
           command: forge --version
-          working_directory: rvsol/lib/optimism
       - run:
-          name: Build monorepo
+          name: Pull artifacts
+          command: bash scripts/ops/pull-artifacts.sh
+          working_directory: rvsol/lib/optimism/packages/contracts-bedrock
+      - run:
+          name: Build contracts
+          command: forge build --deny-warnings --skip test
           environment:
             FOUNDRY_PROFILE: ci
-          command: pnpm build
-          working_directory: rvsol/lib/optimism
+          working_directory: rvsol/lib/optimism/packages/contracts-bedrock
       - run:
-          name: Generate allocs
+          name: Generate default allocs
           command: make devnet-allocs
           working_directory: rvsol/lib/optimism
+      - save_cache:
+          name: Save Go modules cache
+          key: gomod-contracts-build-{{ checksum "go.sum" }}
+          paths:
+            - "/go/pkg/mod"
+      - save_cache:
+          name: Save Go build cache
+          key: golang-build-cache-contracts-build-{{ checksum "go.sum" }}
+          paths:
+            - "/root/.cache/go-build"
       - persist_to_workspace:
           root: rvsol/lib/optimism
           paths:
-            - "packages/**/dist"
             - "packages/contracts-bedrock/cache"
             - "packages/contracts-bedrock/artifacts"
             - "packages/contracts-bedrock/forge-artifacts"
-            - "packages/contracts-bedrock/tsconfig.tsbuildinfo"
-            - "packages/contracts-bedrock/tsconfig.build.tsbuildinfo"
-            - ".devnet/allocs-l1.json"
-            - ".devnet/allocs-l2-delta.json"
-            - ".devnet/allocs-l2-ecotone.json"
-            - ".devnet/allocs-l2-fjord.json"
-            - ".devnet/addresses.json"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
+            - ".devnet"
 
   go-mod-download-monorepo:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
     steps:
-      - checkout
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
+      - checkout-with-monorepo
       - restore_cache:
           key: gomod>-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache for monorepo
@@ -168,10 +172,7 @@ jobs:
         description: The key of restore_cache and save_cache.
         type: string
     steps:
-      - checkout
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
+      - checkout-with-monorepo
       - restore_cache:
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache
@@ -229,12 +230,9 @@ jobs:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
     steps:
-      - checkout
+      - checkout-with-monorepo
       - attach_workspace:
           at: /tmp/workspace
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
       - run:
           name: Forge build
           # We first build here to avoid `failed to read artifact source file` foundry error while running forge script
@@ -253,6 +251,7 @@ jobs:
             cp /tmp/workspace/.devnet/allocs-l2-delta.json .devnet/allocs-l2-delta.json
             cp /tmp/workspace/.devnet/allocs-l2-ecotone.json .devnet/allocs-l2-ecotone.json
             cp /tmp/workspace/.devnet/allocs-l2-fjord.json .devnet/allocs-l2-fjord.json
+            cp /tmp/workspace/.devnet/allocs-l2-granite.json .devnet/allocs-l2-granite.json
             cp /tmp/workspace/.devnet/addresses.json .devnet/addresses.json
             cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json devnetL1.json
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
@@ -303,6 +302,7 @@ jobs:
             cp .devnet/allocs-l2-delta.json .devnet-asterisc/allocs-l2-delta.json
             cp .devnet/allocs-l2-ecotone.json .devnet-asterisc/allocs-l2-ecotone.json
             cp .devnet/allocs-l2-fjord.json .devnet-asterisc/allocs-l2-fjord.json
+            cp .devnet/allocs-l2-granite.json .devnet-asterisc/allocs-l2-granite.json
           working_directory: rvsol
       - persist_to_workspace:
           root: rvsol
@@ -317,12 +317,9 @@ jobs:
     resource_class: xlarge
     parallelism: 4
     steps:
-      - checkout
+      - checkout-with-monorepo
       - attach_workspace:
           at: /tmp/workspace
-      - run:
-          name: Fetch submodules for asterisc
-          command: git submodule update --init --recursive
       - restore_cache:
           name: Restore Go modules cache for monorepo
           # this go mod cache will be populated from go-mod-download-monorepo step
@@ -338,6 +335,7 @@ jobs:
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-delta.json .devnet/allocs-l2-delta.json
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-ecotone.json .devnet/allocs-l2-ecotone.json
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-fjord.json .devnet/allocs-l2-fjord.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-granite.json .devnet/allocs-l2-granite.json
             cp /tmp/workspace/.devnet-asterisc/addresses.json .devnet/addresses.json
             mkdir -p packages/contracts-bedrock
             cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock

@@ -2,24 +2,24 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/pkg/profile"
 	"github.com/urfave/cli/v2"
 
-	"github.com/pkg/profile"
-
+	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
+	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 
-	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type Proof struct {
@@ -67,8 +67,7 @@ func Run(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-
-	l := Logger(os.Stderr, log.LevelInfo)
+	l := Logger(os.Stderr, slog.LevelInfo)
 	outLog := &LoggingWriter{Name: "program std-out", Log: l}
 	errLog := &LoggingWriter{Name: "program std-err", Log: l}
 
@@ -192,7 +191,7 @@ func Run(ctx *cli.Context) error {
 		}
 
 		if snapshotAt(state) {
-			if err := jsonutil.WriteJSON(fmt.Sprintf(snapshotFmt, step), state, OutFilePerm); err != nil {
+			if err := jsonutil.WriteJSON(state, ioutil.ToStdOutOrFileOrNoop(fmt.Sprintf(snapshotFmt, step), OutFilePerm)); err != nil {
 				return fmt.Errorf("failed to write state snapshot: %w", err)
 			}
 		}
@@ -222,7 +221,7 @@ func Run(ctx *cli.Context) error {
 				proof.OracleValue = witness.PreimageValue
 				proof.OracleOffset = witness.PreimageOffset
 			}
-			if err := jsonutil.WriteJSON(fmt.Sprintf(proofFmt, step), proof, OutFilePerm); err != nil {
+			if err := jsonutil.WriteJSON(proof, ioutil.ToStdOutOrFileOrNoop(fmt.Sprintf(proofFmt, step), OutFilePerm)); err != nil {
 				return fmt.Errorf("failed to write proof data: %w", err)
 			}
 		} else {
@@ -256,7 +255,7 @@ func Run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to set witness and stateHash: %w", err)
 	}
 
-	if err := jsonutil.WriteJSON(ctx.Path(cannon.RunOutputFlag.Name), state, OutFilePerm); err != nil {
+	if err := jsonutil.WriteJSON(state, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.RunOutputFlag.Name), OutFilePerm)); err != nil {
 		return fmt.Errorf("failed to write state output: %w", err)
 	}
 	return nil

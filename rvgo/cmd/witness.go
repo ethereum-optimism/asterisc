@@ -3,11 +3,12 @@ package cmd
 import (
 	"fmt"
 
-	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
-	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
+	"github.com/ethereum-optimism/optimism/op-service/ioutil"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 )
 
 type WitnessOutput struct {
@@ -31,7 +32,7 @@ func Witness(ctx *cli.Context) error {
 		Witness:   witness,
 		StateHash: stateHash,
 	}
-	if err := jsonutil.WriteJSON(output, witnessOutput, OutFilePerm); err != nil {
+	if err := jsonutil.WriteJSON(witnessOutput, ioutil.ToStdOutOrFileOrNoop(output, OutFilePerm)); err != nil {
 		return fmt.Errorf("failed to write witness output %w", err)
 	}
 	fmt.Println(stateHash.Hex())

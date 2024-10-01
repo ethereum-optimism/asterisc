@@ -21,8 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 
-	"github.com/ethereum-optimism/optimism/op-chain-ops/srcmap"
-
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
 
@@ -81,10 +79,6 @@ type Contract struct {
 	} `json:"deployedBytecode"`
 }
 
-func (c *Contract) SourceMap(sourcePaths []string) (*srcmap.SourceMap, error) {
-	return srcmap.ParseSourceMap(sourcePaths, c.DeployedBytecode.Object, c.DeployedBytecode.SourceMap)
-}
-
 type Contracts struct {
 	RISCV  *Contract
 	Oracle *Contract
@@ -136,20 +130,6 @@ func testContracts(t require.TestingT) *Contracts {
 		RISCV:  loadRISCVContractCode(t),
 		Oracle: loadPreimageOracleContractCode(t),
 	}
-}
-
-// nolint:unused
-func addTracer(t *testing.T, env *vm.EVM, addrs *Addresses, contracts *Contracts) {
-	//env.Config.Tracer = logger.NewMarkdownLogger(&logger.Config{}, os.Stdout)
-
-	a, err := contracts.RISCV.SourceMap([]string{"../../rvsol/src/RISCV.sol"})
-	require.NoError(t, err)
-	b, err := contracts.Oracle.SourceMap([]string{"../../rvsol/src/PreimageOracle.sol"})
-	require.NoError(t, err)
-	env.Config.Tracer = srcmap.NewSourceMapTracer(map[common.Address]*srcmap.SourceMap{
-		addrs.RISCV:  a,
-		addrs.Oracle: b,
-	}, os.Stdout)
 }
 
 func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses, step uint64, revertCode []byte) (postState []byte, postHash common.Hash, gasUsed uint64) {

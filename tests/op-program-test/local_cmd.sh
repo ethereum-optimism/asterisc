@@ -11,11 +11,11 @@
   --l2.genesis ./test-data/chain-artifacts/genesis-l2.json \
   --l1.trustrpc \
   --l1.rpckind debug_geth \
-  --l1.head 0xde3fdc5ac10696af68240e1b503b2adc9546fad649142b0cb8bc77eee0dd4bf8 \
-  --l2.head 0xeebb4bfeb240e7eb927277eb3055a64e640764b612d3074582ce815e0cc5f2ef \
-  --l2.outputroot 0x628b7f5289f8d67203b36f14474eb616a5a5b7a97d9636d125eb142ffe463d12 \
-  --l2.claim 0x6546c2b1d660ac6b1e8a2e2bc68d4b992a0508e3ff481d0b68988dd9423a47f4 \
-  --l2.blocknumber 13 \
+  --l1.head 0x32230088dbbc84c096d91e7fe67df0e18451f47ec8e5170911a4aa77e7d8bfc5 \
+  --l2.head 0x4550a5cdaae0fb257a4034af8c2b6c20263319b56672545d6917c0785972a72e \
+  --l2.outputroot 0x8f6100bd0f05fefed78e7d94b9f7397ce98a0f9fe515ae25e2a315a9fa0520a4 \
+  --l2.claim 0xe508b8b3fe23fc4d3372c77a5896d6ea1177bf12ef8ff2a1ba6d22ac4b9447da \
+  --l2.blocknumber 12 \
   --datadir ./test-data/preimages \
   --log.format terminal \
   --server

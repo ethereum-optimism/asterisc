@@ -10,6 +10,7 @@ import (
 
 	op_challenger "github.com/ethereum-optimism/optimism/op-challenger"
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
 	op_e2e_challenger "github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/optimism/op-service/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -27,7 +28,7 @@ func WithAsterisc(
 	l2Genesis *core.Genesis,
 ) op_e2e_challenger.Option {
 	return func(c *config.Config) {
-		c.TraceTypes = append(c.TraceTypes, config.TraceTypeAsterisc)
+		c.TraceTypes = append(c.TraceTypes, types.TraceTypeAsterisc)
 		applyAsteriscConfig(c, t, rollupCfg, l2Genesis)
 	}
 }
@@ -73,9 +74,9 @@ func NewChallenger(t *testing.T, ctx context.Context, sys op_e2e_challenger.Endp
 
 func NewChallengerConfig(t *testing.T, sys op_e2e_challenger.EndpointProvider, l2NodeName string, options ...op_e2e_challenger.Option) *config.Config {
 	// Use the NewConfig method to ensure we pick up any defaults that are set.
-	l1Endpoint := sys.NodeEndpoint("l1")
-	l1Beacon := sys.L1BeaconEndpoint()
-	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, sys.RollupEndpoint(l2NodeName), sys.NodeEndpoint(l2NodeName), t.TempDir())
+	l1Endpoint := sys.NodeEndpoint("l1").RPC()
+	l1Beacon := sys.L1BeaconEndpoint().RestHTTP()
+	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, sys.RollupEndpoint(l2NodeName).RPC(), sys.NodeEndpoint(l2NodeName).RPC(), t.TempDir())
 	// The devnet can't set the absolute prestate output root because the contracts are deployed in L1 genesis
 	// before the L2 genesis is known.
 	cfg.AllowInvalidPrestate = true

@@ -11,15 +11,30 @@ import { RISCV } from "../src/RISCV.sol";
 
 import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
-import { DisputeGameFactory } from "@optimism/src/dispute/DisputeGameFactory.sol";
-import { DelayedWETH } from "@optimism/src/dispute/weth/DelayedWETH.sol";
-import { AnchorStateRegistry } from "@optimism/src/dispute/AnchorStateRegistry.sol";
+import { IDisputeGameFactory } from "@optimism/src/dispute/interfaces/IDisputeGameFactory.sol";
+import { IDisputeGame } from "@optimism/src/dispute/interfaces/IDisputeGame.sol";
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
+import { IDelayedWETH } from "@optimism/src/dispute/interfaces/IDelayedWETH.sol";
+import { IAnchorStateRegistry } from "@optimism/src/dispute/interfaces/IAnchorStateRegistry.sol";
 import { GnosisSafe as Safe } from "safe-contracts/GnosisSafe.sol";
 import { Enum as SafeOps } from "safe-contracts/common/Enum.sol";
 import "@optimism/src/dispute/lib/Types.sol";
 
 contract Deploy is Deployer {
+    /// @notice FaultDisputeGameParams is a struct that contains the parameters necessary to call
+    ///         the function _setFaultGameImplementation. This struct exists because the EVM needs
+    ///         to finally adopt PUSHN and get rid of stack too deep once and for all.
+    ///         Someday we will look back and laugh about stack too deep, today is not that day.
+    struct FaultDisputeGameParams {
+        IAnchorStateRegistry anchorStateRegistry;
+        IDelayedWETH weth;
+        GameType gameType;
+        Claim absolutePrestate;
+        IBigStepper faultVm;
+        uint256 maxGameDepth;
+        Duration maxClockDuration;
+    }
+
     /// @notice Modifier that wraps a function in broadcasting.
     modifier broadcast() {
         vm.startBroadcast(msg.sender);
@@ -56,7 +71,7 @@ contract Deploy is Deployer {
     /// @notice Deploy RISCV
     function deployRiscv() public broadcast returns (address addr_) {
         console.log("Deploying RISCV implementation");
-        RISCV riscv = new RISCV{ salt: _implSalt() }(IPreimageOracle(mustGetChainAddress("PreimageOracle")));
+        RISCV riscv = new RISCV{ salt: _implSalt() }(IPreimageOracle(mustGetAddress("PreimageOracle")));
         save("RISCV", address(riscv));
         console.log("RISCV deployed at %s", address(riscv));
         addr_ = address(riscv);
@@ -87,9 +102,31 @@ contract Deploy is Deployer {
         }
     }
 
+    /// @notice Sets the implementation for the given fault game type in the `DisputeGameFactory`.
+    function setAsteriscFaultGameImplementation(bool _allowUpgrade) public broadcast {
+        console.log("Setting Asterisc FaultDisputeGame implementation");
+        IDisputeGameFactory factory = IDisputeGameFactory(mustGetAddress("DisputeGameFactoryProxy"));
+        IDelayedWETH weth = IDelayedWETH(mustGetAddress("DelayedWETHProxy"));
+
+        // Set the Asterisc FaultDisputeGame implementation in the factory.
+        _setFaultGameImplementation({
+            _factory: factory,
+            _allowUpgrade: _allowUpgrade,
+            _params: FaultDisputeGameParams({
+                anchorStateRegistry: IAnchorStateRegistry(mustGetAddress("AnchorStateRegistryProxy")),
+                weth: weth,
+                gameType: GameTypes.ASTERISC,
+                absolutePrestate: loadRiscvAbsolutePrestate(),
+                faultVm: IBigStepper(mustGetAddress("RISCV")),
+                maxGameDepth: cfg.faultGameMaxDepth(),
+                maxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration()))
+            })
+        });
+    }
+
     /// @notice Make a call from the Safe contract to an arbitrary address with arbitrary data
     function _callViaSafe(address _target, bytes memory _data) internal {
-        Safe safe = Safe(mustGetChainAddress("SystemOwnerSafe"));
+        Safe safe = Safe(mustGetAddress("SystemOwnerSafe"));
 
         // This is the signature format used the caller is also the signer.
         bytes memory signature = abi.encodePacked(uint256(uint160(msg.sender)), bytes32(0), uint8(1));
@@ -109,38 +146,79 @@ contract Deploy is Deployer {
     }
 
     /// @notice Sets the implementation for the given fault game type in the `DisputeGameFactory`.
-    function setAsteriscFaultGameImplementation(bool _allowUpgrade) public broadcast {
-        console.log("Setting Asterisc FaultDisputeGame implementation");
-        DisputeGameFactory factory = DisputeGameFactory(mustGetChainAddress("DisputeGameFactoryProxy"));
-        DelayedWETH weth = DelayedWETH(mustGetChainAddress("DelayedWETHProxy"));
-        AnchorStateRegistry anchorStateRegistry = AnchorStateRegistry(mustGetChainAddress("AnchorStateRegistryProxy"));
-
-        if (address(factory.gameImpls(GameTypes.ASTERISC)) != address(0) && !_allowUpgrade) {
+    function _setFaultGameImplementation(
+        IDisputeGameFactory _factory,
+        bool _allowUpgrade,
+        FaultDisputeGameParams memory _params
+    )
+        internal
+    {
+        if (address(_factory.gameImpls(_params.gameType)) != address(0) && !_allowUpgrade) {
             console.log(
-                "[WARN] DisputeGameFactoryProxy: `FaultDisputeGame` implementation already set for game type: ASTERISC"
+                "[WARN] DisputeGameFactoryProxy: `FaultDisputeGame` implementation already set for game type: %s",
+                vm.toString(GameType.unwrap(_params.gameType))
             );
             return;
         }
 
-        FaultDisputeGame fdg = new FaultDisputeGame{ salt: _implSalt() }({
-            _gameType: GameTypes.ASTERISC,
-            _absolutePrestate: loadRiscvAbsolutePrestate(),
-            _maxGameDepth: cfg.faultGameMaxDepth(),
-            _splitDepth: cfg.faultGameSplitDepth(),
-            _clockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
-            _maxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
-            _vm: IBigStepper(mustGetAddress("RISCV")),
-            _weth: weth,
-            _anchorStateRegistry: anchorStateRegistry,
-            _l2ChainId: cfg.l2ChainID()
-        });
+        uint32 rawGameType = GameType.unwrap(_params.gameType);
+        IDisputeGame dg = IDisputeGame(
+            _deploy(
+                "FaultDisputeGame",
+                string.concat("FaultDisputeGame_", vm.toString(rawGameType)),
+                abi.encode(
+                    _params.gameType,
+                    _params.absolutePrestate,
+                    _params.maxGameDepth,
+                    cfg.faultGameSplitDepth(),
+                    cfg.faultGameClockExtension(),
+                    _params.maxClockDuration,
+                    _params.faultVm,
+                    _params.weth,
+                    _params.anchorStateRegistry,
+                    cfg.l2ChainID()
+                )
+            )
+        );
 
-        bytes memory data = abi.encodeCall(DisputeGameFactory.setImplementation, (GameTypes.ASTERISC, fdg));
-        _callViaSafe(address(factory), data);
+        bytes memory data = abi.encodeCall(IDisputeGameFactory.setImplementation, (_params.gameType, dg));
+        _callViaSafe(address(_factory), data);
 
         console.log(
-            "DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: ASTERISC | GameType: %s)",
-            vm.toString(GameType.unwrap(GameTypes.ASTERISC))
+            "DisputeGameFactoryProxy: set `FaultDisputeGame` implementation (Backend: Asterisc | GameType: %s)",
+            vm.toString(rawGameType)
         );
+    }
+
+    /// @notice Deploys a contract via CREATE2.
+    /// @param _name The name of the contract.
+    /// @param _constructorParams The constructor parameters.
+    function _deploy(string memory _name, bytes memory _constructorParams) internal returns (address addr_) {
+        return _deploy(_name, _name, _constructorParams);
+    }
+
+    /// @notice Deploys a contract via CREATE2.
+    /// @param _name The name of the contract.
+    /// @param _nickname The nickname of the contract.
+    /// @param _constructorParams The constructor parameters.
+    function _deploy(
+        string memory _name,
+        string memory _nickname,
+        bytes memory _constructorParams
+    )
+        internal
+        returns (address addr_)
+    {
+        console.log("Deploying %s", _nickname);
+        bytes32 salt = _implSalt();
+        bytes memory initCode = abi.encodePacked(vm.getCode(_name), _constructorParams);
+        address preComputedAddress = vm.computeCreate2Address(salt, keccak256(initCode));
+        require(preComputedAddress.code.length == 0, "Deploy: contract already deployed");
+        assembly {
+            addr_ := create2(0, add(initCode, 0x20), mload(initCode), salt)
+        }
+        require(addr_ != address(0), "deployment failed");
+        save(_nickname, addr_);
+        console.log("%s deployed at %s", _nickname, addr_);
     }
 }
