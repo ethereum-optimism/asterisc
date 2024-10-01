@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
+
 	"github.com/ethereum-optimism/optimism/cannon/serialize"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -259,4 +261,11 @@ func (s *VMState) Deserialize(in io.Reader) error {
 	}
 
 	return nil
+}
+
+func LoadVMStateFromFile(path string) (*VMState, error) {
+	if !serialize.IsBinaryFile(path) {
+		return jsonutil.LoadJSON[VMState](path)
+	}
+	return serialize.LoadSerializedBinary[VMState](path)
 }

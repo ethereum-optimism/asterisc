@@ -7,7 +7,6 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
-	"github.com/ethereum-optimism/optimism/cannon/serialize"
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 )
@@ -20,7 +19,7 @@ type WitnessOutput struct {
 func Witness(ctx *cli.Context) error {
 	input := ctx.Path(cannon.WitnessInputFlag.Name)
 	output := ctx.Path(cannon.WitnessOutputFlag.Name)
-	state, err := serialize.LoadSerializedBinary[fast.VMState](input)
+	state, err := fast.LoadVMStateFromFile(input)
 	if err != nil {
 		return fmt.Errorf("invalid input state (%v): %w", input, err)
 	}

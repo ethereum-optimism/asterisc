@@ -64,7 +64,7 @@ func Run(ctx *cli.Context) error {
 		defer profile.Start(profile.NoShutdownHook, profile.ProfilePath("."), profile.CPUProfile).Stop()
 	}
 
-	state, err := jsonutil.LoadJSON[fast.VMState](ctx.Path(cannon.RunInputFlag.Name))
+	state, err := fast.LoadVMStateFromFile(ctx.Path(cannon.RunInputFlag.Name))
 	if err != nil {
 		return err
 	}
