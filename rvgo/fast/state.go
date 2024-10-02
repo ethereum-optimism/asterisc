@@ -6,8 +6,7 @@ import (
 	"io"
 
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
-
-	"github.com/ethereum-optimism/optimism/cannon/serialize"
+	"github.com/ethereum-optimism/optimism/op-service/serialize"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"

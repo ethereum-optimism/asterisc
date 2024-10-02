@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"os"
 
 	"github.com/urfave/cli/v2"
 
@@ -12,37 +15,52 @@ import (
 )
 
 type WitnessOutput struct {
-	Witness   []byte   `json:"witness"`
-	StateHash [32]byte `json:"stateHash"`
+	Witness   hexutil.Bytes `json:"witness"`
+	StateHash common.Hash   `json:"stateHash"`
+	Step      uint64        `json:"step"`
+	Exited    bool          `json:"exited"`
+	ExitCode  uint8         `json:"exitCode"`
+	PC        uint64        `json:"pc"`
 }
 
 func Witness(ctx *cli.Context) error {
 	input := ctx.Path(cannon.WitnessInputFlag.Name)
-	output := ctx.Path(cannon.WitnessOutputFlag.Name)
+	witnessOutput := ctx.Path(cannon.WitnessOutputFlag.Name)
 	state, err := fast.LoadVMStateFromFile(input)
 	if err != nil {
 		return fmt.Errorf("invalid input state (%v): %w", input, err)
 	}
+
 	witness := state.EncodeWitness()
 	stateHash, err := witness.StateHash()
 	if err != nil {
-		return fmt.Errorf("failed to compute witness hash: %w", err)
+		return fmt.Errorf("invalid Witness (%v): %w", witness, err)
 	}
-	witnessOutput := &WitnessOutput{
-		Witness:   witness,
+
+	if witnessOutput != "" {
+		if err := os.WriteFile(witnessOutput, witness, OutFilePerm); err != nil {
+			return fmt.Errorf("writing output to %v: %w", witnessOutput, err)
+		}
+	}
+	output := &WitnessOutput{
+		Witness:   []byte(witness),
 		StateHash: stateHash,
+		Step:      state.GetStep(),
+		Exited:    state.Exited,
+		ExitCode:  state.ExitCode,
+		PC:        state.PC,
 	}
-	if err := jsonutil.WriteJSON(witnessOutput, ioutil.ToStdOutOrFileOrNoop(output, OutFilePerm)); err != nil {
-		return fmt.Errorf("failed to write witness output %w", err)
+
+	if err := jsonutil.WriteJSON(output, ioutil.ToStdOut()); err != nil {
+		return fmt.Errorf("failed to write response: %w", err)
 	}
-	fmt.Println(stateHash.Hex())
 	return nil
 }
 
 var WitnessCommand = &cli.Command{
 	Name:        "witness",
-	Usage:       "Convert an Asterisc JSON state into a binary witness",
-	Description: "Convert an Asterisc JSON state into a binary witness. The statehash is written to stdout",
+	Usage:       "Convert an Asterisc JSON/binary state into a binary witness",
+	Description: "Convert an Asterisc JSON/binary state into a binary witness. Basic Data about the state is printed to stdout in JSON format",
 	Action:      Witness,
 	Flags: []cli.Flag{
 		cannon.WitnessInputFlag,

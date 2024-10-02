@@ -95,7 +95,7 @@ func (h *AsteriscFactoryHelper) StartOutputAsteriscGame(ctx context.Context, l2N
 
 	return &OutputAsteriscGameHelper{
 		OutputCannonGameHelper: op_e2e_disputegame.OutputCannonGameHelper{
-			OutputGameHelper: *op_e2e_disputegame.NewOutputGameHelper(h.T, h.Require, h.Client, h.Opts, h.PrivKey, game, h.FactoryAddr, createdEvent.DisputeProxy, provider, h.System),
+			OutputGameHelper: *op_e2e_disputegame.NewOutputGameHelper(h.T, h.Require, h.Client, h.Opts, h.PrivKey, game, h.FactoryAddr, createdEvent.DisputeProxy, provider, h.System, h.AllocType),
 		},
 	}
 }
