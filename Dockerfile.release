@@ -1,4 +1,4 @@
-FROM golang:1.21.1-alpine3.18 AS builder
+FROM golang:1.22.7-alpine3.20 AS builder
 WORKDIR /build
 
 # Copy the context into the container
@@ -9,7 +9,7 @@ RUN apk add --no-cache git make bash
 
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build make
 
-FROM alpine:3.18 AS export
+FROM alpine:3.20 AS export
 
 RUN apk add --no-cache bash
 COPY --from=builder /build/rvgo/bin/asterisc /usr/local/bin/asterisc

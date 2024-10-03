@@ -2,11 +2,10 @@ module github.com/ethereum-optimism/asterisc
 
 go 1.22
 
-toolchain go1.22.1
+toolchain go1.22.7
 
-replace github.com/ethereum/go-ethereum v1.14.8 => github.com/ethereum-optimism/op-geth v1.101408.0-rc.4.0.20240827042333-110c433a2469
-
-replace github.com/ethereum-optimism/optimism v1.9.2 => github.com/testinprod-io/optimism v0.0.0-20241003225321-55d7533108f9
+replace github.com/ethereum/go-ethereum v1.14.11 => github.com/ethereum-optimism/op-geth v1.101408.1-0.20241002211323-d5a96613c22b
+replace github.com/ethereum-optimism/optimism v1.9.2 => github.com/testinprod-io/optimism v0.0.0-20241003231047-9d908ccbe262
 
 require (
 	github.com/ethereum-optimism/optimism v1.9.2

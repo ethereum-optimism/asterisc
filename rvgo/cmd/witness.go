@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -12,6 +10,8 @@ import (
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type WitnessOutput struct {
