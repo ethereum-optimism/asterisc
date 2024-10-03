@@ -96,10 +96,15 @@ devnet-allocs: devnet-allocs-monorepo prestate
 	./rvsol/scripts/devnet_allocs.sh
 .PHONY: devnet-allocs
 
-devnet-clean:
+devnet-clean-monorepo:
+	make -C $(MONOREPO_ROOT) devnet-clean
+.PHONY: devnet-clean-monorepo
+
+devnet-clean: devnet-clean-monorepo
 	rm -rf .devnet
-	rm -rf packages/contracts-bedrock/deployments
-	rm -rf packages/contracts-bedrock/deploy-config
+	rm -rf ./rvsol/devnetL1
+	rm -rf ./rvsol/deployments
+	rm -f ./rvsol/devnetL1.json
 .PHONY: devnet-clean
 
 reproducible-prestate:

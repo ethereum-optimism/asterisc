@@ -104,7 +104,7 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
-            - ".devnet"
+            - ".devnet-standard"
 
   go-mod-download-monorepo:
     docker:
@@ -246,19 +246,19 @@ jobs:
       - run:
           name: Load devnet-allocs
           command: |
-            mkdir -p .devnet
-            cp /tmp/workspace/.devnet/allocs-l1.json .devnet/allocs-l1.json
-            cp /tmp/workspace/.devnet/allocs-l2-delta.json .devnet/allocs-l2-delta.json
-            cp /tmp/workspace/.devnet/allocs-l2-ecotone.json .devnet/allocs-l2-ecotone.json
-            cp /tmp/workspace/.devnet/allocs-l2-fjord.json .devnet/allocs-l2-fjord.json
-            cp /tmp/workspace/.devnet/allocs-l2-granite.json .devnet/allocs-l2-granite.json
-            cp /tmp/workspace/.devnet/addresses.json .devnet/addresses.json
+            mkdir -p .devnet-standard
+            cp /tmp/workspace/.devnet-standard/allocs-l1.json .devnet-standard/allocs-l1.json
+            cp /tmp/workspace/.devnet-standard/allocs-l2-delta.json .devnet-standard/allocs-l2-delta.json
+            cp /tmp/workspace/.devnet-standard/allocs-l2-ecotone.json .devnet-standard/allocs-l2-ecotone.json
+            cp /tmp/workspace/.devnet-standard/allocs-l2-fjord.json .devnet-standard/allocs-l2-fjord.json
+            cp /tmp/workspace/.devnet-standard/allocs-l2-granite.json .devnet-standard/allocs-l2-granite.json
+            cp /tmp/workspace/.devnet-standard/addresses.json .devnet-standard/addresses.json
             cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json devnetL1.json
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
           working_directory: rvsol
       - run:
           name: Copy L1 Allocs
-          command: cp .devnet/allocs-l1.json allocs-l1.json
+          command: cp .devnet-standard/allocs-l1.json allocs-l1.json
           working_directory: rvsol
       - run:
           name: Generate allocs including asterisc
@@ -299,10 +299,10 @@ jobs:
       - run:
           name: Copy L2 Allocs
           command: |
-            cp .devnet/allocs-l2-delta.json .devnet-asterisc/allocs-l2-delta.json
-            cp .devnet/allocs-l2-ecotone.json .devnet-asterisc/allocs-l2-ecotone.json
-            cp .devnet/allocs-l2-fjord.json .devnet-asterisc/allocs-l2-fjord.json
-            cp .devnet/allocs-l2-granite.json .devnet-asterisc/allocs-l2-granite.json
+            cp .devnet-standard/allocs-l2-delta.json .devnet-asterisc/allocs-l2-delta.json
+            cp .devnet-standard/allocs-l2-ecotone.json .devnet-asterisc/allocs-l2-ecotone.json
+            cp .devnet-standard/allocs-l2-fjord.json .devnet-asterisc/allocs-l2-fjord.json
+            cp .devnet-standard/allocs-l2-granite.json .devnet-asterisc/allocs-l2-granite.json
           working_directory: rvsol
       - persist_to_workspace:
           root: rvsol
@@ -331,12 +331,12 @@ jobs:
           name: Load devnet-allocs
           command: |
             mkdir -p .devnet
-            cp /tmp/workspace/.devnet-asterisc/allocs-l1.json .devnet/allocs-l1.json
-            cp /tmp/workspace/.devnet-asterisc/allocs-l2-delta.json .devnet/allocs-l2-delta.json
-            cp /tmp/workspace/.devnet-asterisc/allocs-l2-ecotone.json .devnet/allocs-l2-ecotone.json
-            cp /tmp/workspace/.devnet-asterisc/allocs-l2-fjord.json .devnet/allocs-l2-fjord.json
-            cp /tmp/workspace/.devnet-asterisc/allocs-l2-granite.json .devnet/allocs-l2-granite.json
-            cp /tmp/workspace/.devnet-asterisc/addresses.json .devnet/addresses.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l1.json .devnet-standard/allocs-l1.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-delta.json .devnet-standard/allocs-l2-delta.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-ecotone.json .devnet-standard/allocs-l2-ecotone.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-fjord.json .devnet-standard/allocs-l2-fjord.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-granite.json .devnet-standard/allocs-l2-granite.json
+            cp /tmp/workspace/.devnet-asterisc/addresses.json .devnet-standard/addresses.json
             mkdir -p packages/contracts-bedrock
             cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock
             mkdir -p packages/contracts-bedrock/deployments/devnetL1

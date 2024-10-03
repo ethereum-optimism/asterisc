@@ -2,8 +2,8 @@ set -eo pipefail
 
 # Run at rvsol/
 
-# foundry pre-funded account #4: gnosis safe's owner(0x90F79bf6EB2c4f870365E785982E1f101E93b906)
-DEPLOY_PRIVATE_KEY="${DEPLOY_PRIVATE_KEY:-"0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"}"
+# foundry pre-funded account #10: finalSystemOwner(0xa0Ee7A142d267C1f36714E4a8F75612F20a79720)
+DEPLOY_PRIVATE_KEY="${DEPLOY_PRIVATE_KEY:-"0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"}"
 ASTERISC_PRESTATE="${ASTERISC_PRESTATE:-"/../rvgo/bin/prestate-proof.json"}"
 
 if [ -z "${TARGET_L2_DEPLOYMENT_FILE}" ]; then
