@@ -2,10 +2,10 @@ package fast
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"math/rand"
 	"strings"
 	"testing"
 
@@ -339,7 +339,7 @@ func TestMemoryReadWrite(t *testing.T) {
 	t.Run("large random", func(t *testing.T) {
 		m := NewMemory()
 		data := make([]byte, 20_000)
-		_, err := rand.Read(data[:])
+		_, err := cryptorand.Read(data[:])
 		require.NoError(t, err)
 		require.NoError(t, m.SetMemoryRange(0, bytes.NewReader(data)))
 		for _, i := range []uint64{0, 1, 2, 3, 4, 5, 6, 7, 1000, 3333, 4095, 4096, 4097, 20_000 - 32} {
