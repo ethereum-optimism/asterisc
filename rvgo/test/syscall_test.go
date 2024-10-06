@@ -476,8 +476,17 @@ func FuzzStateSyscallFcntl(f *testing.F) {
 		// Add 7 to fd to ensure fd > 6
 		testFcntl(t, fd+7, 3, pc, step, 0xFFFF_FFFF_FFFF_FFFF, 0x4d)
 
+		// Test F_GETFD
+		for _, fd := range []uint64{0, 1, 2, 3, 4, 5, 6} {
+			testFcntl(t, fd, 1, pc, step, 0, 0)
+		}
+
+		// Test F_GETFD for unsupported fds
+		// Add 7 to fd to ensure fd > 6
+		testFcntl(t, fd+7, 1, pc, step, 0xFFFF_FFFF_FFFF_FFFF, 0x4d)
+
 		// Test other commands
-		if cmd == 3 {
+		if cmd == 3 || cmd == 1 {
 			// Set arbitrary commands if cmd is F_GETFL
 			cmd = 4
 		}
