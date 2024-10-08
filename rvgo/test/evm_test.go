@@ -20,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/triedb"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 )
@@ -102,13 +103,12 @@ func newEVMEnv(t *testing.T, contracts *Contracts, addrs *Addresses) *vm.EVM {
 	bc := &dummyChain{startTime: *chainCfg.CancunTime + offsetBlocks*12}
 	header := bc.GetHeader(common.Hash{}, 17034870+offsetBlocks)
 	db := rawdb.NewMemoryDatabase()
-	statedb := state.NewDatabase(db)
-	state, err := state.New(types.EmptyRootHash, statedb, nil)
+	statedb, err := state.New(types.EmptyRootHash, state.NewDatabase(triedb.NewDatabase(db, nil), nil))
 	require.NoError(t, err)
-	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
+	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, statedb)
 	vmCfg := vm.Config{}
 
-	env := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
+	env := vm.NewEVM(blockContext, vm.TxContext{}, statedb, chainCfg, vmCfg)
 	env.StateDB.SetCode(addrs.RISCV, contracts.RISCV.DeployedBytecode.Object)
 	env.StateDB.SetCode(addrs.Oracle, contracts.Oracle.DeployedBytecode.Object)
 	env.StateDB.SetState(addrs.RISCV, common.Hash{}, common.BytesToHash(addrs.Oracle.Bytes())) // set storage slot pointing to preimage oracle

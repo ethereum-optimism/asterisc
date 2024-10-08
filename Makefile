@@ -68,8 +68,8 @@ fuzz-mac:
 OP_PROGRAM_PATH ?= $(MONOREPO_ROOT)/op-program/bin-riscv/op-program-client-riscv.elf
 
 prestate: build-rvgo op-program-riscv
-	./rvgo/bin/asterisc load-elf --path $(OP_PROGRAM_PATH) --out ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json
-	./rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input ./rvgo/bin/prestate.json --meta ./rvgo/bin/meta.json --proof-fmt './rvgo/bin/%d.json' --output ""
+	./rvgo/bin/asterisc load-elf --path $(OP_PROGRAM_PATH) --out ./rvgo/bin/prestate.bin.gz --meta ./rvgo/bin/meta.json
+	./rvgo/bin/asterisc run --proof-at '=0' --stop-at '=1' --input ./rvgo/bin/prestate.bin.gz --meta ./rvgo/bin/meta.json --proof-fmt './rvgo/bin/%d.json' --output ""
 	mv ./rvgo/bin/0.json ./rvgo/bin/prestate-proof.json
 .PHONY: prestate
 
@@ -96,10 +96,16 @@ devnet-allocs: devnet-allocs-monorepo prestate
 	./rvsol/scripts/devnet_allocs.sh
 .PHONY: devnet-allocs
 
-devnet-clean:
+devnet-clean-monorepo:
+	make -C $(MONOREPO_ROOT) devnet-clean
+.PHONY: devnet-clean-monorepo
+
+devnet-clean: devnet-clean-monorepo
 	rm -rf .devnet
-	rm -rf packages/contracts-bedrock/deployments
-	rm -rf packages/contracts-bedrock/deploy-config
+	rm -rf .devnet-standard
+	rm -rf ./rvsol/devnetL1
+	rm -rf ./rvsol/deployments
+	rm -f ./rvsol/devnetL1.json
 .PHONY: devnet-clean
 
 reproducible-prestate:

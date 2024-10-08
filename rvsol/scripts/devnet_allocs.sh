@@ -12,7 +12,7 @@ cp -r ${MONOREPO_ROOT}/packages/contracts-bedrock/deployments/devnetL1 packages/
 # Generate L1 Allocs including asterisc
 # copy everything locally due to foundry permission issues
 cp ./rvgo/bin/prestate-proof.json ./rvsol/prestate-proof.json
-cp -r packages/contracts-bedrock/deployments/devnetL1 ./rvsol/devnetL1
+cp -r packages/contracts-bedrock/deployments/devnetL1 ./rvsol
 cp packages/contracts-bedrock/deploy-config/devnetL1.json ./rvsol/devnetL1.json
 cp .devnet/allocs-l1.json ./rvsol/allocs-l1.json
 cd ./rvsol && ASTERISC_PRESTATE=./prestate-proof.json \
@@ -28,5 +28,7 @@ jq -s '.[0] * .[1]' ./rvsol/devnetL1/.deploy ./rvsol/deployments/devnetL1/.deplo
 cp ./rvsol/allocs-l1-asterisc.json .devnet/allocs-l1.json
 # Patch .deploy
 cp .devnet/addresses.json packages/contracts-bedrock/deployments/devnetL1/.deploy
+# move devnet to devnet-standard
+cp -r .devnet .devnet-standard
 # Remove tmps
 cd rvsol && rm -rf prestate-proof.json devnetL1 devnetL1.json allocs-l1.json deployments ./allocs-l1-asterisc.json

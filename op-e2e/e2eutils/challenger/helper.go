@@ -43,7 +43,7 @@ func applyAsteriscConfig(
 	root := op_e2e_challenger.FindMonorepoRoot(t)
 	c.Asterisc.VmBin = root + "rvgo/bin/asterisc"
 	c.Asterisc.Server = root + "rvsol/lib/optimism/op-program/bin/op-program"
-	c.AsteriscAbsolutePreState = root + "rvgo/bin/prestate.json"
+	c.AsteriscAbsolutePreState = root + "rvgo/bin/prestate.bin.gz"
 	c.Asterisc.SnapshotFreq = 10_000_000
 
 	genesisBytes, err := json.Marshal(l2Genesis)

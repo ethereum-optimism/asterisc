@@ -42,7 +42,7 @@ $absolute_python_path capture.py
 # Capture preimages
 rm -f ./test-data.tar.gz
 mkdir -p ./test-data/preimages
-mv state.json ./test-data/
+mv state.bin.gz ./test-data/
 mv meta.json ./test-data/
 ./capture_cmd.sh
 tar -czvf test-data.tar.gz ./test-data
