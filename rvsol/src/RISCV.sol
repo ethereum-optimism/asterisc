@@ -994,6 +994,42 @@ contract RISCV {
                     let out := 0
                     let errCode := 0
                     switch cmd
+                    case 0x1 {
+                        // F_GETFD: get file descriptor flags
+                        switch fd
+                        case 0 {
+                            // stdin
+                            out := toU64(0) // no flag set
+                        }
+                        case 1 {
+                            // stdout
+                            out := toU64(0) // no flag set
+                        }
+                        case 2 {
+                            // stderr
+                            out := toU64(0) // no flag set
+                        }
+                        case 3 {
+                            // hint-read
+                            out := toU64(0) // no flag set
+                        }
+                        case 4 {
+                            // hint-write
+                            out := toU64(0) // no flag set
+                        }
+                        case 5 {
+                            // pre-image read
+                            out := toU64(0) // no flag set
+                        }
+                        case 6 {
+                            // pre-image write
+                            out := toU64(0) // no flag set
+                        }
+                        default {
+                            out := u64Mask()
+                            errCode := toU64(0x4d) //EBADF
+                        }
+                    }
                     case 0x3 {
                         // F_GETFL: get file descriptor flags
                         switch fd
