@@ -102,18 +102,13 @@ devnet-clean-monorepo:
 
 devnet-clean: devnet-clean-monorepo
 	rm -rf .devnet
+	rm -rf .devnet-standard
 	rm -rf ./rvsol/devnetL1
 	rm -rf ./rvsol/deployments
 	rm -f ./rvsol/devnetL1.json
 .PHONY: devnet-clean
 
 reproducible-prestate:
-	@head -n 1 rvsol/lib/optimism/op-program/Dockerfile.repro > temp.repro && \
-	tail -n +2 Dockerfile.repro >> temp.repro && \
-	mv temp.repro Dockerfile.repro
-	@GO_VERSION=$$(go mod edit -json rvsol/lib/optimism/go.mod | jq -r '.Go'); \
-	echo "Updating Go version to $$GO_VERSION"; \
-	go mod edit -go=$$GO_VERSION;
 	@docker build --output ./bin/ --progress plain -f Dockerfile.repro .
 	@echo "Absolute prestate hash:"
 	@cat ./bin/prestate.json | jq -r .stateHash

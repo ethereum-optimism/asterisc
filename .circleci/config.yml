@@ -384,6 +384,7 @@ jobs:
       - run:
           name: Checkout asterisc to correct commit
           command: |
+            # we need to use proper asterisc version that works with specific op-program version 
             cp prestates.json temp.json
             git checkout "<<parameters.asterisc-commit>>"
             cp -f temp.json prestates.json
