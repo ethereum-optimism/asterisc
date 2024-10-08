@@ -94,7 +94,8 @@ contract Deploy is Deployer, StdAssertions {
             SystemConfig: getAddress("SystemConfigProxy"),
             L1ERC721Bridge: getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
-            SuperchainConfig: getAddress("SuperchainConfigProxy")
+            SuperchainConfig: getAddress("SuperchainConfigProxy"),
+            OPContractsManager: getAddress("OPContractsManagerProxy")
         });
     }
 
