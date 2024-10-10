@@ -1,10 +1,10 @@
 package riscv
 
 const (
-	SysExitGroup        = 94
-	SysMmap             = 222
-	SysRead             = 63
-	SysWrite            = 64
+	SysExitGroup = 94
+	SysMmap      = 222
+	SysRead      = 63
+	SysWrite     = 64
 
 	FdStdin         = 0
 	FdStdout        = 1

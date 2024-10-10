@@ -16,10 +16,6 @@ func shortToU64(v uint16) U64 {
 	return uint64(v)
 }
 
-func shortToU256(v uint16) U256 {
-	return *uint256.NewInt(uint64(v))
-}
-
 // nolint:unused
 func longToU256(v uint64) U256 {
 	return *uint256.NewInt(v)

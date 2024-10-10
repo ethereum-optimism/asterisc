@@ -64,7 +64,6 @@ func runSlow(t *testing.T, stepWitness *fast.StepWitness, fastPost fast.StateWit
 		require.NoError(t, err)
 		require.Equal(t, fastPostHash, slowPostHash, "fast VM produced different state than slow VM")
 	}
-
 }
 
 func errCodeToByte32(errCode uint64) []byte {
@@ -74,7 +73,7 @@ func errCodeToByte32(errCode uint64) []byte {
 func TestStateSyscallUnsupported(t *testing.T) {
 	contracts := testContracts(t)
 	addrs := testAddrs
-	syscalls := []int{ 0xFF }
+	syscalls := []int{0xFF}
 
 	for _, syscall := range syscalls {
 		t.Run(fmt.Sprintf("sys_%d", syscall), func(t *testing.T) {
@@ -533,7 +532,7 @@ func FuzzStatePreimageRead(f *testing.F) {
 		require.Equal(t, false, state.Exited)
 		if writeLen > 0 {
 			// Memory may be unchanged if we're writing the first zero-valued 7 bytes of the pre-image.
-			//require.NotEqual(t, preStateRoot, state.Memory.MerkleRoot())
+			// require.NotEqual(t, preStateRoot, state.Memory.MerkleRoot())
 			require.Greater(t, state.PreimageOffset, preimageOffset)
 		} else {
 			require.Equal(t, preStateRoot, state.Memory.MerkleRoot())
