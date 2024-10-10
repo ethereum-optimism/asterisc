@@ -1596,19 +1596,20 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_ecall_succeeds() public {
-        // some syscalls are not supported
-        // lets choose unsupported syscall clone just for testing functionality
         uint16 imm = 0x0;
         uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
         uint64 pc = 0x1337;
         (State memory state, bytes memory proof) = constructRISCVState(pc, insn);
-        state.registers[17] = 220; // syscall number of clone
+        state.registers[10] = 1;
+        state.registers[17] = 94; // syscall number of exit-group
         bytes memory encodedState = encodeState(state);
 
         State memory expect;
         expect.memRoot = state.memRoot;
         expect.pc = state.pc + 4;
         expect.step = state.step + 1;
+        expect.exited = true;
+        expect.exitCode = 1;
         expect.registers[10] = 1;
         expect.registers[11] = 0;
         expect.registers[17] = state.registers[17];
@@ -2375,18 +2376,6 @@ contract RISCV_Test is CommonTest {
         proof = hex"00"; // Invalid memory proof
 
         vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000badf00d1");
-        riscv.step(encodedState, proof, 0);
-    }
-
-    function test_unrecognized_resource_limit() public {
-        uint16 imm = 0x0;
-        uint32 insn = encodeIType(0x73, 0, 0, 0, imm); // ecall
-        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
-        state.registers[17] = 163;
-        state.registers[10] = 0;
-        bytes memory encodedState = encodeState(state);
-
-        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000000f0012");
         riscv.step(encodedState, proof, 0);
     }
 

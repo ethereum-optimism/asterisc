@@ -869,28 +869,11 @@ contract RISCV {
             function sysCall(localContext_) {
                 let a7 := getRegister(toU64(17))
                 switch a7
-                case 93 {
-                    // exit the calling thread. No multi-thread support yet, so just exit.
-                    let a0 := getRegister(toU64(10))
-                    setExitCode(and(a0, 0xff))
-                    setExited()
-                    // program stops here, no need to change registers.
-                }
                 case 94 {
                     // exit-group
                     let a0 := getRegister(toU64(10))
                     setExitCode(and(a0, 0xff))
                     setExited()
-                }
-                case 214 {
-                    // brk
-                    // Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set
-                    // to 0.
-
-                    // brk(0) changes nothing about the memory, and returns the current page break
-                    let v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
-                    setRegister(toU64(10), v)
-                    setRegister(toU64(11), toU64(0)) // no error
                 }
                 case 222 {
                     // mmap
@@ -986,141 +969,6 @@ contract RISCV {
                     }
                     setRegister(toU64(10), n)
                     setRegister(toU64(11), errCode)
-                }
-                case 25 {
-                    // fcntl - file descriptor manipulation / info lookup
-                    let fd := getRegister(toU64(10)) // A0 = fd
-                    let cmd := getRegister(toU64(11)) // A1 = cmd
-                    let out := 0
-                    let errCode := 0
-                    switch cmd
-                    case 0x1 {
-                        // F_GETFD: get file descriptor flags
-                        switch fd
-                        case 0 {
-                            // stdin
-                            out := toU64(0) // no flag set
-                        }
-                        case 1 {
-                            // stdout
-                            out := toU64(0) // no flag set
-                        }
-                        case 2 {
-                            // stderr
-                            out := toU64(0) // no flag set
-                        }
-                        case 3 {
-                            // hint-read
-                            out := toU64(0) // no flag set
-                        }
-                        case 4 {
-                            // hint-write
-                            out := toU64(0) // no flag set
-                        }
-                        case 5 {
-                            // pre-image read
-                            out := toU64(0) // no flag set
-                        }
-                        case 6 {
-                            // pre-image write
-                            out := toU64(0) // no flag set
-                        }
-                        default {
-                            out := u64Mask()
-                            errCode := toU64(0x4d) //EBADF
-                        }
-                    }
-                    case 0x3 {
-                        // F_GETFL: get file descriptor flags
-                        switch fd
-                        case 0 {
-                            // stdin
-                            out := toU64(0) // O_RDONLY
-                        }
-                        case 1 {
-                            // stdout
-                            out := toU64(1) // O_WRONLY
-                        }
-                        case 2 {
-                            // stderr
-                            out := toU64(1) // O_WRONLY
-                        }
-                        case 3 {
-                            // hint-read
-                            out := toU64(0) // O_RDONLY
-                        }
-                        case 4 {
-                            // hint-write
-                            out := toU64(1) // O_WRONLY
-                        }
-                        case 5 {
-                            // pre-image read
-                            out := toU64(0) // O_RDONLY
-                        }
-                        case 6 {
-                            // pre-image write
-                            out := toU64(1) // O_WRONLY
-                        }
-                        default {
-                            out := u64Mask()
-                            errCode := toU64(0x4d) // EBADF
-                        }
-                    }
-                    default {
-                        // no other commands: don't allow changing flags, duplicating FDs, etc.
-                        out := u64Mask()
-                        errCode := toU64(0x16) // EINVAL (cmd not recognized by this kernel)
-                    }
-                    setRegister(toU64(10), out)
-                    setRegister(toU64(11), errCode) // EBADF
-                }
-                case 56 {
-                    // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
-                    setRegister(toU64(10), u64Mask())
-                    setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
-                }
-                case 113 {
-                    // clock_gettime
-                    let addr := getRegister(toU64(11)) // addr of timespec struct
-                    // write 1337s + 42ns as time
-                    let value := or(shortToU256(1337), shl(shortToU256(64), toU256(42)))
-                    storeMemUnaligned(addr, toU64(16), value, 1, 2)
-                    setRegister(toU64(10), toU64(0))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 220 {
-                    // clone - not supported
-                    setRegister(toU64(10), toU64(1))
-                    setRegister(toU64(11), toU64(0))
-                }
-                case 163 {
-                    // getrlimit
-                    let res := getRegister(toU64(10))
-                    let addr := getRegister(toU64(11))
-                    switch res
-                    case 0x7 {
-                        // RLIMIT_NOFILE
-                        // first 8 bytes: soft limit. 1024 file handles max open
-                        // second 8 bytes: hard limit
-                        storeMemUnaligned(
-                            addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2
-                        )
-                        setRegister(toU64(10), toU64(0))
-                        setRegister(toU64(11), toU64(0))
-                    }
-                    default { revertWithCode(0xf0012) } // unrecognized resource limit lookup
-                }
-                case 261 {
-                    // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
-                    revertWithCode(0xf001ca11) // unsupported system call
-                }
-                case 422 {
-                    // futex - not supported, for now
-                    revertWithCode(0xf001ca11) // unsupported system call
-                }
-                case 101 {
-                    // nanosleep - not supported, for now
-                    revertWithCode(0xf001ca11) // unsupported system call
                 }
                 default {
                     // Ignore(no-op) unsupported system calls

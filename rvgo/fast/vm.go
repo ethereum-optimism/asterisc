@@ -204,39 +204,6 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		return out
 	}
 
-	storeMemUnaligned := func(addr U64, size U64, value U256, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
-		if size > 32 {
-			revertWithCode(riscv.ErrStoreExceeds32Bytes, fmt.Errorf("cannot store more than 32 bytes: %d", size))
-		}
-		var bytez [32]byte
-		binary.LittleEndian.PutUint64(bytez[:8], value[0])
-		binary.LittleEndian.PutUint64(bytez[8:16], value[1])
-		binary.LittleEndian.PutUint64(bytez[16:24], value[2])
-		binary.LittleEndian.PutUint64(bytez[24:], value[3])
-
-		leftAddr := addr &^ 31
-		if verifyL {
-			inst.trackMemAccess(leftAddr, proofIndexL)
-		}
-		inst.verifyMemChange(leftAddr, proofIndexL)
-		if (addr+size-1)&^31 == addr&^31 { // if aligned
-			s.Memory.SetUnaligned(addr, bytez[:size])
-			return
-		}
-		if proofIndexR == 0xff {
-			revertWithCode(riscv.ErrUnexpectedRProofStoreUnaligned, fmt.Errorf("unexpected need for right-side proof %d in storeMemUnaligned", proofIndexR))
-		}
-		// if not aligned
-		rightAddr := leftAddr + 32
-		leftSize := rightAddr - addr
-		s.Memory.SetUnaligned(addr, bytez[:leftSize])
-		if verifyR {
-			inst.trackMemAccess(rightAddr, proofIndexR)
-		}
-		inst.verifyMemChange(rightAddr, proofIndexR)
-		s.Memory.SetUnaligned(rightAddr, bytez[leftSize:size])
-	}
-
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
 		if size > 8 {
 			revertWithCode(riscv.ErrStoreExceeds8Bytes, fmt.Errorf("cannot store more than 8 bytes: %d", size))
@@ -368,22 +335,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	sysCall := func() {
 		a7 := getRegister(toU64(17))
 		switch a7 {
-		case riscv.SysExit: // exit the calling thread. No multi-thread support yet, so just exit.
-			a0 := getRegister(toU64(10))
-			setExitCode(uint8(a0))
-			setExited()
-			// program stops here, no need to change registers.
 		case riscv.SysExitGroup: // exit-group
 			a0 := getRegister(toU64(10))
 			setExitCode(uint8(a0))
 			setExited()
-		case riscv.SysBrk: // brk
-			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
-
-			// brk(0) changes nothing about the memory, and returns the current page break
-			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
-			setRegister(toU64(10), v)
-			setRegister(toU64(11), toU64(0)) // no error
 		case riscv.SysMmap: // mmap
 			// A0 = addr (hint)
 			addr := getRegister(toU64(10))
@@ -480,90 +435,6 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 			setRegister(toU64(10), n)
 			setRegister(toU64(11), errCode)
-		case riscv.SysFcntl: // fcntl - file descriptor manipulation / info lookup
-			fd := getRegister(toU64(10))  // A0 = fd
-			cmd := getRegister(toU64(11)) // A1 = cmd
-			var out U64
-			var errCode U64
-			switch cmd {
-			case 0x1: // F_GETFD: get file descriptor flags
-				switch fd {
-				case 0: // stdin
-					out = toU64(0) // no flag set
-				case 1: // stdout
-					out = toU64(0) // no flag set
-				case 2: // stderr
-					out = toU64(0) // no flag set
-				case 3: // hint-read
-					out = toU64(0) // no flag set
-				case 4: // hint-write
-					out = toU64(0) // no flag set
-				case 5: // pre-image read
-					out = toU64(0) // no flag set
-				case 6: // pre-image write
-					out = toU64(0) // no flag set
-				default:
-					out = u64Mask()
-					errCode = toU64(0x4d) //EBADF
-				}
-			case 0x3: // F_GETFL: get file descriptor flags
-				switch fd {
-				case 0: // stdin
-					out = toU64(0) // O_RDONLY
-				case 1: // stdout
-					out = toU64(1) // O_WRONLY
-				case 2: // stderr
-					out = toU64(1) // O_WRONLY
-				case 3: // hint-read
-					out = toU64(0) // O_RDONLY
-				case 4: // hint-write
-					out = toU64(1) // O_WRONLY
-				case 5: // pre-image read
-					out = toU64(0) // O_RDONLY
-				case 6: // pre-image write
-					out = toU64(1) // O_WRONLY
-				default:
-					out = u64Mask()
-					errCode = toU64(0x4d) // EBADF
-				}
-			default: // no other commands: don't allow changing flags, duplicating FDs, etc.
-				out = u64Mask()
-				errCode = toU64(0x16) // EINVAL (cmd not recognized by this kernel)
-			}
-			setRegister(toU64(10), out)
-			setRegister(toU64(11), errCode) // EBADF
-		case riscv.SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
-			setRegister(toU64(10), u64Mask())
-			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
-		case riscv.SysClockGettime: // clock_gettime
-			addr := getRegister(toU64(11)) // addr of timespec struct
-			// write 1337s + 42ns as time
-			value := or(shortToU256(1337), shl(shortToU256(64), toU256(42)))
-			storeMemUnaligned(addr, toU64(16), value, 1, 2, true, true)
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysClone: // clone - not supported
-			setRegister(toU64(10), toU64(1))
-			setRegister(toU64(11), toU64(0))
-		case riscv.SysGetrlimit: // getrlimit
-			res := getRegister(toU64(10))
-			addr := getRegister(toU64(11))
-			switch res {
-			case 0x7: // RLIMIT_NOFILE
-				// first 8 bytes: soft limit. 1024 file handles max open
-				// second 8 bytes: hard limit
-				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2, true, true)
-				setRegister(toU64(10), toU64(0))
-				setRegister(toU64(11), toU64(0))
-			default:
-				revertWithCode(riscv.ErrUnrecognizedResource, &UnrecognizedResourceErr{Resource: res})
-			}
-		case riscv.SysPrlimit64: // prlimit64 -- unsupported, we have getrlimit, is prlimit64 even called?
-			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
-		case riscv.SysFutex: // futex - not supported, for now
-			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
-		case riscv.SysNanosleep: // nanosleep - not supported, for now
-			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			// Ignore(no-op) unsupported system calls
 			setRegister(toU64(10), toU64(0))
