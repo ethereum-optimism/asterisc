@@ -23,30 +23,35 @@ type SmallRadixNode[C RadixNode] struct {
 	Depth       uint64           // The depth of this node in the trie (number of bits from the root).
 }
 
-// LargeRadixNode is a radix trie node with a branching factor of 8 bits.
-type LargeRadixNode[C RadixNode] struct {
-	Children    [1 << 8]*C // Array of child nodes, indexed by 8-bit keys.
-	Hashes      [1 << 8][32]byte
-	ChildExists [(1 << 8) / 64]uint64
-	HashValid   [(1 << 8) / 64]uint64
+// MediumRadixNode is a radix trie node with a branching factor of 6 bits.
+type MediumRadixNode[C RadixNode] struct {
+	Children    [1 << 6]*C // Array of child nodes, indexed by 6-bit keys.
+	Hashes      [1 << 6][32]byte
+	ChildExists uint64
+	HashValid   uint64
 	Depth       uint64
 }
 
-// Define a sequence of radix trie node types (L1 to L11) representing different levels in the trie.
-// Each level corresponds to a node type, where L1 is the root node and L11 is the leaf level pointing to Memory.
-// The cumulative bit-lengths of the addresses represented by the nodes from L1 to L11 add up to 52 bits.
+// LargeRadixNode is a radix trie node with a branching factor of 16 bits.
+type LargeRadixNode[C RadixNode] struct {
+	Children    [1 << 16]*C // Array of child nodes, indexed by 16-bit keys.
+	Hashes      [1 << 16][32]byte
+	ChildExists [(1 << 16) / 64]uint64
+	HashValid   [(1 << 16) / 64]uint64
+	Depth       uint64
+}
 
-type L1 = SmallRadixNode[L2]
-type L2 = *SmallRadixNode[L3]
-type L3 = *SmallRadixNode[L4]
-type L4 = *SmallRadixNode[L5]
+// Define a sequence of radix trie node types (L1 to L7) representing different levels in the trie.
+// Each level corresponds to a node type, where L1 is the root node and L7 is the leaf level pointing to Memory.
+// The cumulative bit-lengths of the addresses represented by the nodes from L1 to L7 add up to 52 bits.
+
+type L1 = LargeRadixNode[L2]
+type L2 = *LargeRadixNode[L3]
+type L3 = *MediumRadixNode[L4]
+type L4 = *MediumRadixNode[L5]
 type L5 = *SmallRadixNode[L6]
 type L6 = *SmallRadixNode[L7]
-type L7 = *SmallRadixNode[L8]
-type L8 = *LargeRadixNode[L9]
-type L9 = *LargeRadixNode[L10]
-type L10 = *LargeRadixNode[L11]
-type L11 = *Memory
+type L7 = *Memory
 
 // InvalidateNode invalidates the hash cache along the path to the specified address.
 // It marks the necessary child hashes as invalid, forcing them to be recomputed when needed.
@@ -63,10 +68,22 @@ func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
 	}
 }
 
-func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
-	childIdx := addressToRadixPath(addr, n.Depth, 8)
+func (n *MediumRadixNode[C]) InvalidateNode(addr uint64) {
+	childIdx := addressToRadixPath(addr, n.Depth, 6)
 
-	branchIdx := (childIdx + 1<<8) / 2
+	branchIdx := (childIdx + 1<<6) / 2
+
+	for index := branchIdx; index > 0; index >>= 1 {
+		hashBit := index & 63
+		n.ChildExists |= 1 << hashBit
+		n.HashValid &= ^(1 << hashBit)
+	}
+}
+
+func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
+	childIdx := addressToRadixPath(addr, n.Depth, 16)
+
+	branchIdx := (childIdx + 1<<16) / 2
 
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashIndex := index >> 6
@@ -104,16 +121,33 @@ func (n *SmallRadixNode[C]) GenerateProof(addr uint64, proofs [][32]byte) {
 	}
 }
 
-func (n *LargeRadixNode[C]) GenerateProof(addr uint64, proofs [][32]byte) {
-	path := addressToRadixPath(addr, n.Depth, 8)
+func (n *MediumRadixNode[C]) GenerateProof(addr uint64, proofs [][32]byte) {
+	path := addressToRadixPath(addr, n.Depth, 6)
 
 	if n.Children[path] == nil {
-		fillZeroHashRange(proofs, 0, 60-n.Depth-8)
+		fillZeroHashRange(proofs, 0, 60-n.Depth-6)
 	} else {
 		(*n.Children[path]).GenerateProof(addr, proofs)
 	}
-	proofIndex := 60 - n.Depth - 8
-	for idx := path + 1<<8; idx > 1; idx >>= 1 {
+
+	proofIndex := 60 - n.Depth - 6
+	for idx := path + 1<<6; idx > 1; idx >>= 1 {
+		sibling := idx ^ 1
+		proofs[proofIndex] = n.MerkleizeNode(addr>>(64-n.Depth), sibling)
+		proofIndex += 1
+	}
+}
+
+func (n *LargeRadixNode[C]) GenerateProof(addr uint64, proofs [][32]byte) {
+	path := addressToRadixPath(addr, n.Depth, 16)
+
+	if n.Children[path] == nil {
+		fillZeroHashRange(proofs, 0, 60-n.Depth-16)
+	} else {
+		(*n.Children[path]).GenerateProof(addr, proofs)
+	}
+	proofIndex := 60 - n.Depth - 16
+	for idx := path + 1<<16; idx > 1; idx >>= 1 {
 		sibling := idx ^ 1
 		proofs[proofIndex] = n.MerkleizeNode(addr>>(64-n.Depth), sibling)
 		proofIndex += 1
@@ -146,7 +180,6 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	// Leaf node of the radix trie (17~32)
 	if depth > 4 {
 		childIndex := gindex - 1<<4
-
 		if n.Children[childIndex] == nil {
 			// Return zero hash if child does not exist.
 			return zeroHashes[64-5+1-(depth+n.Depth)]
@@ -159,8 +192,54 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 		return (*n.Children[childIndex]).MerkleizeNode(addr, 1)
 	}
 
-	// Intermediate node of the radix trie (0~16)
+	// Intermediate node of the radix trie (0~15)
 	hashBit := gindex & 15
+
+	if (n.ChildExists & (1 << hashBit)) != 0 {
+		if (n.HashValid & (1 << hashBit)) != 0 {
+			// Return the cached hash if valid.
+			return n.Hashes[gindex]
+		} else {
+			left := n.MerkleizeNode(addr, gindex<<1)
+			right := n.MerkleizeNode(addr, (gindex<<1)|1)
+
+			// Hash the pair and cache the result.
+			r := HashPair(left, right)
+			n.Hashes[gindex] = r
+			n.HashValid |= 1 << hashBit
+			return r
+		}
+	} else {
+		// Return zero hash for non-existent child.
+		return zeroHashes[64-5+1-(depth+n.Depth)]
+	}
+}
+
+func (n *MediumRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
+	depth := uint64(bits.Len64(gindex)) // Get the depth of the current gindex.
+
+	if depth > 7 {
+		panic("gindex too deep")
+	}
+
+	// Leaf node of the radix trie (64~128)
+	if depth > 6 {
+		childIndex := gindex - 1<<6
+
+		if n.Children[childIndex] == nil {
+			// Return zero hash if child does not exist.
+			return zeroHashes[64-5+1-(depth+n.Depth)]
+		}
+
+		// Update the partial address by appending the child index bits.
+		// This accumulates the address as we traverse deeper into the trie.
+		addr <<= 6
+		addr |= childIndex
+		return (*n.Children[childIndex]).MerkleizeNode(addr, 1)
+	}
+
+	// Intermediate node of the radix trie (0~16)
+	hashBit := gindex & 63
 
 	if (n.ChildExists & (1 << hashBit)) != 0 {
 		if (n.HashValid & (1 << hashBit)) != 0 {
@@ -185,23 +264,23 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 func (n *LargeRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	depth := uint64(bits.Len64(gindex))
 
-	if depth > 9 {
+	if depth > 17 {
 		panic("gindex too deep")
 	}
 
-	// Leaf node of the radix trie (2^8~2^16)
-	if depth > 8 {
-		childIndex := gindex - 1<<8
+	// Leaf node of the radix trie (2^15~2^16)
+	if depth > 16 {
+		childIndex := gindex - 1<<16
 		if n.Children[int(childIndex)] == nil {
 			return zeroHashes[64-5+1-(depth+n.Depth)]
 		}
 
-		addr <<= 8
+		addr <<= 16
 		addr |= childIndex
 		return (*n.Children[childIndex]).MerkleizeNode(addr, 1)
 	}
 
-	// Intermediate node of the radix trie (0~2^7)
+	// Intermediate node of the radix trie (0~2^15)
 	hashIndex := gindex >> 6
 	hashBit := gindex & 63
 	if (n.ChildExists[hashIndex] & (1 << hashBit)) != 0 {
@@ -304,80 +383,46 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 	radixLevel1 := m.radix
 	depth += m.branchFactors[0]
 	if (*radixLevel1).Children[branchPaths[0]] == nil {
-		node := &SmallRadixNode[L3]{Depth: depth}
+		node := &LargeRadixNode[L3]{Depth: depth}
 		(*radixLevel1).Children[branchPaths[0]] = &node
 	}
-	radixLevel1.InvalidateNode(addr)
+	(*radixLevel1).InvalidateNode(addr)
 
-	radixLevel2 := (*radixLevel1).Children[branchPaths[0]]
+	radixLevel2 := *(*radixLevel1).Children[branchPaths[0]]
 	depth += m.branchFactors[1]
-	if (*radixLevel2).Children[branchPaths[1]] == nil {
-		node := &SmallRadixNode[L4]{Depth: depth}
-		(*radixLevel2).Children[branchPaths[1]] = &node
+	if (radixLevel2).Children[branchPaths[1]] == nil {
+		node := &MediumRadixNode[L4]{Depth: depth}
+		(radixLevel2).Children[branchPaths[1]] = &node
 	}
-	(*radixLevel2).InvalidateNode(addr)
+	(radixLevel2).InvalidateNode(addr)
 
-	radixLevel3 := (*radixLevel2).Children[branchPaths[1]]
+	radixLevel3 := *(*radixLevel2).Children[branchPaths[1]]
 	depth += m.branchFactors[2]
-	if (*radixLevel3).Children[branchPaths[2]] == nil {
-		node := &SmallRadixNode[L5]{Depth: depth}
-		(*radixLevel3).Children[branchPaths[2]] = &node
+	if (radixLevel3).Children[branchPaths[2]] == nil {
+		node := &MediumRadixNode[L5]{Depth: depth}
+		(radixLevel3).Children[branchPaths[2]] = &node
 	}
-	(*radixLevel3).InvalidateNode(addr)
+	(radixLevel3).InvalidateNode(addr)
 
-	radixLevel4 := (*radixLevel3).Children[branchPaths[2]]
+	radixLevel4 := *(*radixLevel3).Children[branchPaths[2]]
 	depth += m.branchFactors[3]
-	if (*radixLevel4).Children[branchPaths[3]] == nil {
+	if (radixLevel4).Children[branchPaths[3]] == nil {
 		node := &SmallRadixNode[L6]{Depth: depth}
-		(*radixLevel4).Children[branchPaths[3]] = &node
+		(radixLevel4).Children[branchPaths[3]] = &node
 	}
-	(*radixLevel4).InvalidateNode(addr)
+	(radixLevel4).InvalidateNode(addr)
 
-	radixLevel5 := (*radixLevel4).Children[branchPaths[3]]
+	radixLevel5 := *(*radixLevel4).Children[branchPaths[3]]
 	depth += m.branchFactors[4]
-	if (*radixLevel5).Children[branchPaths[4]] == nil {
+	if (radixLevel5).Children[branchPaths[4]] == nil {
 		node := &SmallRadixNode[L7]{Depth: depth}
-		(*radixLevel5).Children[branchPaths[4]] = &node
+		(radixLevel5).Children[branchPaths[4]] = &node
 	}
-	(*radixLevel5).InvalidateNode(addr)
+	(radixLevel5).InvalidateNode(addr)
 
-	radixLevel6 := (*radixLevel5).Children[branchPaths[4]]
-	depth += m.branchFactors[5]
-	if (*radixLevel6).Children[branchPaths[5]] == nil {
-		node := &SmallRadixNode[L8]{Depth: depth}
-		(*radixLevel6).Children[branchPaths[5]] = &node
-	}
-	(*radixLevel6).InvalidateNode(addr)
-
-	radixLevel7 := (*radixLevel6).Children[branchPaths[5]]
-	depth += m.branchFactors[6]
-	if (*radixLevel7).Children[branchPaths[6]] == nil {
-		node := &LargeRadixNode[L9]{Depth: depth}
-		(*radixLevel7).Children[branchPaths[6]] = &node
-	}
-	(*radixLevel7).InvalidateNode(addr)
-
-	radixLevel8 := (*radixLevel7).Children[branchPaths[6]]
-	depth += m.branchFactors[7]
-	if (*radixLevel8).Children[branchPaths[7]] == nil {
-		node := &LargeRadixNode[L10]{Depth: depth}
-		(*radixLevel8).Children[branchPaths[7]] = &node
-	}
-	(*radixLevel8).InvalidateNode(addr)
-
-	radixLevel9 := (*radixLevel8).Children[branchPaths[7]]
-	depth += m.branchFactors[8]
-	if (*radixLevel9).Children[branchPaths[8]] == nil {
-		node := &LargeRadixNode[L11]{Depth: depth}
-		(*radixLevel9).Children[branchPaths[8]] = &node
-	}
-	(*radixLevel9).InvalidateNode(addr)
-
-	radixLevel10 := (*radixLevel9).Children[branchPaths[8]]
-	(*radixLevel10).InvalidateNode(addr)
-	(*radixLevel10).Children[branchPaths[9]] = &m
-
-	m.InvalidateNode(addr)
+	radixLevel6 := *(*radixLevel5).Children[branchPaths[4]]
+	(radixLevel6).Children[branchPaths[5]] = &m
+	(radixLevel6).InvalidateNode(addr)
 
 	return p
 }
@@ -430,30 +475,6 @@ func (m *Memory) Invalidate(addr uint64) {
 		return
 	}
 	(*radixLevel6).InvalidateNode(addr)
-
-	radixLevel7 := (*radixLevel6).Children[branchPaths[5]]
-	if radixLevel7 == nil {
-		return
-	}
-	(*radixLevel7).InvalidateNode(addr)
-
-	radixLevel8 := (*radixLevel7).Children[branchPaths[6]]
-	if radixLevel8 == nil {
-		return
-	}
-	(*radixLevel8).InvalidateNode(addr)
-
-	radixLevel9 := (*radixLevel8).Children[branchPaths[7]]
-	if radixLevel9 == nil {
-		return
-	}
-	(*radixLevel9).InvalidateNode(addr)
-
-	radixLevel10 := (*radixLevel9).Children[branchPaths[8]]
-	if radixLevel10 == nil {
-		return
-	}
-	(*radixLevel10).InvalidateNode(addr)
 
 	m.InvalidateNode(addr)
 }

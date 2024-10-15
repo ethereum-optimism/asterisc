@@ -38,16 +38,12 @@ var zeroHashes = func() [256][32]byte {
 }()
 
 type Memory struct {
-	// generalized index -> merkle root or nil if invalidated
-	// pageIndex -> cached page
-
-	pages map[uint64]*CachedPage
-
 	radix         *L1
-	branchFactors [10]uint64
+	branchFactors [6]uint64
 
 	// Note: since we don't de-alloc pages, we don't do ref-counting.
 	// Once a page exists, it doesn't leave memory
+	pages map[uint64]*CachedPage
 
 	// two caches: we often read instructions from one page, and do memory things with another page.
 	// this prevents map lookups each instruction
@@ -60,7 +56,7 @@ func NewMemory() *Memory {
 	return &Memory{
 		radix:         node,
 		pages:         make(map[uint64]*CachedPage),
-		branchFactors: [10]uint64{4, 4, 4, 4, 4, 4, 4, 8, 8, 8},
+		branchFactors: [6]uint64{16, 16, 6, 6, 4, 4},
 		lastPageKeys:  [2]uint64{^uint64(0), ^uint64(0)}, // default to invalid keys, to not match any pages
 	}
 }
@@ -201,7 +197,7 @@ func (m *Memory) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	m.branchFactors = [10]uint64{4, 4, 4, 4, 4, 4, 4, 8, 8, 8}
+	m.branchFactors = [6]uint64{16, 16, 6, 6, 4, 4}
 	m.radix = &L1{}
 	m.pages = make(map[uint64]*CachedPage)
 	m.lastPageKeys = [2]uint64{^uint64(0), ^uint64(0)}
