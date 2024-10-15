@@ -94,7 +94,8 @@ contract Deploy is Deployer, StdAssertions {
             SystemConfig: getAddress("SystemConfigProxy"),
             L1ERC721Bridge: getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
-            SuperchainConfig: getAddress("SuperchainConfigProxy")
+            SuperchainConfig: getAddress("SuperchainConfigProxy"),
+            OPContractsManager: getAddress("OPContractsManagerProxy")
         });
     }
 
@@ -142,7 +143,7 @@ contract Deploy is Deployer, StdAssertions {
         // `DisputeGameFactory` implementation alongside dependent contracts, which are always proxies.
         Types.ContractSet memory contracts = _proxiesUnstrict();
         contracts.DisputeGameFactory = address(factory);
-        ChainAssertions.checkDisputeGameFactory({ _contracts: contracts, _expectedOwner: address(0) });
+        ChainAssertions.checkDisputeGameFactory({ _contracts: contracts, _expectedOwner: address(0), _isProxy: true });
 
         addr_ = address(factory);
     }

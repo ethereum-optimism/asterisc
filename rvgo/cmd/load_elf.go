@@ -7,6 +7,7 @@ import (
 	cannon "github.com/ethereum-optimism/optimism/cannon/cmd"
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
+	"github.com/ethereum-optimism/optimism/op-service/serialize"
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
@@ -40,7 +41,7 @@ func LoadELF(ctx *cli.Context) error {
 	if err := jsonutil.WriteJSON[*Metadata](meta, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.LoadELFMetaFlag.Name), OutFilePerm)); err != nil {
 		return fmt.Errorf("failed to output metadata: %w", err)
 	}
-	return jsonutil.WriteJSON[*fast.VMState](state, ioutil.ToStdOutOrFileOrNoop(ctx.Path(cannon.LoadELFOutFlag.Name), OutFilePerm))
+	return serialize.Write[*fast.VMState](ctx.Path(cannon.LoadELFOutFlag.Name), state, OutFilePerm)
 }
 
 var LoadELFCommand = &cli.Command{

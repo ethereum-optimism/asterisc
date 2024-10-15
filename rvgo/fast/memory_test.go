@@ -173,3 +173,17 @@ func TestMemoryJSON(t *testing.T) {
 	m.GetUnaligned(8, dest[:])
 	require.Equal(t, uint8(123), dest[0])
 }
+
+func TestMemoryBinary(t *testing.T) {
+	m := NewMemory()
+	m.SetUnaligned(8, []byte{123})
+	ser := new(bytes.Buffer)
+	err := m.Serialize(ser)
+	require.NoError(t, err, "must serialize state")
+	m2 := NewMemory()
+	err = m2.Deserialize(ser)
+	require.NoError(t, err, "must deserialize state")
+	var dest [1]byte
+	m.GetUnaligned(8, dest[:])
+	require.Equal(t, uint8(123), dest[0])
+}

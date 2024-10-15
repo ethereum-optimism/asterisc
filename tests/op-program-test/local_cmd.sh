@@ -3,7 +3,7 @@
 ./asterisc run \
   --info-at '%10000000' \
   --proof-at never \
-  --input ./test-data/state.json \
+  --input ./test-data/state.bin.gz \
   --meta ./test-data/meta.json \
   -- \
   ./op-program \
@@ -11,10 +11,10 @@
   --l2.genesis ./test-data/chain-artifacts/genesis-l2.json \
   --l1.trustrpc \
   --l1.rpckind debug_geth \
-  --l1.head 0x32230088dbbc84c096d91e7fe67df0e18451f47ec8e5170911a4aa77e7d8bfc5 \
-  --l2.head 0x4550a5cdaae0fb257a4034af8c2b6c20263319b56672545d6917c0785972a72e \
-  --l2.outputroot 0x8f6100bd0f05fefed78e7d94b9f7397ce98a0f9fe515ae25e2a315a9fa0520a4 \
-  --l2.claim 0xe508b8b3fe23fc4d3372c77a5896d6ea1177bf12ef8ff2a1ba6d22ac4b9447da \
+  --l1.head 0xe5e936e8b01ff9084ffc91f3d6944238df0ed1bc58ee56f569c56169a4e70b52 \
+  --l2.head 0x8bc9297b05324efc1f9eb48e2dcb70a85ac8ec1a25bdcbe2c4c7ea7db4b15160 \
+  --l2.outputroot 0x9faa74acedf717cc0362a79beec59013cf27fce4de146d7e2d941b16b50901f3 \
+  --l2.claim 0x7dbae010376c4ae02877fd146cd9b9ef3209c8a103d977d415130f725ee6b7eb \
   --l2.blocknumber 12 \
   --datadir ./test-data/preimages \
   --log.format terminal \

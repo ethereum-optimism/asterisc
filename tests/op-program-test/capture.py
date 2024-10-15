@@ -94,7 +94,7 @@ local_cmd = f'''#!/bin/bash
 ./asterisc run \\
   --info-at '%10000000' \\
   --proof-at never \\
-  --input ./test-data/state.json \\
+  --input ./test-data/state.bin.gz \\
   --meta ./test-data/meta.json \\
   -- \\
   ./op-program \\
