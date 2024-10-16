@@ -1571,7 +1571,10 @@ contract RISCV {
                 if or(lt64(size, toU64(4)), gt64(size, toU64(8))) { revertWithCode(0xbada70) } // bad AMO size
 
                 let addr := getRegister(rs1)
-                // TODO check if addr is aligned
+                if and64(addr, toU64(3)) {
+                // quick addr alignment check
+                    revertWithCode(0xbad10ad0) // addr not aligned with 4 bytes
+                }
 
                 let op := shr64(toU64(2), funct7)
                 switch op
