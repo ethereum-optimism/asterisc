@@ -15,7 +15,7 @@ import (
 func TestMemoryMerkleProof(t *testing.T) {
 	t.Run("nearly empty tree", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(0x10000, []byte{0xaa, 0xbb, 0xcc, 0xdd})
+		m.SetAligned(0x10000, []byte{0xaa, 0xbb, 0xcc, 0xdd})
 		proof := m.MerkleProof(0x10000)
 		require.Equal(t, uint32(0xaabbccdd), binary.BigEndian.Uint32(proof[:4]))
 		for i := 0; i < 32-5; i++ {
@@ -24,9 +24,9 @@ func TestMemoryMerkleProof(t *testing.T) {
 	})
 	t.Run("fuller tree", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(0x10000, []byte{0xaa, 0xbb, 0xcc, 0xdd})
-		m.SetUnaligned(0x80004, []byte{42})
-		m.SetUnaligned(0x13370000, []byte{123})
+		m.SetAligned(0x10000, []byte{0xaa, 0xbb, 0xcc, 0xdd})
+		m.SetAligned(0x80004, []byte{42})
+		m.SetAligned(0x13370000, []byte{123})
 		root := m.MerkleRoot()
 		proof := m.MerkleProof(0x80004)
 		require.Equal(t, uint32(42<<24), binary.BigEndian.Uint32(proof[4:8]))
@@ -53,35 +53,35 @@ func TestMemoryMerkleRoot(t *testing.T) {
 	})
 	t.Run("empty page", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(0xF000, []byte{0})
+		m.SetAligned(0xF000, []byte{0})
 		root := m.MerkleRoot()
 		require.Equal(t, zeroHashes[64-5], root, "fully zeroed memory should have expected zero hash")
 	})
 	t.Run("single page", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(0xF000, []byte{1})
+		m.SetAligned(0xF000, []byte{1})
 		root := m.MerkleRoot()
 		require.NotEqual(t, zeroHashes[64-5], root, "non-zero memory")
 	})
 	t.Run("repeat zero", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(0xF000, []byte{0})
-		m.SetUnaligned(0xF004, []byte{0})
+		m.SetAligned(0xF000, []byte{0})
+		m.SetAligned(0xF004, []byte{0})
 		root := m.MerkleRoot()
 		require.Equal(t, zeroHashes[64-5], root, "zero still")
 	})
 	t.Run("two empty pages", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(PageSize*3, []byte{0})
-		m.SetUnaligned(PageSize*10, []byte{0})
+		m.SetAligned(PageSize*3, []byte{0})
+		m.SetAligned(PageSize*10, []byte{0})
 		root := m.MerkleRoot()
 		require.Equal(t, zeroHashes[64-5], root, "zero still")
 	})
 	t.Run("random few pages", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(PageSize*3, []byte{1})
-		m.SetUnaligned(PageSize*5, []byte{42})
-		m.SetUnaligned(PageSize*6, []byte{123})
+		m.SetAligned(PageSize*3, []byte{1})
+		m.SetAligned(PageSize*5, []byte{42})
+		m.SetAligned(PageSize*6, []byte{123})
 		p3 := m.MerkleizeSubtree((1 << PageKeySize) | 3)
 		p5 := m.MerkleizeSubtree((1 << PageKeySize) | 5)
 		p6 := m.MerkleizeSubtree((1 << PageKeySize) | 6)
@@ -101,11 +101,11 @@ func TestMemoryMerkleRoot(t *testing.T) {
 	})
 	t.Run("invalidate page", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(0xF000, []byte{0})
+		m.SetAligned(0xF000, []byte{0})
 		require.Equal(t, zeroHashes[64-5], m.MerkleRoot(), "zero at first")
-		m.SetUnaligned(0xF004, []byte{1})
+		m.SetAligned(0xF004, []byte{1})
 		require.NotEqual(t, zeroHashes[64-5], m.MerkleRoot(), "non-zero")
-		m.SetUnaligned(0xF004, []byte{0})
+		m.SetAligned(0xF004, []byte{0})
 		require.Equal(t, zeroHashes[64-5], m.MerkleRoot(), "zero again")
 	})
 }
@@ -141,22 +141,22 @@ func TestMemoryReadWrite(t *testing.T) {
 
 	t.Run("read-write", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(12, []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE})
+		m.SetAligned(12, []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE})
 		var tmp [5]byte
 		m.GetUnaligned(12, tmp[:])
 		require.Equal(t, [5]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE}, tmp)
-		m.SetUnaligned(12, []byte{0xAA, 0xBB, 0x1C, 0xDD, 0xEE})
+		m.SetAligned(12, []byte{0xAA, 0xBB, 0x1C, 0xDD, 0xEE})
 		m.GetUnaligned(12, tmp[:])
 		require.Equal(t, [5]byte{0xAA, 0xBB, 0x1C, 0xDD, 0xEE}, tmp)
 	})
 
 	t.Run("read-write-unaligned", func(t *testing.T) {
 		m := NewMemory()
-		m.SetUnaligned(13, []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE})
+		m.SetAligned(13, []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE})
 		var tmp [5]byte
 		m.GetUnaligned(13, tmp[:])
 		require.Equal(t, [5]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE}, tmp)
-		m.SetUnaligned(13, []byte{0xAA, 0xBB, 0x1C, 0xDD, 0xEE})
+		m.SetAligned(13, []byte{0xAA, 0xBB, 0x1C, 0xDD, 0xEE})
 		m.GetUnaligned(13, tmp[:])
 		require.Equal(t, [5]byte{0xAA, 0xBB, 0x1C, 0xDD, 0xEE}, tmp)
 	})
@@ -164,7 +164,7 @@ func TestMemoryReadWrite(t *testing.T) {
 
 func TestMemoryJSON(t *testing.T) {
 	m := NewMemory()
-	m.SetUnaligned(8, []byte{123})
+	m.SetAligned(8, []byte{123})
 	dat, err := json.Marshal(m)
 	require.NoError(t, err)
 	var res Memory
@@ -176,7 +176,7 @@ func TestMemoryJSON(t *testing.T) {
 
 func TestMemoryBinary(t *testing.T) {
 	m := NewMemory()
-	m.SetUnaligned(8, []byte{123})
+	m.SetAligned(8, []byte{123})
 	ser := new(bytes.Buffer)
 	err := m.Serialize(ser)
 	require.NoError(t, err, "must serialize state")
