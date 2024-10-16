@@ -36,9 +36,9 @@ func TestMemoryMerkleProof(t *testing.T) {
 		for i := 32; i < len(proof); i += 32 {
 			sib := *(*[32]byte)(proof[i : i+32])
 			if path&1 != 0 {
-				node = HashPair(sib, node)
+				node = hashPair(sib, node)
 			} else {
-				node = HashPair(node, sib)
+				node = hashPair(node, sib)
 			}
 			path >>= 1
 		}
@@ -253,9 +253,9 @@ func verifyProof(t *testing.T, expectedRoot [32]byte, proof [ProofLen * 32]byte,
 	for i := 32; i < len(proof); i += 32 {
 		sib := *(*[32]byte)(proof[i : i+32])
 		if path&1 != 0 {
-			node = HashPair(sib, node)
+			node = hashPair(sib, node)
 		} else {
-			node = HashPair(node, sib)
+			node = hashPair(node, sib)
 		}
 		path >>= 1
 	}
@@ -310,14 +310,14 @@ func TestMemoryMerkleRoot(t *testing.T) {
 		p6 := m.radix.MerkleizeNode(0, 14)
 		p7 := m.radix.MerkleizeNode(0, 15)
 
-		r1 := HashPair(
-			HashPair(
-				HashPair(p0, p1), // 0,1
-				HashPair(p2, p3), // 2,3
+		r1 := hashPair(
+			hashPair(
+				hashPair(p0, p1), // 0,1
+				hashPair(p2, p3), // 2,3
 			),
-			HashPair(
-				HashPair(p4, p5), // 4,5
-				HashPair(p6, p7), // 6,7
+			hashPair(
+				hashPair(p4, p5), // 4,5
+				hashPair(p6, p7), // 6,7
 			),
 		)
 		r2 := m.MerkleRoot()
