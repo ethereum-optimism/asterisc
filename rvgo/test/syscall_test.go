@@ -93,7 +93,7 @@ func TestStateSyscallUnsupported(t *testing.T) {
 				Registers:       [32]uint64{17: uint64(syscall)},
 				Step:            0,
 			}
-			state.Memory.SetUnaligned(pc, syscallInsn)
+			state.Memory.SetAligned(pc, syscallInsn)
 
 			fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 			stepWitness, err := fastState.Step(true)
@@ -265,7 +265,7 @@ func TestEVMSysWriteHint(t *testing.T) {
 
 			err := state.Memory.SetMemoryRange(uint64(tt.memOffset), bytes.NewReader(tt.hintData))
 			require.NoError(t, err)
-			state.Memory.SetUnaligned(0, syscallInsn)
+			state.Memory.SetAligned(0, syscallInsn)
 
 			fastState := fast.NewInstrumentedState(state, &oracle, os.Stdout, os.Stderr)
 			stepWitness, err := fastState.Step(true)
@@ -296,7 +296,7 @@ func FuzzStateSyscallExit(f *testing.F) {
 			Registers:       [32]uint64{17: uint64(syscall), 10: uint64(exitCode)},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		preStateRegisters := state.Registers
 
@@ -342,7 +342,7 @@ func FuzzStateSyscallBrk(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysBrk},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = 1 << 30
@@ -387,7 +387,7 @@ func FuzzStateSyscallMmap(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysMmap, 10: addr, 11: length},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[11] = 0
@@ -438,7 +438,7 @@ func FuzzStateSyscallFcntl(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysFcntl, 10: fd, 11: cmd},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = out
@@ -510,7 +510,7 @@ func FuzzStateSyscallOpenat(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysOpenat},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = 0xFFFF_FFFF_FFFF_FFFF
@@ -552,7 +552,7 @@ func FuzzStateSyscallClockGettime(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysClockGettime, 11: addr},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		expectedRegisters := state.Registers
 		expectedRegisters[11] = 0
 
@@ -562,11 +562,11 @@ func FuzzStateSyscallClockGettime(f *testing.F) {
 		require.False(t, stepWitness.HasPreimage())
 
 		postMemory := fast.NewMemory()
-		postMemory.SetUnaligned(pc, syscallInsn)
+		postMemory.SetAligned(pc, syscallInsn)
 		var bytes [8]byte
 		binary.LittleEndian.PutUint64(bytes[:], 1337)
-		postMemory.SetUnaligned(addr, bytes[:])
-		postMemory.SetUnaligned(addr+8, []byte{42, 0, 0, 0, 0, 0, 0, 0})
+		postMemory.SetAligned(addr, bytes[:])
+		postMemory.SetAligned(addr+8, []byte{42, 0, 0, 0, 0, 0, 0, 0})
 
 		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.Heap)
@@ -599,7 +599,7 @@ func FuzzStateSyscallClone(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysClone},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = 1
@@ -641,7 +641,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysGetrlimit, 10: 7, 11: addr},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = 0
 		expectedRegisters[11] = 0
@@ -652,11 +652,11 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 		require.False(t, stepWitness.HasPreimage())
 
 		postMemory := fast.NewMemory()
-		postMemory.SetUnaligned(pc, syscallInsn)
+		postMemory.SetAligned(pc, syscallInsn)
 		var bytes [8]byte
 		binary.LittleEndian.PutUint64(bytes[:], 1024)
-		postMemory.SetUnaligned(addr, bytes[:])
-		postMemory.SetUnaligned(addr+8, bytes[:])
+		postMemory.SetAligned(addr, bytes[:])
+		postMemory.SetAligned(addr+8, bytes[:])
 
 		require.Equal(t, pc+4, state.PC) // PC must advance
 		require.Equal(t, uint64(0), state.Heap)
@@ -685,7 +685,7 @@ func FuzzStateSyscallGetrlimit(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysGetrlimit, 10: res, 11: addr},
 			Step:            0,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 
 		fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
 		stepWitness, err := fastState.Step(true)
@@ -745,7 +745,7 @@ func FuzzStateSyscallNoop(f *testing.F) {
 			Registers:       [32]uint64{17: uint64(syscall), 10: arg},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = 0
@@ -793,7 +793,7 @@ func FuzzStateSyscallRead(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysRead, 10: fd, 11: addr, 12: count},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = ret
@@ -853,7 +853,7 @@ func FuzzStateHintRead(f *testing.F) {
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
@@ -905,7 +905,7 @@ func FuzzStatePreimageRead(f *testing.F) {
 			PreimageKey:     preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey(),
 			PreimageOffset:  preimageOffset,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
@@ -966,7 +966,7 @@ func FuzzStateSyscallWrite(f *testing.F) {
 			Registers:       [32]uint64{17: riscv.SysWrite, 10: fd, 11: addr, 12: count},
 			Step:            step,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 		expectedRegisters[10] = ret
@@ -1038,7 +1038,7 @@ func FuzzStateHintWrite(f *testing.F) {
 		require.NoError(t, err)
 
 		// Set syscall instruction
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 		preStatePreimageKey := state.PreimageKey
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
@@ -1095,11 +1095,11 @@ func FuzzStatePreimageWrite(f *testing.F) {
 			Step:            step,
 			PreimageOffset:  preimageOffset,
 		}
-		state.Memory.SetUnaligned(pc, syscallInsn)
+		state.Memory.SetAligned(pc, syscallInsn)
 
 		// Set preimage key to addr
 		preimageKey := preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey()
-		state.Memory.SetUnaligned(addr, preimageKey[:])
+		state.Memory.SetAligned(addr, preimageKey[:])
 		preStateRoot := state.Memory.MerkleRoot()
 		expectedRegisters := state.Registers
 

@@ -180,8 +180,7 @@ func (m *Memory) pageLookup(pageIndex uint64) (*CachedPage, bool) {
 	return p, ok
 }
 
-// TODO: we never do unaligned writes, this should be simplified
-func (m *Memory) SetUnaligned(addr uint64, dat []byte) {
+func (m *Memory) SetAligned(addr uint64, dat []byte) {
 	if len(dat) > 32 {
 		panic("cannot set more than 32 bytes")
 	}
@@ -200,21 +199,6 @@ func (m *Memory) SetUnaligned(addr uint64, dat []byte) {
 	if d == len(dat) {
 		return // if all the data fitted in the page, we're done
 	}
-
-	// continue to remaining part
-	addr += uint64(d)
-	pageIndex = addr >> PageAddrSize
-	pageAddr = addr & PageAddrMask
-	p, ok = m.pageLookup(pageIndex)
-	if !ok {
-		// allocate the page if we have not already.
-		// Go may mmap relatively large ranges, but we only allocate the pages just in time.
-		p = m.AllocPage(pageIndex)
-	} else {
-		m.Invalidate(addr) // invalidate this branch of memory, now that the value changed
-	}
-
-	copy(p.Data[pageAddr:], dat)
 }
 
 func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
