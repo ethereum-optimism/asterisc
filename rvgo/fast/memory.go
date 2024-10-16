@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
-
-	"github.com/ethereum/go-ethereum/crypto"
+	_ "unsafe"
 )
 
 // Note: 2**12 = 4 KiB, the minimum page-size in Unicorn for mmap
@@ -22,17 +21,11 @@ const (
 	ProofLen     = 64 - 4
 )
 
-func HashPair(left, right [32]byte) [32]byte {
-	out := crypto.Keccak256Hash(left[:], right[:])
-	//fmt.Printf("0x%x 0x%x -> 0x%x\n", left, right, out)
-	return out
-}
-
 var zeroHashes = func() [256][32]byte {
 	// empty parts of the tree are all zero. Precompute the hash of each full-zero range sub-tree level.
 	var out [256][32]byte
 	for i := 1; i < 256; i++ {
-		out[i] = HashPair(out[i-1], out[i-1])
+		out[i] = hashPair(out[i-1], out[i-1])
 	}
 	return out
 }()

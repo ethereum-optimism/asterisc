@@ -17,11 +17,11 @@ func TestCachedPage(t *testing.T) {
 	require.Equal(t, expectedLeaf, node, "leaf nodes should not be hashed")
 
 	node = p.MerkleizeSubtree(gindex >> 1)
-	expectedParent := common.Hash(HashPair(zeroHashes[0], expectedLeaf))
+	expectedParent := common.Hash(hashPair(zeroHashes[0], expectedLeaf))
 	require.Equal(t, expectedParent, node, "can get the parent node")
 
 	node = p.MerkleizeSubtree(gindex >> 2)
-	expectedParentParent := common.Hash(HashPair(expectedParent, zeroHashes[1]))
+	expectedParentParent := common.Hash(hashPair(expectedParent, zeroHashes[1]))
 	require.Equal(t, expectedParentParent, node, "and the parent of the parent")
 
 	pre := p.MerkleRoot()
