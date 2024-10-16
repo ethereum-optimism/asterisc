@@ -899,26 +899,38 @@ contract RISCV {
                     // A1 = n (length)
                     let length := getRegister(toU64(11))
                     // A2 = prot (memory protection type, can ignore)
-                    // A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe
-                    // assert the MAP_ANONYMOUS flag is set
+                    // A3 = flags (shared with other process and or written back to file)
+                    let flags := getRegister(toU64(13))
                     // A4 = fd (file descriptor, can ignore because we support anon memory only)
+                    let fd := getRegister(toU64(14))
                     // A5 = offset (offset in file, we don't support any non-anon memory, so we can ignore this)
 
-                    // ignore: prot, flags, fd, offset
-                    switch addr
-                    case 0 {
-                        // No hint, allocate it ourselves, by as much as the requested length.
-                        // Increase the length to align it with desired page size if necessary.
-                        let align := and64(length, shortToU64(4095))
-                        if align { length := add64(length, sub64(shortToU64(4096), align)) }
-                        let prevHeap := getHeap()
-                        setRegister(toU64(10), prevHeap)
-                        setHeap(add64(prevHeap, length)) // increment heap with length
+
+                    let errCode := 0
+                    // ensure MAP_ANONYMOUS is set and fd == -1
+                    switch or(iszero(and(flags, 0x20)), not(eq(fd, u64Mask())))
+                    case 1 {
+                        addr := u64Mask()
+                        errCode := toU64(0x4d)
                     }
                     default {
-                        // allow hinted memory address (leave it in A0 as return argument)
+                        switch addr
+                        case 0 {
+                            // No hint, allocate it ourselves, by as much as the requested length.
+                            // Increase the length to align it with desired page size if necessary.
+                            let align := and64(length, shortToU64(4095))
+                            if align { length := add64(length, sub64(shortToU64(4096), align)) }
+                            let prevHeap := getHeap()
+                            addr := prevHeap
+                            setHeap(add64(prevHeap, length)) // increment heap with length
+                        }
+                        default {
+                            // allow hinted memory address (leave it in A0 as return argument)
+                        }
                     }
-                    setRegister(toU64(11), toU64(0)) // no error
+
+                    setRegister(toU64(10), addr)
+                    setRegister(toU64(11), errCode)
                 }
                 case 63 {
                     // read
