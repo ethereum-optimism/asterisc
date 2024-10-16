@@ -51,7 +51,6 @@ const (
 	ErrUnexpectedRProofLoad           = uint64(0xbad22220)
 	ErrUnexpectedRProofStoreUnaligned = uint64(0xbad22221)
 	ErrUnexpectedRProofStore          = uint64(0xbad2222f)
-	ErrUnknownCSRMode                 = uint64(0xbadc0de0)
 	ErrBadAMOSize                     = uint64(0xbada70)
 	ErrFailToReadPreimage             = uint64(0xbadf00d0)
 	ErrBadMemoryProof                 = uint64(0xbadf00d1)

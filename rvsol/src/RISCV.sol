@@ -548,10 +548,6 @@ contract RISCV {
                 out := shr64(toU64(25), instr)
             }
 
-            function parseCSRR(instr) -> out {
-                out := shr64(toU64(20), instr)
-            }
-
             //
             // Memory functions
             //
@@ -737,31 +733,6 @@ contract RISCV {
             //
             // CSR (control and status registers) functions
             //
-            function readCSR(num) -> out {
-                out := 0 // just return zero, CSR is not supported, but may be in the future.
-            }
-
-            function writeCSR(num, v) {
-                // no-op
-            }
-
-            function updateCSR(num, v, mode) -> out {
-                out := readCSR(num)
-                switch mode
-                case 1 { // ?01 = CSRRW(I)
-                }
-                case 2 {
-                    // ?10 = CSRRS(I)
-                    v := or64(out, v)
-                }
-                case 3 {
-                    // ?11 = CSRRC(I)
-                    v := and64(out, not64(v))
-                }
-                default { revertWithCode(0xbadc0de0) } // unknown CSR mode
-
-                writeCSR(num, v)
-            }
 
             //
             // Preimage oracle interactions
@@ -1543,14 +1514,8 @@ contract RISCV {
                         setPC(add64(_pc, toU64(4))) // ignore breakpoint
                     }
                 }
-                default {
-                    // CSR instructions
-                    let imm := parseCSRR(instr)
-                    let value := rs1
-                    if iszero64(and64(funct3, toU64(4))) { value := getRegister(rs1) }
-                    let mode := and64(funct3, toU64(3))
-                    let rdValue := updateCSR(imm, value, mode)
-                    setRegister(rd, rdValue)
+                default { // CSR instructions
+                    setRegister(rd, toU64(0)) // ignore CSR instructions
                     setPC(add64(_pc, toU64(4)))
                 }
             }
