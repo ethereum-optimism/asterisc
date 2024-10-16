@@ -269,29 +269,6 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	//
 	// CSR (control and status registers) functions
 	//
-	readCSR := func(num U64) U64 {
-		// TODO: do we need CSR?
-		return toU64(0)
-	}
-
-	writeCSR := func(num U64, v U64) {
-		// TODO: do we need CSR?
-	}
-
-	updateCSR := func(num U64, v U64, mode U64) (out U64) {
-		out = readCSR(num)
-		switch mode {
-		case 1: // ?01 = CSRRW(I)
-		case 2: // ?10 = CSRRS(I)
-			v = or64(out, v)
-		case 3: // ?11 = CSRRC(I)
-			v = and64(out, not64(v))
-		default:
-			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unknown CSR mode: %d", mode))
-		}
-		writeCSR(num, v)
-		return
-	}
 
 	//
 	// Preimage oracle interactions
@@ -878,14 +855,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				setPC(add64(pc, toU64(4))) // ignore breakpoint
 			}
 		default: // CSR instructions
-			imm := parseCSSR(instr)
-			value := rs1
-			if iszero64(and64(funct3, toU64(4))) {
-				value = getRegister(rs1)
-			}
-			mode := and64(funct3, toU64(3))
-			rdValue := updateCSR(imm, value, mode)
-			setRegister(rd, rdValue)
+			setRegister(rd, 0) // ignore CSR instructions
 			setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
