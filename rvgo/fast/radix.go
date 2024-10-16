@@ -16,29 +16,29 @@ type RadixNode interface {
 
 // SmallRadixNode is a radix trie node with a branching factor of 4 bits.
 type SmallRadixNode[C RadixNode] struct {
-	Children    [1 << 4]*C       // Array of child nodes, indexed by 4-bit keys.
-	Hashes      [1 << 4][32]byte // Cached hashes for each child node.
-	ChildExists uint16           // Bitmask indicating which children exist (1 bit per child).
-	HashValid   uint16           // Bitmask indicating which hashes are valid (1 bit per child).
-	Depth       uint64           // The depth of this node in the trie (number of bits from the root).
+	Children   [1 << 4]*C       // Array of child nodes, indexed by 4-bit keys.
+	Hashes     [1 << 4][32]byte // Cached hashes for intermediate hash node.
+	HashExists uint16           // Bitmask indicating if the intermediate hash exist (1 bit per intermediate node).
+	HashValid  uint16           // Bitmask indicating if the intermediate hashes are valid (1 bit per intermediate node).
+	Depth      uint64           // The depth of this node in the trie (number of bits from the root).
 }
 
 // MediumRadixNode is a radix trie node with a branching factor of 6 bits.
 type MediumRadixNode[C RadixNode] struct {
-	Children    [1 << 6]*C // Array of child nodes, indexed by 6-bit keys.
-	Hashes      [1 << 6][32]byte
-	ChildExists uint64
-	HashValid   uint64
-	Depth       uint64
+	Children   [1 << 6]*C // Array of child nodes, indexed by 6-bit keys.
+	Hashes     [1 << 6][32]byte
+	HashExists uint64
+	HashValid  uint64
+	Depth      uint64
 }
 
 // LargeRadixNode is a radix trie node with a branching factor of 16 bits.
 type LargeRadixNode[C RadixNode] struct {
-	Children    [1 << 16]*C // Array of child nodes, indexed by 16-bit keys.
-	Hashes      [1 << 16][32]byte
-	ChildExists [(1 << 16) / 64]uint64
-	HashValid   [(1 << 16) / 64]uint64
-	Depth       uint64
+	Children   [1 << 16]*C // Array of child nodes, indexed by 16-bit keys.
+	Hashes     [1 << 16][32]byte
+	HashExists [(1 << 16) / 64]uint64
+	HashValid  [(1 << 16) / 64]uint64
+	Depth      uint64
 }
 
 // Define a sequence of radix trie node types (L1 to L7) representing different levels in the trie.
@@ -54,7 +54,7 @@ type L6 = *SmallRadixNode[L7]
 type L7 = *Memory
 
 // InvalidateNode invalidates the hash cache along the path to the specified address.
-// It marks the necessary child hashes as invalid, forcing them to be recomputed when needed.
+// It marks the necessary intermediate hashes as invalid, forcing them to be recomputed when needed.
 func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
 	childIdx := addressToRadixPath(addr, n.Depth, 4) // Get the 4-bit child index at the current depth.
 
@@ -63,7 +63,7 @@ func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
 	// Traverse up the hash tree, invalidating hashes along the way.
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashBit := index & 15          // Get the relevant bit position (0-15).
-		n.ChildExists |= 1 << hashBit  // Mark the child as existing.
+		n.HashExists |= 1 << hashBit   // Mark the intermediate hash path as existing.
 		n.HashValid &= ^(1 << hashBit) // Invalidate the hash at this position.
 	}
 }
@@ -75,7 +75,7 @@ func (n *MediumRadixNode[C]) InvalidateNode(addr uint64) {
 
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashBit := index & 63
-		n.ChildExists |= 1 << hashBit
+		n.HashExists |= 1 << hashBit
 		n.HashValid &= ^(1 << hashBit)
 	}
 }
@@ -88,7 +88,7 @@ func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashIndex := index >> 6
 		hashBit := index & 63
-		n.ChildExists[hashIndex] |= 1 << hashBit
+		n.HashExists[hashIndex] |= 1 << hashBit
 		n.HashValid[hashIndex] &= ^(1 << hashBit)
 	}
 }
@@ -195,7 +195,7 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	// Intermediate node of the radix trie (0~15)
 	hashBit := gindex & 15
 
-	if (n.ChildExists & (1 << hashBit)) != 0 {
+	if (n.HashExists & (1 << hashBit)) != 0 {
 		if (n.HashValid & (1 << hashBit)) != 0 {
 			// Return the cached hash if valid.
 			return n.Hashes[gindex]
@@ -241,7 +241,7 @@ func (n *MediumRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	// Intermediate node of the radix trie (0~16)
 	hashBit := gindex & 63
 
-	if (n.ChildExists & (1 << hashBit)) != 0 {
+	if (n.HashExists & (1 << hashBit)) != 0 {
 		if (n.HashValid & (1 << hashBit)) != 0 {
 			// Return the cached hash if valid.
 			return n.Hashes[gindex]
@@ -283,7 +283,7 @@ func (n *LargeRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 	// Intermediate node of the radix trie (0~2^15)
 	hashIndex := gindex >> 6
 	hashBit := gindex & 63
-	if (n.ChildExists[hashIndex] & (1 << hashBit)) != 0 {
+	if (n.HashExists[hashIndex] & (1 << hashBit)) != 0 {
 		if (n.HashValid[hashIndex] & (1 << hashBit)) != 0 {
 			return n.Hashes[gindex]
 		} else {
