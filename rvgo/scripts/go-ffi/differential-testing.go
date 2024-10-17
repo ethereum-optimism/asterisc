@@ -47,7 +47,7 @@ func DiffTestUtils() {
 		checkErr(err, "Error decoding insn")
 		instBytes := make([]byte, 4)
 		binary.LittleEndian.PutUint32(instBytes, uint32(insn))
-		mem.SetUnaligned(uint64(pc), instBytes)
+		mem.SetAligned(uint64(pc), instBytes)
 
 		// proof size: 64-5+1=60 (a 64-bit mem-address branch to 32 byte leaf, incl leaf itself), all 32 bytes
 		// 60 * 32 = 1920
@@ -57,7 +57,7 @@ func DiffTestUtils() {
 			checkErr(err, "Error decoding memAddr")
 			memValue, err := hex.DecodeString(strings.TrimPrefix(args[4], "0x"))
 			checkErr(err, "Error decoding memValue")
-			mem.SetUnaligned(uint64(memAddr), memValue)
+			mem.SetAligned(uint64(memAddr), memValue)
 			memProof = mem.MerkleProof(uint64(memAddr))
 		}
 		insnProof = mem.MerkleProof(uint64(pc))
