@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/bits"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -39,14 +38,12 @@ var zeroHashes = func() [256][32]byte {
 }()
 
 type Memory struct {
-	// generalized index -> merkle root or nil if invalidated
-	nodes map[uint64]*[32]byte
-
-	// pageIndex -> cached page
-	pages map[uint64]*CachedPage
+	radix         *L1
+	branchFactors [6]uint64
 
 	// Note: since we don't de-alloc pages, we don't do ref-counting.
 	// Once a page exists, it doesn't leave memory
+	pages map[uint64]*CachedPage
 
 	// two caches: we often read instructions from one page, and do memory things with another page.
 	// this prevents map lookups each instruction
@@ -55,10 +52,12 @@ type Memory struct {
 }
 
 func NewMemory() *Memory {
+	node := &L1{}
 	return &Memory{
-		nodes:        make(map[uint64]*[32]byte),
-		pages:        make(map[uint64]*CachedPage),
-		lastPageKeys: [2]uint64{^uint64(0), ^uint64(0)}, // default to invalid keys, to not match any pages
+		radix:         node,
+		pages:         make(map[uint64]*CachedPage),
+		branchFactors: [6]uint64{16, 16, 6, 6, 4, 4},
+		lastPageKeys:  [2]uint64{^uint64(0), ^uint64(0)}, // default to invalid keys, to not match any pages
 	}
 }
 
@@ -73,90 +72,6 @@ func (m *Memory) ForEachPage(fn func(pageIndex uint64, page *Page) error) error 
 		}
 	}
 	return nil
-}
-
-func (m *Memory) Invalidate(addr uint64) {
-	// find page, and invalidate addr within it
-	if p, ok := m.pageLookup(addr >> PageAddrSize); ok {
-		prevValid := p.Ok[1]
-		p.Invalidate(addr & PageAddrMask)
-		if !prevValid { // if the page was already invalid before, then nodes to mem-root will also still be.
-			return
-		}
-	} else { // no page? nothing to invalidate
-		return
-	}
-
-	// find the gindex of the first page covering the address
-	gindex := (uint64(addr) >> PageAddrSize) | (1 << (64 - PageAddrSize))
-
-	for gindex > 0 {
-		m.nodes[gindex] = nil
-		gindex >>= 1
-	}
-}
-
-func (m *Memory) MerkleizeSubtree(gindex uint64) [32]byte {
-	l := uint64(bits.Len64(gindex))
-	if l > ProofLen {
-		panic("gindex too deep")
-	}
-	if l > PageKeySize {
-		depthIntoPage := l - 1 - PageKeySize
-		pageIndex := (gindex >> depthIntoPage) & PageKeyMask
-		if p, ok := m.pages[uint64(pageIndex)]; ok {
-			pageGindex := (1 << depthIntoPage) | (gindex & ((1 << depthIntoPage) - 1))
-			return p.MerkleizeSubtree(pageGindex)
-		} else {
-			return zeroHashes[64-5+1-l] // page does not exist
-		}
-	}
-	n, ok := m.nodes[gindex]
-	if !ok {
-		// if the node doesn't exist, the whole sub-tree is zeroed
-		return zeroHashes[64-5+1-l]
-	}
-	if n != nil {
-		return *n
-	}
-	left := m.MerkleizeSubtree(gindex << 1)
-	right := m.MerkleizeSubtree((gindex << 1) | 1)
-	r := HashPair(left, right)
-	m.nodes[gindex] = &r
-	return r
-}
-
-func (m *Memory) MerkleProof(addr uint64) (out [ProofLen * 32]byte) {
-	proof := m.traverseBranch(1, addr, 0)
-	// encode the proof
-	for i := 0; i < ProofLen; i++ {
-		copy(out[i*32:(i+1)*32], proof[i][:])
-	}
-	return out
-}
-
-func (m *Memory) traverseBranch(parent uint64, addr uint64, depth uint8) (proof [][32]byte) {
-	if depth == ProofLen-1 {
-		proof = make([][32]byte, 0, ProofLen)
-		proof = append(proof, m.MerkleizeSubtree(parent))
-		return
-	}
-	if depth > ProofLen-1 {
-		panic("traversed too deep")
-	}
-	self := parent << 1
-	sibling := self | 1
-	if addr&(1<<(63-depth)) != 0 {
-		self, sibling = sibling, self
-	}
-	proof = m.traverseBranch(self, addr, depth+1)
-	siblingNode := m.MerkleizeSubtree(sibling)
-	proof = append(proof, siblingNode)
-	return
-}
-
-func (m *Memory) MerkleRoot() [32]byte {
-	return m.MerkleizeSubtree(1)
 }
 
 func (m *Memory) pageLookup(pageIndex uint64) (*CachedPage, bool) {
@@ -257,18 +172,6 @@ func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
 	}
 }
 
-func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
-	p := &CachedPage{Data: new(Page)}
-	m.pages[pageIndex] = p
-	// make nodes to root
-	k := (1 << PageKeySize) | uint64(pageIndex)
-	for k > 0 {
-		m.nodes[k] = nil
-		k >>= 1
-	}
-	return p
-}
-
 type pageEntry struct {
 	Index uint64 `json:"index"`
 	Data  *Page  `json:"data"`
@@ -293,7 +196,9 @@ func (m *Memory) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &pages); err != nil {
 		return err
 	}
-	m.nodes = make(map[uint64]*[32]byte)
+
+	m.branchFactors = [6]uint64{16, 16, 6, 6, 4, 4}
+	m.radix = &L1{}
 	m.pages = make(map[uint64]*CachedPage)
 	m.lastPageKeys = [2]uint64{^uint64(0), ^uint64(0)}
 	m.lastPage = [2]*CachedPage{nil, nil}
