@@ -6,8 +6,6 @@ import (
 
 // RadixNode is an interface defining the operations for a node in a radix trie.
 type RadixNode interface {
-	// InvalidateNode invalidates the hash cache along the path to the specified address.
-	InvalidateNode(addr uint64)
 	// GenerateProof generates the Merkle proof for the given address.
 	GenerateProof(addr uint64, proofs [][32]byte)
 	// MerkleizeNode computes the Merkle root hash for the node at the given generalized index.
@@ -55,10 +53,8 @@ type L7 = *Memory
 
 // InvalidateNode invalidates the hash cache along the path to the specified address.
 // It marks the necessary intermediate hashes as invalid, forcing them to be recomputed when needed.
-func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
-	childIdx := addressToRadixPath(addr, n.Depth, 4) // Get the 4-bit child index at the current depth.
-
-	branchIdx := (childIdx + 1<<4) / 2 // Compute the index for the hash tree traversal.
+func (n *SmallRadixNode[C]) InvalidateNode(gindex uint64) {
+	branchIdx := (gindex + 1<<4) / 2 // Compute the index for the hash tree traversal.
 
 	// Traverse up the hash tree, invalidating hashes along the way.
 	for index := branchIdx; index > 0; index >>= 1 {
@@ -68,10 +64,8 @@ func (n *SmallRadixNode[C]) InvalidateNode(addr uint64) {
 	}
 }
 
-func (n *MediumRadixNode[C]) InvalidateNode(addr uint64) {
-	childIdx := addressToRadixPath(addr, n.Depth, 6)
-
-	branchIdx := (childIdx + 1<<6) / 2
+func (n *MediumRadixNode[C]) InvalidateNode(gindex uint64) {
+	branchIdx := (gindex + 1<<6) / 2
 
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashBit := index & 63
@@ -80,22 +74,14 @@ func (n *MediumRadixNode[C]) InvalidateNode(addr uint64) {
 	}
 }
 
-func (n *LargeRadixNode[C]) InvalidateNode(addr uint64) {
-	childIdx := addressToRadixPath(addr, n.Depth, 16)
-
-	branchIdx := (childIdx + 1<<16) / 2
+func (n *LargeRadixNode[C]) InvalidateNode(gindex uint64) {
+	branchIdx := (gindex + 1<<16) / 2
 
 	for index := branchIdx; index > 0; index >>= 1 {
 		hashIndex := index >> 6
 		hashBit := index & 63
 		n.HashExists[hashIndex] |= 1 << hashBit
 		n.HashValid[hashIndex] &= ^(1 << hashBit)
-	}
-}
-
-func (m *Memory) InvalidateNode(addr uint64) {
-	if p, ok := m.pageLookup(addr >> PageAddrSize); ok {
-		p.Invalidate(addr & PageAddrMask)
 	}
 }
 
@@ -386,7 +372,7 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 		node := &LargeRadixNode[L3]{Depth: depth}
 		(*radixLevel1).Children[branchPaths[0]] = &node
 	}
-	(*radixLevel1).InvalidateNode(addr)
+	(*radixLevel1).InvalidateNode(branchPaths[0])
 
 	radixLevel2 := *(*radixLevel1).Children[branchPaths[0]]
 	depth += m.branchFactors[1]
@@ -394,7 +380,7 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 		node := &MediumRadixNode[L4]{Depth: depth}
 		(radixLevel2).Children[branchPaths[1]] = &node
 	}
-	(radixLevel2).InvalidateNode(addr)
+	(radixLevel2).InvalidateNode(branchPaths[1])
 
 	radixLevel3 := *(*radixLevel2).Children[branchPaths[1]]
 	depth += m.branchFactors[2]
@@ -402,7 +388,7 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 		node := &MediumRadixNode[L5]{Depth: depth}
 		(radixLevel3).Children[branchPaths[2]] = &node
 	}
-	(radixLevel3).InvalidateNode(addr)
+	(radixLevel3).InvalidateNode(branchPaths[2])
 
 	radixLevel4 := *(*radixLevel3).Children[branchPaths[2]]
 	depth += m.branchFactors[3]
@@ -410,7 +396,7 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 		node := &SmallRadixNode[L6]{Depth: depth}
 		(radixLevel4).Children[branchPaths[3]] = &node
 	}
-	(radixLevel4).InvalidateNode(addr)
+	(radixLevel4).InvalidateNode(branchPaths[3])
 
 	radixLevel5 := *(*radixLevel4).Children[branchPaths[3]]
 	depth += m.branchFactors[4]
@@ -418,11 +404,11 @@ func (m *Memory) AllocPage(pageIndex uint64) *CachedPage {
 		node := &SmallRadixNode[L7]{Depth: depth}
 		(radixLevel5).Children[branchPaths[4]] = &node
 	}
-	(radixLevel5).InvalidateNode(addr)
+	(radixLevel5).InvalidateNode(branchPaths[4])
 
 	radixLevel6 := *(*radixLevel5).Children[branchPaths[4]]
 	(radixLevel6).Children[branchPaths[5]] = &m
-	(radixLevel6).InvalidateNode(addr)
+	(radixLevel6).InvalidateNode(branchPaths[5])
 
 	return p
 }
@@ -437,6 +423,7 @@ func (m *Memory) Invalidate(addr uint64) {
 			// If the page was already invalid, the nodes up to the root are also invalid.
 			return
 		}
+		p.Invalidate(addr & PageAddrMask)
 	} else {
 		return
 	}
@@ -444,37 +431,35 @@ func (m *Memory) Invalidate(addr uint64) {
 	branchPaths := m.addressToRadixPaths(addr)
 
 	currentLevel1 := m.radix
-	currentLevel1.InvalidateNode(addr)
+	currentLevel1.InvalidateNode(branchPaths[0])
 
 	radixLevel2 := (*m.radix).Children[branchPaths[0]]
 	if radixLevel2 == nil {
 		return
 	}
-	(*radixLevel2).InvalidateNode(addr)
+	(*radixLevel2).InvalidateNode(branchPaths[1])
 
 	radixLevel3 := (*radixLevel2).Children[branchPaths[1]]
 	if radixLevel3 == nil {
 		return
 	}
-	(*radixLevel3).InvalidateNode(addr)
+	(*radixLevel3).InvalidateNode(branchPaths[2])
 
 	radixLevel4 := (*radixLevel3).Children[branchPaths[2]]
 	if radixLevel4 == nil {
 		return
 	}
-	(*radixLevel4).InvalidateNode(addr)
+	(*radixLevel4).InvalidateNode(branchPaths[3])
 
 	radixLevel5 := (*radixLevel4).Children[branchPaths[3]]
 	if radixLevel5 == nil {
 		return
 	}
-	(*radixLevel5).InvalidateNode(addr)
+	(*radixLevel5).InvalidateNode(branchPaths[4])
 
 	radixLevel6 := (*radixLevel5).Children[branchPaths[4]]
 	if radixLevel6 == nil {
 		return
 	}
-	(*radixLevel6).InvalidateNode(addr)
-
-	m.InvalidateNode(addr)
+	(*radixLevel6).InvalidateNode(branchPaths[5])
 }
