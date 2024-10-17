@@ -875,7 +875,6 @@ contract RISCV {
                     let fd := getRegister(toU64(14))
                     // A5 = offset (offset in file, we don't support any non-anon memory, so we can ignore this)
 
-
                     let errCode := 0
                     // ensure MAP_ANONYMOUS is set and fd == -1
                     switch or(iszero(and(flags, 0x20)), not(eq(fd, u64Mask())))
@@ -1513,7 +1512,8 @@ contract RISCV {
                         setPC(add64(_pc, toU64(4))) // ignore breakpoint
                     }
                 }
-                default { // CSR instructions
+                default {
+                    // CSR instructions
                     setRegister(rd, toU64(0)) // ignore CSR instructions
                     setPC(add64(_pc, toU64(4)))
                 }
@@ -1536,7 +1536,7 @@ contract RISCV {
 
                 let addr := getRegister(rs1)
                 if and64(addr, toU64(3)) {
-                // quick addr alignment check
+                    // quick addr alignment check
                     revertWithCode(0xbad10ad0) // addr not aligned with 4 bytes
                 }
 
