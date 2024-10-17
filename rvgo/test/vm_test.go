@@ -158,7 +158,7 @@ func TestFastStep(t *testing.T) {
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
-	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
+	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?) https://github.com/ethereum-optimism/asterisc/issues/89
 }
 
 func TestSlowStep(t *testing.T) {
@@ -171,7 +171,7 @@ func TestSlowStep(t *testing.T) {
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
-	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
+	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?) https://github.com/ethereum-optimism/asterisc/issues/89
 }
 
 func TestEVMStep(t *testing.T) {
@@ -184,5 +184,5 @@ func TestEVMStep(t *testing.T) {
 	runTestCategory("rv64ui-p")
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
-	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?)
+	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?) https://github.com/ethereum-optimism/asterisc/issues/89
 }
