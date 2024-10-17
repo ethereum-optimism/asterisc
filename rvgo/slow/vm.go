@@ -120,10 +120,6 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		copy(out[:], calldata[offset.val():])
 		return
 	}
-	// TODO check length
-	// TODO check calldata stateData size
-
-	// TODO: validate abi offset values?
 
 	stateContentOffset := uint8(4 + 32 + 32 + 32 + 32)
 	if iszero(eq(b32asBEWord(calldataload(toU64(4+32*3))), shortToU256(stateSize))) {
@@ -132,11 +128,11 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	}
 
 	proofContentOffset := shortToU64(uint16(stateContentOffset) + paddedStateSize + 32)
+	// TODO: validate abi offset values?
 
 	//
 	// State loading
 	//
-	// TODO
 	stateData := make([]byte, stateSize)
 	copy(stateData, calldata[stateContentOffset:])
 

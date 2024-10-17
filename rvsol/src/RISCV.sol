@@ -349,12 +349,10 @@ contract RISCV {
             // State access
             //
             function readState(offset, length) -> out {
-                // TODO revert if more than 32 bytes
                 out := mload(add(memStateOffset(), offset)) // note: the state variables are all big-endian encoded
                 out := shr(shl(3, sub(32, length)), out) // shift-right to right-align data and reduce to desired length
             }
             function writeState(offset, length, data) {
-                // TODO revert if more than 32 bytes
                 let memOffset := add(memStateOffset(), offset)
                 // left-aligned mask of length bytes
                 let mask := shl(shl(3, sub(32, length)), not(0))
@@ -782,8 +780,9 @@ contract RISCV {
                 revertWithCode(0xbadf00d0)
             }
 
+            // Original implementation is at @optimism/src/cannon/PreimageKeyLib.sol
+            // but it cannot be used because this is inside assembly block
             function localize(preImageKey, localContext_) -> localizedKey {
-                // TODO: deduplicate definition of localize using lib
                 // Grab the current free memory pointer to restore later.
                 let ptr := mload(0x40)
                 // Store the local data key and caller next to each other in memory for hashing.
