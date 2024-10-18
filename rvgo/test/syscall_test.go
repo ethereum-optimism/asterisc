@@ -384,8 +384,14 @@ func FuzzStateSyscallMmap(f *testing.F) {
 			Exited:          false,
 			Memory:          fast.NewMemory(),
 			LoadReservation: 0,
-			Registers:       [32]uint64{17: riscv.SysMmap, 10: addr, 11: length},
-			Step:            step,
+			Registers: [32]uint64{
+				17: riscv.SysMmap,
+				10: addr,
+				11: length,
+				13: 32,                    // MAP_ANONYMOUS flag
+				14: 0xFFFF_FFFF_FFFF_FFFF, // fd == -1 (u64 mask)
+			},
+			Step: step,
 		}
 		state.Memory.SetAligned(pc, syscallInsn)
 		preStateRoot := state.Memory.MerkleRoot()
