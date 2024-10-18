@@ -146,8 +146,7 @@ func (m *Memory) GenerateProof(addr uint64, proofs [][32]byte) {
 	// number of proof for a page is 8
 	// 0: leaf page data, 7: page's root
 	if p, ok := m.pages[pageIndex]; ok {
-		pageProofs := p.GenerateProof(addr) // Generate proof from the page.
-		copy(proofs[:8], pageProofs)
+		p.GenerateProof(addr, (*[8][32]byte)(proofs[:8])) // Generate proof from the page.
 	} else {
 		fillZeroHashRange(proofs, 0, 8) // Return zero hashes if the page does not exist.
 	}
@@ -189,8 +188,8 @@ func (n *SmallRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 			left := n.MerkleizeNode(addr, gindex<<1)
 			right := n.MerkleizeNode(addr, (gindex<<1)|1)
 
-			// Hash the pair and cache the result.
-			r := HashPair(left, right)
+			// hash the pair and cache the result.
+			r := hashPair(left, right)
 			n.Hashes[gindex] = r
 			n.HashValid |= 1 << hashBit
 			return r
@@ -235,8 +234,8 @@ func (n *MediumRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 			left := n.MerkleizeNode(addr, gindex<<1)
 			right := n.MerkleizeNode(addr, (gindex<<1)|1)
 
-			// Hash the pair and cache the result.
-			r := HashPair(left, right)
+			// hash the pair and cache the result.
+			r := hashPair(left, right)
 			n.Hashes[gindex] = r
 			n.HashValid |= 1 << hashBit
 			return r
@@ -276,7 +275,7 @@ func (n *LargeRadixNode[C]) MerkleizeNode(addr, gindex uint64) [32]byte {
 			left := n.MerkleizeNode(addr, gindex<<1)
 			right := n.MerkleizeNode(addr, (gindex<<1)|1)
 
-			r := HashPair(left, right)
+			r := hashPair(left, right)
 			n.Hashes[gindex] = r
 			n.HashValid[hashIndex] |= 1 << hashBit
 			return r
