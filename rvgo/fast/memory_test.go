@@ -2,7 +2,7 @@ package fast
 
 import (
 	"bytes"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -22,6 +22,7 @@ func TestMemoryMerkleProof(t *testing.T) {
 			require.Equal(t, zeroHashes[i][:], proof[32+i*32:32+i*32+32], "empty siblings")
 		}
 	})
+
 	t.Run("fuller tree", func(t *testing.T) {
 		m := NewMemory()
 		m.SetUnaligned(0x10000, []byte{0xaa, 0xbb, 0xcc, 0xdd})
@@ -31,7 +32,7 @@ func TestMemoryMerkleProof(t *testing.T) {
 		proof := m.MerkleProof(0x80004)
 		require.Equal(t, uint32(42<<24), binary.BigEndian.Uint32(proof[4:8]))
 		node := *(*[32]byte)(proof[:32])
-		path := uint32(0x80004) >> 5
+		path := 0x80004 >> 5
 		for i := 32; i < len(proof); i += 32 {
 			sib := *(*[32]byte)(proof[i : i+32])
 			if path&1 != 0 {
@@ -43,6 +44,222 @@ func TestMemoryMerkleProof(t *testing.T) {
 		}
 		require.Equal(t, root, node, "proof must verify")
 	})
+
+	t.Run("consistency test", func(t *testing.T) {
+		m := NewMemory()
+		addr := uint64(0x1234560000000)
+		m.SetUnaligned(addr, []byte{1})
+		proof1 := m.MerkleProof(addr)
+		proof2 := m.MerkleProof(addr)
+		require.Equal(t, proof1, proof2, "Proofs for the same address should be consistent")
+	})
+
+	t.Run("stress test", func(t *testing.T) {
+		m := NewMemory()
+		var addresses []uint64
+		for i := uint64(0); i < 10000; i++ {
+			addr := i * 0x1000000 // Spread out addresses
+			addresses = append(addresses, addr)
+			m.SetUnaligned(addr, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for _, addr := range addresses {
+			proof := m.MerkleProof(addr)
+			verifyProof(t, root, proof, addr)
+		}
+	})
+	t.Run("boundary addresses", func(t *testing.T) {
+		m := NewMemory()
+		addresses := []uint64{
+			//0x0000000000000 - 1, // Just before first level
+			0x0000000000000,     // Start of first level
+			0x0400000000000 - 1, // End of first level
+			0x0400000000000,     // Start of second level
+			0x3C00000000000 - 1, // End of fourth level
+			0x3C00000000000,     // Start of fifth level
+			0x3FFFFFFFFFFF,      // Maximum address
+		}
+		for i, addr := range addresses {
+			m.SetUnaligned(addr, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for _, addr := range addresses {
+			proof := m.MerkleProof(addr)
+			verifyProof(t, root, proof, addr)
+		}
+	})
+	t.Run("multiple levels", func(t *testing.T) {
+		m := NewMemory()
+		addresses := []uint64{
+			0x0000000000000,
+			0x0400000000000,
+			0x0800000000000,
+			0x0C00000000000,
+			0x1000000000000,
+			0x1400000000000,
+		}
+		for i, addr := range addresses {
+			m.SetUnaligned(addr, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for _, addr := range addresses {
+			proof := m.MerkleProof(addr)
+			verifyProof(t, root, proof, addr)
+		}
+	})
+
+	t.Run("sparse tree", func(t *testing.T) {
+		m := NewMemory()
+		addresses := []uint64{
+			0x0000000000000,
+			0x0000400000000,
+			0x0004000000000,
+			0x0040000000000,
+			0x0400000000000,
+			0x3C00000000000,
+		}
+		for i, addr := range addresses {
+			m.SetUnaligned(addr, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for _, addr := range addresses {
+			proof := m.MerkleProof(addr)
+			verifyProof(t, root, proof, addr)
+		}
+	})
+
+	t.Run("adjacent addresses", func(t *testing.T) {
+		m := NewMemory()
+		baseAddr := uint64(0x0400000000000)
+		for i := uint64(0); i < 16; i++ {
+			m.SetUnaligned(baseAddr+i, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for i := uint64(0); i < 16; i++ {
+			proof := m.MerkleProof(baseAddr + i)
+			verifyProof(t, root, proof, baseAddr+i)
+		}
+	})
+
+	t.Run("cross-page addresses", func(t *testing.T) {
+		m := NewMemory()
+		pageSize := uint64(4096)
+		addresses := []uint64{
+			pageSize - 2,
+			pageSize - 1,
+			pageSize,
+			pageSize + 1,
+			2*pageSize - 2,
+			2*pageSize - 1,
+			2 * pageSize,
+			2*pageSize + 1,
+		}
+		for i, addr := range addresses {
+			m.SetUnaligned(addr, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for _, addr := range addresses {
+			proof := m.MerkleProof(addr)
+			verifyProof(t, root, proof, addr)
+		}
+	})
+
+	t.Run("large addresses", func(t *testing.T) {
+		m := NewMemory()
+		addresses := []uint64{
+			0x10_00_00_00_00_00_00_00,
+			0x10_00_00_00_00_00_00_02,
+			0x10_00_00_00_00_00_00_04,
+			0x10_00_00_00_00_00_00_06,
+		}
+		for i, addr := range addresses {
+			m.SetUnaligned(addr, []byte{byte(i + 1)})
+		}
+		root := m.MerkleRoot()
+		for _, addr := range addresses {
+			proof := m.MerkleProof(addr)
+			verifyProof(t, root, proof, addr)
+		}
+	})
+}
+func TestMerkleProofWithPartialPaths(t *testing.T) {
+	testCases := []struct {
+		name        string
+		setupMemory func(*Memory)
+		proofAddr   uint64
+	}{
+		{
+			name: "Path ends at level 1",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_00_00_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x20_00_00_00_00_00_00_00,
+		},
+		{
+			name: "Path ends at level 2",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_00_00_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x11_00_00_00_00_00_00_00,
+		},
+		{
+			name: "Path ends at level 3",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_00_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x10_11_00_00_00_00_00_00,
+		},
+		{
+			name: "Path ends at level 4",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_10_00_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x10_10_11_00_00_00_00_00,
+		},
+		{
+			name: "Full path to level 5, page doesn't exist",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_10_10_00_00_00_00, []byte{1})
+			},
+			proofAddr: 0x10_10_10_10_10_00_00_00, // Different page in the same level 5 node
+		},
+		{
+			name: "Path ends at level 3, check different page offsets",
+			setupMemory: func(m *Memory) {
+				m.SetUnaligned(0x10_10_00_00_00_00_00_00, []byte{1})
+				m.SetUnaligned(0x10_10_00_00_00_00_10_00, []byte{2})
+			},
+			proofAddr: 0x10_10_00_00_00_00_20_00, // Different offset in the same page
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewMemory()
+			tc.setupMemory(m)
+
+			proof := m.MerkleProof(tc.proofAddr)
+
+			// Check that the proof is filled correctly
+			verifyProof(t, m.MerkleRoot(), proof, tc.proofAddr)
+			//checkProof(t, proof, tc.expectedDepth)
+		})
+	}
+}
+
+func verifyProof(t *testing.T, expectedRoot [32]byte, proof [ProofLen * 32]byte, addr uint64) {
+	node := *(*[32]byte)(proof[:32])
+	path := addr >> 5
+	for i := 32; i < len(proof); i += 32 {
+		sib := *(*[32]byte)(proof[i : i+32])
+		if path&1 != 0 {
+			node = HashPair(sib, node)
+		} else {
+			node = HashPair(node, sib)
+		}
+		path >>= 1
+	}
+	require.Equal(t, expectedRoot, node, "proof must verify for address 0x%x", addr)
 }
 
 func TestMemoryMerkleRoot(t *testing.T) {
@@ -77,28 +294,36 @@ func TestMemoryMerkleRoot(t *testing.T) {
 		root := m.MerkleRoot()
 		require.Equal(t, zeroHashes[64-5], root, "zero still")
 	})
+
 	t.Run("random few pages", func(t *testing.T) {
 		m := NewMemory()
 		m.SetUnaligned(PageSize*3, []byte{1})
 		m.SetUnaligned(PageSize*5, []byte{42})
 		m.SetUnaligned(PageSize*6, []byte{123})
-		p3 := m.MerkleizeSubtree((1 << PageKeySize) | 3)
-		p5 := m.MerkleizeSubtree((1 << PageKeySize) | 5)
-		p6 := m.MerkleizeSubtree((1 << PageKeySize) | 6)
-		z := zeroHashes[PageAddrSize-5]
+
+		p0 := m.radix.MerkleizeNode(0, 8)
+		p1 := m.radix.MerkleizeNode(0, 9)
+		p2 := m.radix.MerkleizeNode(0, 10)
+		p3 := m.radix.MerkleizeNode(0, 11)
+		p4 := m.radix.MerkleizeNode(0, 12)
+		p5 := m.radix.MerkleizeNode(0, 13)
+		p6 := m.radix.MerkleizeNode(0, 14)
+		p7 := m.radix.MerkleizeNode(0, 15)
+
 		r1 := HashPair(
 			HashPair(
-				HashPair(z, z),  // 0,1
-				HashPair(z, p3), // 2,3
+				HashPair(p0, p1), // 0,1
+				HashPair(p2, p3), // 2,3
 			),
 			HashPair(
-				HashPair(z, p5), // 4,5
-				HashPair(p6, z), // 6,7
+				HashPair(p4, p5), // 4,5
+				HashPair(p6, p7), // 6,7
 			),
 		)
-		r2 := m.MerkleizeSubtree(1 << (PageKeySize - 3))
+		r2 := m.MerkleRoot()
 		require.Equal(t, r1, r2, "expecting manual page combination to match subtree merkle func")
 	})
+
 	t.Run("invalidate page", func(t *testing.T) {
 		m := NewMemory()
 		m.SetUnaligned(0xF000, []byte{0})
@@ -114,7 +339,7 @@ func TestMemoryReadWrite(t *testing.T) {
 	t.Run("large random", func(t *testing.T) {
 		m := NewMemory()
 		data := make([]byte, 20_000)
-		_, err := rand.Read(data[:])
+		_, err := cryptorand.Read(data[:])
 		require.NoError(t, err)
 		require.NoError(t, m.SetMemoryRange(0, bytes.NewReader(data)))
 		for _, i := range []uint64{0, 1, 2, 3, 4, 5, 6, 7, 1000, 3333, 4095, 4096, 4097, 20_000 - 32} {
