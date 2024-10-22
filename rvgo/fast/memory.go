@@ -195,10 +195,7 @@ func (m *Memory) SetAligned(addr uint64, dat []byte) {
 		m.Invalidate(addr) // invalidate this branch of memory, now that the value changed
 	}
 
-	d := copy(p.Data[pageAddr:], dat)
-	if d == len(dat) {
-		return // if all the data fitted in the page, we're done
-	}
+	copy(p.Data[pageAddr:], dat)
 }
 
 func (m *Memory) GetUnaligned(addr uint64, dest []byte) {

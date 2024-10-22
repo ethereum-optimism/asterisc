@@ -333,7 +333,6 @@ contract RISCV {
                 out := 548
             }
             if iszero(eq(proof.offset, proofContentOffset())) { revert(0, 0) }
-            // TODO: validate abi offset values?
 
             //
             // State loading
@@ -727,10 +726,6 @@ contract RISCV {
             function storeMem(addr, size, value, proofIndexL, proofIndexR) {
                 storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
             }
-
-            //
-            // CSR (control and status registers) functions
-            //
 
             //
             // Preimage oracle interactions

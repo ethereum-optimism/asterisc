@@ -267,10 +267,6 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	}
 
 	//
-	// CSR (control and status registers) functions
-	//
-
-	//
 	// Preimage oracle interactions
 	//
 	writePreimageKey := func(addr U64, count U64) U64 {
@@ -378,7 +374,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			// ensure MAP_ANONYMOUS is set and fd == -1
 			if (flags&0x20) == 0 || fd != u64Mask() {
 				addr = u64Mask()
-				errCode = toU64(0x4d) // no error
+				errCode = toU64(0x4d) // EBADF
 			} else {
 				// ignore: prot, flags, fd, offset
 				switch addr {

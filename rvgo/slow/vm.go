@@ -128,7 +128,13 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	}
 
 	proofContentOffset := shortToU64(uint16(stateContentOffset) + paddedStateSize + 32)
-	// TODO: validate abi offset values?
+
+	if and(b32asBEWord(calldataload(shortToU64(uint16(stateContentOffset)+paddedStateSize))), shortToU256(60-1)) != (U256{}) {
+		// proof offset must be stateContentOffset+paddedStateSize+32
+		// proof size: 64-5+1=60 * 32 byte leaf,
+		// but multiple memProof can be used, so the proofSize must be a multiple of 60
+		panic("invalid proof offset input")
+	}
 
 	//
 	// State loading
@@ -449,10 +455,6 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8) {
 		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
 	}
-
-	//
-	// CSR (control and status registers) functions
-	//
 
 	//
 	// Preimage oracle interactions
