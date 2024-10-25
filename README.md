@@ -8,10 +8,22 @@ The interface of the Asterisc binary is essentially the same as Cannon for op-ch
 
 ## Getting started
 
-- Read the [docs](./docs).
-- Build the smart-contracts with foundry.
-- Compile the `tests/go-tests` (see [`Makefile`](./tests/go-tests/Makefile)) for binaries used by Go tests.
-- Run the `rvgo` tests. All onchain and offchain execution is covered by standard RISC-V unit-tests
+Read the [docs](./docs) to get started.
+
+Install the dependencies by running the following: 
+```bash
+git submodule update --remote --init
+
+# to build rvgo target
+make build-rvgo
+
+# to build rvsol target
+make build-rvsol
+```
+
+## Docs
+
+Refer to the [docs](docs) directory.
 
 ## Deployment
 
@@ -22,11 +34,13 @@ The interface of the Asterisc binary is essentially the same as Cannon for op-ch
 
 ### Sepolia
 
-Check [deployments/README.md](deployments/README.md) for details.
+Check [deployments/README.md](deployments/README.md) for more details.
 
 ## Testing
 
-All test suites can be ran referring to CI pipelines.
+The Asterisc has multiple tests running on the Github Actions and CircleCI pipelines. 
+
+Refer to the following commands to run individual tests on your machine. 
 
 ### rvgo-tests
 
@@ -36,7 +50,10 @@ Checks correctness of fast and slow mode. Also differential fuzz tests with EVM 
 (cd rvsol && forge build)
 (cd tests/go-tests && make bin bin/simple bin/minimal)
 
+# Run go unit tests
 go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
+
+# Run fuzz tests
 make fuzz
 ```
 
@@ -100,8 +117,7 @@ and having a Go mirror of the smart-contract behavior for testing/debugging in g
 ## RISC-V subset support
 
 - `RV32I` support - 32 bit base instruction set
-  - `FENCE`, `ECALL`, `EBREAK` are hardwired to implement a minimal subset of systemcalls of the linux kernel
-    - Work in progress. All syscalls used by the Golang `risc64` runtime. 
+  - `FENCE`, `ECALL`, `EBREAK` are hardwired to implement a minimal subset of systemcalls of the linux kernel 
 - `RV64I` support
 - `RV32M`+`RV64M`: Multiplication support
 - `RV32A`+`RV64A`: Atomics support
@@ -142,12 +158,6 @@ So Asterisc aims to complement other fraud-proof systems, and not to replace the
 
 Asterisc has been transferred to the Optimism GitHub org in January 2024,
 to push forward the multi-proof OP-Stack vision with collective Optimism engineering effort.
-
-## Docs
-
-- [Go support](./docs/golang.md): relevant info about the Go runtime / compiler to support it
-- [RISC-V resources](./docs/riscv.md): RISC-V instruction set specs, references and notes
-- [Toolchain notes](./docs/toolchain.md): RISC-V and Go toolchain help
 
 ## Why not X?
 
