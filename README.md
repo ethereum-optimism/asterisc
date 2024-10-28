@@ -25,6 +25,56 @@ make build-rvsol
 
 Refer to the [docs](docs) directory.
 
+## Usage
+
+```bash
+# Build op-program server-mode and RISCV-client binaries.
+make op-program-riscv
+make op-program
+
+# Build the asterisc go binary
+make build-rvgo
+
+# Transform RISCV op-program client binary into first VM state.
+# This outputs state.bin.gz (VM state) and meta.json (for debug symbols).
+./rvgo/bin/asterisc load-elf --path=./rvsol/lib/optimism/op-program/bin-riscv/op-program-client-riscv.elf
+
+# Run asterisc emulator (with example inputs)
+# Note that the server-mode op-program command is passed into asterisc (after the --),
+# it runs as sub-process to provide the pre-image data.
+#
+# Note:
+#  - The L2 RPC is an archive L2 node on OP MAINNET.
+#  - The L1 RPC is a non-archive RPC, also change `--l1.rpckind` to reflect the correct L1 RPC type.
+#  - The network flag is only suitable for specific networks(https://github.com/ethereum-optimism/superchain-registry/blob/main/chainList.json). If you are running on the devnet, please use '--l2.genesis' to supply a path to the L2 devnet genesis file.
+./rvgo/bin/asterisc run \
+    --pprof.cpu \
+    --info-at '%10000000' \
+    --proof-at '=<TRACE_INDEX>' \
+    --stop-at '=<STOP_INDEX>' \
+    --snapshot-at '%1000000000' \
+    --input ./state.bin.gz \
+    -- \
+    ./rvsol/lib/optimism/op-program/bin/op-program \
+    --network <network name> \
+    --l1 <L1_URL> \
+    --l2 <L2_URL> \
+    --l1.head <L1_HEAD> \
+    --l2.claim <L2_CLAIM> \
+    --l2.head <L2_HEAD> \
+    --l2.blocknumber <L2_BLOCK_NUMBER> \
+    --l2.outputroot <L2_OUTPUT_ROOT>
+    --datadir /tmp/fpp-database \
+    --log.format terminal \
+    --server
+
+# Add --proof-at '=12345' (or pick other pattern, see --help)
+# to pick a step to build a proof for (e.g. exact step, every N steps, etc.)
+
+# Also see `./rvgo/bin/asterisc run --help` for more options
+```
+
+
 ## Deployment
 
 ### Local Devnet

@@ -16,7 +16,7 @@ Before you begin, make sure you have the following:
 - `L2 Execution Client Endpoint`: Access to an L2 execution client (e.g., op-geth).
 - `OP Node` Running on Your Selected Chain: An operational op-node connected to your chosen network.
 
-## Gathering the necessary hashes
+## Step 1: Gathering the necessary hashes
 
 A fault proof program starts from a specific l2 head, and runs the fault proof program until another l2 head in the future. 
 Then, we want to validate that the l2 output root the output root generated is equal to the claim we want to verify against.
@@ -44,7 +44,7 @@ The following command…
 - derives until `l2.blocknumber` …
 - checks the final output root is equal to `l2.claim`.
 
-### Gathering the l2 head and output root
+### Step 1.1: Gathering the l2 head and output root
 Pick a l2 block number to start derivation from. 
 
 For example, if we start from block `123,993,796`, call the following rpc on your op-node RPC: 
@@ -76,7 +76,7 @@ This will return something like (but not exactly):
 
 The `outputRoot` and `blockRef.hash` are what we're interested in. These values correspond to the `l2.head` and `l2.outputroot` in the previous command.
 
-### Gathering the target l2 head and output root
+### Step 1.2: Gathering the target l2 head and output root
 Now, pick a l2 block number to end derivation at. 
 
 For example, if we start from block `123,993,889`, call the following rpc on your op-node RPC:
@@ -86,7 +86,7 @@ cast rpc optimism_outputAtBlock 0x763FF21 --rpc-url http://OP_NODE_ENDPOINT | jq
 
 From the result, get the `outputRoot`, `blockRef.number`, and `blockRef.l1origin.hash`. These values correspond to the `l2.claim`, `l2.blocknumber`, `l1.head`.
 
-### Gathering the preimage
+### Step 1.3: Gathering the preimage
 
 Now, let's return to the original command we were working on:
 ```bash
@@ -107,23 +107,27 @@ Now, let's return to the original command we were working on:
 The above command uses op-program to [gather the pre-image](https://github.com/ethereum-optimism/specs/blob/main/specs/fault-proof/index.md#pre-image-oracle), which are necessary for the FPVM to work with.
 
 The op-program will run from `l2.head` to `l2.blocknumber`, and save the preimage data to the `--datadir` we specified.
+When the preimage data is fetched prior to Asterisc running, the networking cost of op-program during FPVM run may be reduced. 
 
-Once this is ready, we can run the Asterisc FPVM
+Once this is ready, we can run the Asterisc FPVM.
 
-## Building the Fault Proof VM 
+> This step is only necessary if you want to fetch preimage in advance to running Asterisc. 
+> You can [also run op-program as a server mode](#step-31-breaking-down-the-command), where preimages will be fetched on-the-go while Asterisc is running.
+
+## Step 2: Building the Fault Proof VM 
 
 What is a FPVM?
 - First, the op-program is compiled down to a binary in RISC-V format.
 - Then, this ELF binary is fed into the Asterisc, which produced a json format of the program (prestate)
 - Finally, Asterisc can execute through this json
 
-### Compiling op-program into RISC-V
+### Step 2.1: Compiling op-program into RISC-V
 Navigate to `rvsol/lib/optimism/op-program`, and run:
 ```bash
 make op-program-client-riscv
 ```
 
-### Generating the Prestate JSON
+### Step 2.2: Generating the Prestate JSON
 Use Asterisc to translate the ELF binary into a JSON format that the FPVM can execute:
 
 ```bash
@@ -139,7 +143,7 @@ This generates:
 
 You can also run `make prestate` at the root directory to run the above steps. 
 
-### Running Asterisc
+### Step 2.3: Running Asterisc
 To run Asterisc with the prestate generated in the above step, run:
 ```bash
 ./bin/asterisc run \
@@ -151,7 +155,7 @@ To run Asterisc with the prestate generated in the above step, run:
 
 Note that the `prestate.json` is now provided as the `input`.
 
-## Running the Fault Proof Program with Asterisc
+## Step 3: Running the Fault Proof Program with Asterisc
 Now, run the FPP within the FPVM, using the prestate JSON and the pre-images gathered earlier.
 
 ```bash
@@ -175,13 +179,13 @@ Now, run the FPP within the FPVM, using the prestate JSON and the pre-images gat
     --l1.trustrpc=true \
     --server
 ```
-### Breaking Down the Command
+### Step 3.1: Breaking Down the Command
 - `./bin/asterisc run`: Executes the FPVM with the prestate.
 - The arguments after `--` are passed to the server part of op-program.
 - `./bin/op-program` runs the op-program.
-  - The `--server` flag runs op-program in server mode, providing pre-images. 
-
-## Validating the Output Root
+  - The `--server` flag runs op-program in server mode, providing pre-images. When you run op-program in a server mode, you don't need to have preimages fetched in step 1.3.
+  
+## Step 4: Validating the Output Root
 After running the above command, the FPVM should output whether the final output root matches the claimed output root.
 - Success: If the output root matches, the claim is valid.
 - Failure: If it doesn't match, there may be a fault in the state transition.
