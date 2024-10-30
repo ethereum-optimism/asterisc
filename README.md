@@ -8,10 +8,72 @@ The interface of the Asterisc binary is essentially the same as Cannon for op-ch
 
 ## Getting started
 
-- Read the [docs](./docs).
-- Build the smart-contracts with foundry.
-- Compile the `tests/go-tests` (see [`Makefile`](./tests/go-tests/Makefile)) for binaries used by Go tests.
-- Run the `rvgo` tests. All onchain and offchain execution is covered by standard RISC-V unit-tests
+Read the [docs](./docs) to get started.
+
+Install the dependencies by running the following: 
+```bash
+git submodule update --remote --init
+
+# to build rvgo target
+make build-rvgo
+
+# to build rvsol target
+make build-rvsol
+```
+
+## Docs
+
+Refer to the [docs](docs) directory.
+
+## Usage
+
+```bash
+# Build op-program server-mode and RISCV-client binaries.
+make op-program-riscv
+make op-program
+
+# Build the asterisc go binary
+make build-rvgo
+
+# Transform RISCV op-program client binary into first VM state.
+# This outputs state.bin.gz (VM state) and meta.json (for debug symbols).
+./rvgo/bin/asterisc load-elf --path=./rvsol/lib/optimism/op-program/bin-riscv/op-program-client-riscv.elf
+
+# Run asterisc emulator (with example inputs)
+# Note that the server-mode op-program command is passed into asterisc (after the --),
+# it runs as sub-process to provide the pre-image data.
+#
+# Note:
+#  - The L2 RPC is an archive L2 node on OP MAINNET.
+#  - The L1 RPC is a non-archive RPC, also change `--l1.rpckind` to reflect the correct L1 RPC type.
+#  - The network flag is only suitable for specific networks(https://github.com/ethereum-optimism/superchain-registry/blob/main/chainList.json). If you are running on the devnet, please use '--l2.genesis' to supply a path to the L2 devnet genesis file.
+./rvgo/bin/asterisc run \
+    --pprof.cpu \
+    --info-at '%10000000' \
+    --proof-at '=<TRACE_INDEX>' \
+    --stop-at '=<STOP_INDEX>' \
+    --snapshot-at '%1000000000' \
+    --input ./state.bin.gz \
+    -- \
+    ./rvsol/lib/optimism/op-program/bin/op-program \
+    --network <network name> \
+    --l1 <L1_URL> \
+    --l2 <L2_URL> \
+    --l1.head <L1_HEAD> \
+    --l2.claim <L2_CLAIM> \
+    --l2.head <L2_HEAD> \
+    --l2.blocknumber <L2_BLOCK_NUMBER> \
+    --l2.outputroot <L2_OUTPUT_ROOT>
+    --datadir /tmp/fpp-database \
+    --log.format terminal \
+    --server
+
+# Add --proof-at '=12345' (or pick other pattern, see --help)
+# to pick a step to build a proof for (e.g. exact step, every N steps, etc.)
+
+# Also see `./rvgo/bin/asterisc run --help` for more options
+```
+
 
 ## Deployment
 
@@ -22,11 +84,13 @@ The interface of the Asterisc binary is essentially the same as Cannon for op-ch
 
 ### Sepolia
 
-Check [deployments/README.md](deployments/README.md) for details.
+Check [deployments/README.md](deployments/README.md) for more details.
 
 ## Testing
 
-All test suites can be ran referring to CI pipelines.
+The Asterisc has multiple tests running on the Github Actions and CircleCI pipelines. 
+
+Refer to the following commands to run individual tests on your machine. 
 
 ### rvgo-tests
 
@@ -36,7 +100,10 @@ Checks correctness of fast and slow mode. Also differential fuzz tests with EVM 
 (cd rvsol && forge build)
 (cd tests/go-tests && make bin bin/simple bin/minimal)
 
+# Run go unit tests
 go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
+
+# Run fuzz tests
 make fuzz
 ```
 
@@ -100,8 +167,7 @@ and having a Go mirror of the smart-contract behavior for testing/debugging in g
 ## RISC-V subset support
 
 - `RV32I` support - 32 bit base instruction set
-  - `FENCE`, `ECALL`, `EBREAK` are hardwired to implement a minimal subset of systemcalls of the linux kernel
-    - Work in progress. All syscalls used by the Golang `risc64` runtime. 
+  - `FENCE`, `ECALL`, `EBREAK` are hardwired to implement a minimal subset of systemcalls of the linux kernel 
 - `RV64I` support
 - `RV32M`+`RV64M`: Multiplication support
 - `RV32A`+`RV64A`: Atomics support
@@ -142,12 +208,6 @@ So Asterisc aims to complement other fraud-proof systems, and not to replace the
 
 Asterisc has been transferred to the Optimism GitHub org in January 2024,
 to push forward the multi-proof OP-Stack vision with collective Optimism engineering effort.
-
-## Docs
-
-- [Go support](./docs/golang.md): relevant info about the Go runtime / compiler to support it
-- [RISC-V resources](./docs/riscv.md): RISC-V instruction set specs, references and notes
-- [Toolchain notes](./docs/toolchain.md): RISC-V and Go toolchain help
 
 ## Why not X?
 

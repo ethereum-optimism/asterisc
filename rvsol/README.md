@@ -3,6 +3,21 @@
 ## Deployment
 Currently, Asterisc only supports the local devnet launched from the Optimism monorepo.
 
+### Build
+1. Update the git submodule
+   - Run `git submodule update --init --remote` in the project root. 
+2. Build the Asterisc binary and generate prestate proof
+   - Run `make prestate` in the project root.   
+
+### Testing
+To run tests on [rvsol/src/RISCV.sol](../rvsol/src/RISCV.sol) implementation, run the following in the project root:
+```
+(cd rvgo/scripts/go-ffi && go build)
+
+cd rvsol
+forge test -vvv --ffi
+```
+
 ### Prerequisites
 1. Running local devnet launched from the Optimism monorepo
    - Run ```make devnet-up``` in the monorepo root.
