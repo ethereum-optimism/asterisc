@@ -628,7 +628,7 @@ contract RISCV_Test is CommonTest {
 
     function test_lrw_succeeds() public {
         bytes32 value = hex"1e0acbdd44d41d85";
-        uint64 addr = 0x233f3d38d3ce666b;
+        uint64 addr = 0x233f3d38d3ce6668;
         uint8 funct3 = 0x2;
         uint8 funct7 = encodeFunct7(0x2, 0x0, 0x0);
         uint8 size = uint8(1 << (funct3 & 0x3));
@@ -678,7 +678,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoswapw_succeeds() public {
-        uint64 addr = 0x44c23256360226b2;
+        uint64 addr = 0x44c23256360226b0;
         uint32 insn;
         uint8 size;
         {
@@ -709,7 +709,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoaddw_succeeds() public {
-        uint64 addr = 0xbf1cd3785c3b5e3;
+        uint64 addr = 0xbf1cd3785c3b5e0;
         uint32 insn;
         uint8 size;
         {
@@ -746,7 +746,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoxorw_succeeds() public {
-        uint64 addr = 0xd9a8dd911b0547cd;
+        uint64 addr = 0xd9a8dd911b0547cc;
         uint32 insn;
         uint8 size;
         {
@@ -783,7 +783,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoandw_succeeds() public {
-        uint64 addr = 0x5519c1cd82d36829;
+        uint64 addr = 0x5519c1cd82d36828;
         uint32 insn;
         uint8 size;
         {
@@ -819,7 +819,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoorw_succeeds() public {
-        uint64 addr = 0x2dbd6638ebe8a251;
+        uint64 addr = 0x2dbd6638ebe8a250;
         uint32 insn;
         uint8 size;
         {
@@ -856,7 +856,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amominw_succeeds() public {
-        uint64 addr = 0xbb0517653427ed99;
+        uint64 addr = 0xbb0517653427ed98;
         uint32 insn;
         uint8 size;
         {
@@ -888,7 +888,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amomaxw_succeeds() public {
-        uint64 addr = 0xb320adad61ff64b9;
+        uint64 addr = 0xb320adad61ff64b8;
         uint32 insn;
         uint8 size;
         {
@@ -920,7 +920,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amominuw_succeeds() public {
-        uint64 addr = 0xc00b31ae34210acb;
+        uint64 addr = 0xc00b31ae34210ac8;
         uint32 insn;
         uint8 size;
         {
@@ -953,7 +953,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amomaxuw_succeeds() public {
-        uint64 addr = 0xca0b8f3993fbb896;
+        uint64 addr = 0xca0b8f3993fbb894;
         uint32 insn;
         uint8 size;
         {
@@ -987,7 +987,7 @@ contract RISCV_Test is CommonTest {
 
     function test_lrd_succeeds() public {
         bytes32 value = hex"a0b1df92a49eec39";
-        uint64 addr = 0xb86a394544c084ef;
+        uint64 addr = 0xb86a394544c084ec;
         uint8 funct3 = 0x3;
         uint8 funct7 = encodeFunct7(0x2, 0x0, 0x0);
         uint8 size = uint8(1 << (funct3 & 0x3));
@@ -1036,7 +1036,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoswapd_succeeds() public {
-        uint64 addr = 0x15f4716cd3aa7306;
+        uint64 addr = 0x15f4716cd3aa7308;
         uint32 insn;
         uint8 size;
         {
@@ -1067,7 +1067,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoaddd_succeeds() public {
-        uint64 addr = 0xeae426a36ff2bb67;
+        uint64 addr = 0xeae426a36ff2bb64;
         uint32 insn;
         uint8 size;
         {
@@ -1162,7 +1162,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoord_succeeds() public {
-        uint64 addr = 0xa0d7a5ea65b35666;
+        uint64 addr = 0xa0d7a5ea65b35664;
         uint32 insn;
         uint8 size;
         {
@@ -1194,7 +1194,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amomind_succeeds() public {
-        uint64 addr = 0x1f817b9eab194b3;
+        uint64 addr = 0x1f817b9eab194b0;
         uint32 insn;
         uint8 size;
         {
@@ -1258,7 +1258,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amominud_succeeds() public {
-        uint64 addr = 0xe094be571f4baca6;
+        uint64 addr = 0xe094be571f4baca4;
         uint32 insn;
         uint8 size;
         {
@@ -1290,7 +1290,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amomaxud_succeeds() public {
-        uint64 addr = 0x2bcfe03b376a17e2;
+        uint64 addr = 0x2bcfe03b376a17e0;
         uint32 insn;
         uint8 size;
         {
@@ -2403,8 +2403,42 @@ contract RISCV_Test is CommonTest {
         riscv.step(encodedState, proof, 0);
     }
 
+    function test_unaligned_address() public {
+        uint64 addr = 0xeae426a36ff2bb65; // unaligned address
+
+        // Valid amoadd instr
+        uint32 insn;
+        uint8 size;
+        {
+            uint8 funct3 = 0x3;
+            uint8 funct7 = encodeFunct7(0x0, 0x0, 0x0);
+            size = uint8(1 << (funct3 & 0x3));
+            insn = encodeRType(0x2f, 14, funct3, 8, 28, funct7); // amoaddd x14, x28, (x8)
+        }
+        (, uint64 rs2ValueU64) = truncate(hex"a0821b98f6c0d237", size);
+        (bytes32 memValueBytes32, uint64 memValueU64) = truncate(hex"f47daefa285404dc", size);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, memValueBytes32);
+        state.registers[8] = addr;
+        state.registers[28] = rs2ValueU64;
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        // check memory stores value of M[x[rs1]] + x[rs2]
+        bytes32 result = uint256ToBytes32(uint256(uint128(int128(int64(rs2ValueU64)) + int128(int64(memValueU64)))));
+        (expect.memRoot,) = ffi.getAsteriscMemoryProof(0, insn, addr, result);
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        // check rd value stores original mem value.
+        expect.registers[14] = memValueU64;
+        expect.registers[8] = state.registers[8];
+        expect.registers[28] = state.registers[28];
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000bad10ad0");
+        riscv.step(encodedState, proof, 0);
+    }
+
     function test_unknown_atomic_operation() public {
-        uint64 addr = 0xeae426a36ff2bb67;
+        uint64 addr = 0xeae426a36ff2bb64;
         uint32 insn;
         uint8 size;
         {

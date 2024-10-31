@@ -333,7 +333,6 @@ contract RISCV {
                 out := 548
             }
             if iszero(eq(proof.offset, proofContentOffset())) { revert(0, 0) }
-            // TODO: validate abi offset values?
 
             //
             // State loading
@@ -349,12 +348,10 @@ contract RISCV {
             // State access
             //
             function readState(offset, length) -> out {
-                // TODO revert if more than 32 bytes
                 out := mload(add(memStateOffset(), offset)) // note: the state variables are all big-endian encoded
                 out := shr(shl(3, sub(32, length)), out) // shift-right to right-align data and reduce to desired length
             }
             function writeState(offset, length, data) {
-                // TODO revert if more than 32 bytes
                 let memOffset := add(memStateOffset(), offset)
                 // left-aligned mask of length bytes
                 let mask := shl(shl(3, sub(32, length)), not(0))
@@ -548,10 +545,6 @@ contract RISCV {
                 out := shr64(toU64(25), instr)
             }
 
-            function parseCSRR(instr) -> out {
-                out := shr64(toU64(20), instr)
-            }
-
             //
             // Memory functions
             //
@@ -735,35 +728,6 @@ contract RISCV {
             }
 
             //
-            // CSR (control and status registers) functions
-            //
-            function readCSR(num) -> out {
-                out := 0 // just return zero, CSR is not supported, but may be in the future.
-            }
-
-            function writeCSR(num, v) {
-                // no-op
-            }
-
-            function updateCSR(num, v, mode) -> out {
-                out := readCSR(num)
-                switch mode
-                case 1 { // ?01 = CSRRW(I)
-                }
-                case 2 {
-                    // ?10 = CSRRS(I)
-                    v := or64(out, v)
-                }
-                case 3 {
-                    // ?11 = CSRRC(I)
-                    v := and64(out, not64(v))
-                }
-                default { revertWithCode(0xbadc0de0) } // unknown CSR mode
-
-                writeCSR(num, v)
-            }
-
-            //
             // Preimage oracle interactions
             //
             function writePreimageKey(addr, count) -> out {
@@ -811,8 +775,9 @@ contract RISCV {
                 revertWithCode(0xbadf00d0)
             }
 
+            // Original implementation is at @optimism/src/cannon/PreimageKeyLib.sol
+            // but it cannot be used because this is inside assembly block
             function localize(preImageKey, localContext_) -> localizedKey {
-                // TODO: deduplicate definition of localize using lib
                 // Grab the current free memory pointer to restore later.
                 let ptr := mload(0x40)
                 // Store the local data key and caller next to each other in memory for hashing.
@@ -899,26 +864,37 @@ contract RISCV {
                     // A1 = n (length)
                     let length := getRegister(toU64(11))
                     // A2 = prot (memory protection type, can ignore)
-                    // A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe
-                    // assert the MAP_ANONYMOUS flag is set
+                    // A3 = flags (shared with other process and or written back to file)
+                    let flags := getRegister(toU64(13))
                     // A4 = fd (file descriptor, can ignore because we support anon memory only)
+                    let fd := getRegister(toU64(14))
                     // A5 = offset (offset in file, we don't support any non-anon memory, so we can ignore this)
 
-                    // ignore: prot, flags, fd, offset
-                    switch addr
-                    case 0 {
-                        // No hint, allocate it ourselves, by as much as the requested length.
-                        // Increase the length to align it with desired page size if necessary.
-                        let align := and64(length, shortToU64(4095))
-                        if align { length := add64(length, sub64(shortToU64(4096), align)) }
-                        let prevHeap := getHeap()
-                        setRegister(toU64(10), prevHeap)
-                        setHeap(add64(prevHeap, length)) // increment heap with length
+                    let errCode := 0
+                    // ensure MAP_ANONYMOUS is set and fd == -1
+                    switch or(iszero(and(flags, 0x20)), not(eq(fd, u64Mask())))
+                    case 1 {
+                        addr := u64Mask()
+                        errCode := toU64(0x4d)
                     }
                     default {
-                        // allow hinted memory address (leave it in A0 as return argument)
+                        switch addr
+                        case 0 {
+                            // No hint, allocate it ourselves, by as much as the requested length.
+                            // Increase the length to align it with desired page size if necessary.
+                            let align := and64(length, shortToU64(4095))
+                            if align { length := add64(length, sub64(shortToU64(4096), align)) }
+                            let prevHeap := getHeap()
+                            addr := prevHeap
+                            setHeap(add64(prevHeap, length)) // increment heap with length
+                        }
+                        default {
+                            // allow hinted memory address (leave it in A0 as return argument)
+                        }
                     }
-                    setRegister(toU64(11), toU64(0)) // no error
+
+                    setRegister(toU64(10), addr)
+                    setRegister(toU64(11), errCode)
                 }
                 case 63 {
                     // read
@@ -1533,12 +1509,7 @@ contract RISCV {
                 }
                 default {
                     // CSR instructions
-                    let imm := parseCSRR(instr)
-                    let value := rs1
-                    if iszero64(and64(funct3, toU64(4))) { value := getRegister(rs1) }
-                    let mode := and64(funct3, toU64(3))
-                    let rdValue := updateCSR(imm, value, mode)
-                    setRegister(rd, rdValue)
+                    setRegister(rd, toU64(0)) // ignore CSR instructions
                     setPC(add64(_pc, toU64(4)))
                 }
             }
@@ -1559,7 +1530,10 @@ contract RISCV {
                 if or(lt64(size, toU64(4)), gt64(size, toU64(8))) { revertWithCode(0xbada70) } // bad AMO size
 
                 let addr := getRegister(rs1)
-                // TODO check if addr is aligned
+                if and64(addr, toU64(3)) {
+                    // quick addr alignment check
+                    revertWithCode(0xbad10ad0) // addr not aligned with 4 bytes
+                }
 
                 let op := shr64(toU64(2), funct7)
                 switch op

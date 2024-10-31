@@ -75,7 +75,3 @@ func parseRs2(instr U64) U64 {
 func parseFunct7(instr U64) U64 {
 	return shr64(toU64(25), instr)
 }
-
-func parseCSSR(instr U64) U64 {
-	return shr64(toU64(20), instr)
-}

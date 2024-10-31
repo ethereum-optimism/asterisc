@@ -83,6 +83,9 @@ func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]b
 		m.lastPreimage = preimage
 	}
 	m.lastPreimageOffset = offset
+	if offset >= uint64(len(preimage)) {
+		panic("Preimage offset out-of-bounds")
+	}
 	datLen = uint64(copy(dat[:], preimage[offset:]))
 	return
 }

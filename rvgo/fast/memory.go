@@ -95,7 +95,6 @@ func (m *Memory) pageLookup(pageIndex uint64) (*CachedPage, bool) {
 	return p, ok
 }
 
-// TODO: we never do unaligned writes, this should be simplified
 func (m *Memory) SetUnaligned(addr uint64, dat []byte) {
 	if len(dat) > 32 {
 		panic("cannot set more than 32 bytes")

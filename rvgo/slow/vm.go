@@ -120,10 +120,6 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		copy(out[:], calldata[offset.val():])
 		return
 	}
-	// TODO check length
-	// TODO check calldata stateData size
-
-	// TODO: validate abi offset values?
 
 	stateContentOffset := uint8(4 + 32 + 32 + 32 + 32)
 	if iszero(eq(b32asBEWord(calldataload(toU64(4+32*3))), shortToU256(stateSize))) {
@@ -133,10 +129,16 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 	proofContentOffset := shortToU64(uint16(stateContentOffset) + paddedStateSize + 32)
 
+	if and(b32asBEWord(calldataload(shortToU64(uint16(stateContentOffset)+paddedStateSize))), shortToU256(60-1)) != (U256{}) {
+		// proof offset must be stateContentOffset+paddedStateSize+32
+		// proof size: 64-5+1=60 * 32 byte leaf,
+		// but multiple memProof can be used, so the proofSize must be a multiple of 60
+		panic("invalid proof offset input")
+	}
+
 	//
 	// State loading
 	//
-	// TODO
 	stateData := make([]byte, stateSize)
 	copy(stateData, calldata[stateContentOffset:])
 
@@ -455,33 +457,6 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	}
 
 	//
-	// CSR (control and status registers) functions
-	//
-	readCSR := func(num U64) U64 {
-		// TODO: do we need CSR?
-		return toU64(0)
-	}
-
-	writeCSR := func(num U64, v U64) {
-		// TODO: do we need CSR?
-	}
-
-	updateCSR := func(num U64, v U64, mode U64) (out U64) {
-		out = readCSR(num)
-		switch mode.val() {
-		case 1: // ?01 = CSRRW(I)
-		case 2: // ?10 = CSRRS(I)
-			v = or64(out, v)
-		case 3: // ?11 = CSRRC(I)
-			v = and64(out, not64(v))
-		default:
-			revertWithCode(riscv.ErrUnknownCSRMode, fmt.Errorf("unknown CSR mode: %d", mode.val()))
-		}
-		writeCSR(num, v)
-		return
-	}
-
-	//
 	// Preimage oracle interactions
 	//
 	writePreimageKey := func(addr U64, count U64) (out U64) {
@@ -590,28 +565,39 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			// A1 = n (length)
 			length := getRegister(toU64(11))
 			// A2 = prot (memory protection type, can ignore)
-			// A3 = flags (shared with other process and or written back to file, can ignore)  // TODO maybe assert the MAP_ANONYMOUS flag is set
+			// A3 = flags (shared with other process and or written back to file)
+			flags := getRegister(toU64(13))
 			// A4 = fd (file descriptor, can ignore because we support anon memory only)
+			fd := getRegister(toU64(14))
 			// A5 = offset (offset in file, we don't support any non-anon memory, so we can ignore this)
 
-			// ignore: prot, flags, fd, offset
-			switch addr.val() {
-			case 0:
-				// No hint, allocate it ourselves, by as much as the requested length.
-				// Increase the length to align it with desired page size if necessary.
-				align := and64(length, shortToU64(4095))
-				if align != (U64{}) {
-					length = add64(length, sub64(shortToU64(4096), align))
+			errCode := toU64(0)
+
+			// ensure MAP_ANONYMOUS is set and fd == -1
+			if (flags.val()&0x20) == 0 || fd != u64Mask() {
+				addr = u64Mask()
+				errCode = toU64(0x4d) // no error
+			} else {
+				// ignore: prot, flags, fd, offset
+				switch addr.val() {
+				case 0:
+					// No hint, allocate it ourselves, by as much as the requested length.
+					// Increase the length to align it with desired page size if necessary.
+					align := and64(length, shortToU64(4095))
+					if align != (U64{}) {
+						length = add64(length, sub64(shortToU64(4096), align))
+					}
+					prevHeap := getHeap()
+					addr = prevHeap
+					setHeap(add64(prevHeap, length)) // increment heap with length
+					//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
+				default:
+					// allow hinted memory address (leave it in A0 as return argument)
+					//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 				}
-				prevHeap := getHeap()
-				setRegister(toU64(10), prevHeap)
-				setHeap(add64(prevHeap, length)) // increment heap with length
-				//fmt.Printf("mmap: 0x%016x (+ 0x%x increase)\n", s.Heap, length)
-			default:
-				// allow hinted memory address (leave it in A0 as return argument)
-				//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 			}
-			setRegister(toU64(11), toU64(0)) // no error
+			setRegister(toU64(10), addr)
+			setRegister(toU64(11), errCode)
 		case riscv.SysRead: // read
 			fd := getRegister(toU64(10))    // A0 = fd
 			addr := getRegister(toU64(11))  // A1 = *buf addr
@@ -1037,15 +1023,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			default: // imm12 = 000000000001 EBREAK
 				setPC(add64(pc, toU64(4))) // ignore breakpoint
 			}
-		default: // CSR instructions
-			imm := parseCSSR(instr)
-			value := rs1
-			if iszero64(and64(funct3, toU64(4))) {
-				value = getRegister(rs1)
-			}
-			mode := and64(funct3, toU64(3))
-			rdValue := updateCSR(imm, value, mode)
-			setRegister(rd, rdValue)
+		default: // ignore CSR instructions
+			setRegister(rd, toU64(0)) // ignore CSR instructions
 			setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
@@ -1065,7 +1044,9 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
-		// TODO check if addr is aligned
+		if and64(addr, toU64(3)) != (U64{}) { // quick addr alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 4 bytes", addr))
+		}
 
 		op := shr64(toU64(2), funct7)
 		switch op.val() {
