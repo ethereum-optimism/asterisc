@@ -178,7 +178,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			panic(fmt.Errorf("addr %d not aligned with 32 bytes", addr))
 		}
 		inst.verifyMemChange(addr, proofIndex)
-		s.Memory.SetAligned(addr, v[:])
+		s.Memory.SetUnaligned(addr, v[:])
 	}
 
 	// load unaligned, optionally signed, little-endian, integer of 1 ... 8 bytes from memory
@@ -220,7 +220,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		inst.verifyMemChange(leftAddr, proofIndexL)
 		if (addr+size-1)&^31 == addr&^31 { // if aligned
-			s.Memory.SetAligned(addr, bytez[:size])
+			s.Memory.SetUnaligned(addr, bytez[:size])
 			return
 		}
 		if proofIndexR == 0xff {
@@ -229,12 +229,12 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// if not aligned
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
-		s.Memory.SetAligned(addr, bytez[:leftSize])
+		s.Memory.SetUnaligned(addr, bytez[:leftSize])
 		if verifyR {
 			inst.trackMemAccess(rightAddr, proofIndexR)
 		}
 		inst.verifyMemChange(rightAddr, proofIndexR)
-		s.Memory.SetAligned(rightAddr, bytez[leftSize:size])
+		s.Memory.SetUnaligned(rightAddr, bytez[leftSize:size])
 	}
 
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8, verifyL bool, verifyR bool) {
@@ -249,7 +249,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		inst.verifyMemChange(leftAddr, proofIndexL)
 		if (addr+size-1)&^31 == addr&^31 { // if aligned
-			s.Memory.SetAligned(addr, bytez[:size])
+			s.Memory.SetUnaligned(addr, bytez[:size])
 			return
 		}
 		// if not aligned
@@ -258,12 +258,12 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		}
 		rightAddr := leftAddr + 32
 		leftSize := rightAddr - addr
-		s.Memory.SetAligned(addr, bytez[:leftSize])
+		s.Memory.SetUnaligned(addr, bytez[:leftSize])
 		if verifyR {
 			inst.trackMemAccess(rightAddr, proofIndexR)
 		}
 		inst.verifyMemChange(rightAddr, proofIndexR)
-		s.Memory.SetAligned(rightAddr, bytez[leftSize:size])
+		s.Memory.SetUnaligned(rightAddr, bytez[leftSize:size])
 	}
 
 	//
