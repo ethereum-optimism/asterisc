@@ -835,13 +835,13 @@ contract RISCV is IBigStepper {
                 // update pre-image reader with updated offset
                 let newOffset := add64(offset, count_)
                 setPreimageOffset(newOffset)
+
                 out := count_
 
                 let node := getMemoryB32(sub64(addr_, alignment), 1)
                 let dat := and(b32asBEWord(node), not(mask)) // keep old bytes outside of mask
                 dat := or(dat, and(pdat, mask)) // fill with bytes from pdat
                 setMemoryB32(sub64(addr_, alignment), beWordAsB32(dat), 1)
-                // out := count_
             }
 
             //
