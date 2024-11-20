@@ -31,7 +31,7 @@ var (
 
 // RISCVMetaData contains all meta data concerning the RISCV contract.
 var RISCVMetaData = &bind.MetaData{
-	ABI: "[{\"type\":\"constructor\",\"inputs\":[{\"name\":\"_oracle\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"oracle\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"step\",\"inputs\":[{\"name\":\"stateData\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"proof\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"localContext\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"nonpayable\"}]",
+	ABI: "[{\"type\":\"constructor\",\"inputs\":[{\"name\":\"_oracle\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"oracle\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"step\",\"inputs\":[{\"name\":\"_stateData\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"_proof\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"_localContext\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"version\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"}]",
 }
 
 // RISCVABI is the input ABI used to generate the binding from.
@@ -211,23 +211,54 @@ func (_RISCV *RISCVCallerSession) Oracle() (common.Address, error) {
 	return _RISCV.Contract.Oracle(&_RISCV.CallOpts)
 }
 
-// Step is a paid mutator transaction binding the contract method 0xe14ced32.
+// Version is a free data retrieval call binding the contract method 0x54fd4d50.
 //
-// Solidity: function step(bytes stateData, bytes proof, bytes32 localContext) returns(bytes32)
-func (_RISCV *RISCVTransactor) Step(opts *bind.TransactOpts, stateData []byte, proof []byte, localContext [32]byte) (*types.Transaction, error) {
-	return _RISCV.contract.Transact(opts, "step", stateData, proof, localContext)
+// Solidity: function version() view returns(string)
+func (_RISCV *RISCVCaller) Version(opts *bind.CallOpts) (string, error) {
+	var out []interface{}
+	err := _RISCV.contract.Call(opts, &out, "version")
+
+	if err != nil {
+		return *new(string), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(string)).(*string)
+
+	return out0, err
+
+}
+
+// Version is a free data retrieval call binding the contract method 0x54fd4d50.
+//
+// Solidity: function version() view returns(string)
+func (_RISCV *RISCVSession) Version() (string, error) {
+	return _RISCV.Contract.Version(&_RISCV.CallOpts)
+}
+
+// Version is a free data retrieval call binding the contract method 0x54fd4d50.
+//
+// Solidity: function version() view returns(string)
+func (_RISCV *RISCVCallerSession) Version() (string, error) {
+	return _RISCV.Contract.Version(&_RISCV.CallOpts)
 }
 
 // Step is a paid mutator transaction binding the contract method 0xe14ced32.
 //
-// Solidity: function step(bytes stateData, bytes proof, bytes32 localContext) returns(bytes32)
-func (_RISCV *RISCVSession) Step(stateData []byte, proof []byte, localContext [32]byte) (*types.Transaction, error) {
-	return _RISCV.Contract.Step(&_RISCV.TransactOpts, stateData, proof, localContext)
+// Solidity: function step(bytes _stateData, bytes _proof, bytes32 _localContext) returns(bytes32)
+func (_RISCV *RISCVTransactor) Step(opts *bind.TransactOpts, _stateData []byte, _proof []byte, _localContext [32]byte) (*types.Transaction, error) {
+	return _RISCV.contract.Transact(opts, "step", _stateData, _proof, _localContext)
 }
 
 // Step is a paid mutator transaction binding the contract method 0xe14ced32.
 //
-// Solidity: function step(bytes stateData, bytes proof, bytes32 localContext) returns(bytes32)
-func (_RISCV *RISCVTransactorSession) Step(stateData []byte, proof []byte, localContext [32]byte) (*types.Transaction, error) {
-	return _RISCV.Contract.Step(&_RISCV.TransactOpts, stateData, proof, localContext)
+// Solidity: function step(bytes _stateData, bytes _proof, bytes32 _localContext) returns(bytes32)
+func (_RISCV *RISCVSession) Step(_stateData []byte, _proof []byte, _localContext [32]byte) (*types.Transaction, error) {
+	return _RISCV.Contract.Step(&_RISCV.TransactOpts, _stateData, _proof, _localContext)
+}
+
+// Step is a paid mutator transaction binding the contract method 0xe14ced32.
+//
+// Solidity: function step(bytes _stateData, bytes _proof, bytes32 _localContext) returns(bytes32)
+func (_RISCV *RISCVTransactorSession) Step(_stateData []byte, _proof []byte, _localContext [32]byte) (*types.Transaction, error) {
+	return _RISCV.Contract.Step(&_RISCV.TransactOpts, _stateData, _proof, _localContext)
 }
