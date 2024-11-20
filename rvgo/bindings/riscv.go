@@ -31,7 +31,7 @@ var (
 
 // RISCVMetaData contains all meta data concerning the RISCV contract.
 var RISCVMetaData = &bind.MetaData{
-	ABI: "[{\"type\":\"constructor\",\"inputs\":[{\"name\":\"_oracle\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"oracle\",\"inputs\":[],\"outputs\":[{\"name\":\"oracle_\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"step\",\"inputs\":[{\"name\":\"_stateData\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"_proof\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"_localContext\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"version\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"}]",
+	ABI: "[{\"type\":\"constructor\",\"inputs\":[{\"name\":\"_oracle\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"oracle\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"contractIPreimageOracle\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"step\",\"inputs\":[{\"name\":\"_stateData\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"_proof\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"_localContext\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"version\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"}]",
 }
 
 // RISCVABI is the input ABI used to generate the binding from.
@@ -182,7 +182,7 @@ func (_RISCV *RISCVTransactorRaw) Transact(opts *bind.TransactOpts, method strin
 
 // Oracle is a free data retrieval call binding the contract method 0x7dc0d1d0.
 //
-// Solidity: function oracle() view returns(address oracle_)
+// Solidity: function oracle() view returns(address)
 func (_RISCV *RISCVCaller) Oracle(opts *bind.CallOpts) (common.Address, error) {
 	var out []interface{}
 	err := _RISCV.contract.Call(opts, &out, "oracle")
@@ -199,14 +199,14 @@ func (_RISCV *RISCVCaller) Oracle(opts *bind.CallOpts) (common.Address, error) {
 
 // Oracle is a free data retrieval call binding the contract method 0x7dc0d1d0.
 //
-// Solidity: function oracle() view returns(address oracle_)
+// Solidity: function oracle() view returns(address)
 func (_RISCV *RISCVSession) Oracle() (common.Address, error) {
 	return _RISCV.Contract.Oracle(&_RISCV.CallOpts)
 }
 
 // Oracle is a free data retrieval call binding the contract method 0x7dc0d1d0.
 //
-// Solidity: function oracle() view returns(address oracle_)
+// Solidity: function oracle() view returns(address)
 func (_RISCV *RISCVCallerSession) Oracle() (common.Address, error) {
 	return _RISCV.Contract.Oracle(&_RISCV.CallOpts)
 }
