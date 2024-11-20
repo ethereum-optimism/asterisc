@@ -1,17 +1,35 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity 0.8.15;
 
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
+import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 
-contract RISCV {
-    IPreimageOracle public oracle;
+/// @title RISCV
+/// @notice The RISCV contract emulates a single RISCV hart cycle statelessly, using memory proofs to verify the
+///         instruction and optional memory access' inclusion in the memory merkle root provided in the trusted
+///         prestate witness.
+/// @dev https://github.com/ethereum-optimism/asterisc
+contract RISCV is IBigStepper {
+    /// @notice The preimage oracle contract.
+    IPreimageOracle internal immutable ORACLE;
 
+    /// @notice The version of the contract.
+    /// @custom:semver 1.1.0-rc.1
+    string public constant version = "1.1.0-rc.1";
+
+    /// @param _oracle The preimage oracle contract.
     constructor(IPreimageOracle _oracle) {
-        oracle = _oracle;
+        ORACLE = _oracle;
     }
 
-    // Executes a single RISC-V instruction, starting from
-    function step(bytes calldata stateData, bytes calldata proof, bytes32 localContext) public returns (bytes32) {
+    /// @notice Getter for the pre-image oracle contract.
+    /// @return oracle_ The pre-image oracle contract.
+    function oracle() external view returns (IPreimageOracle oracle_) {
+        oracle_ = ORACLE;
+    }
+
+    /// @inheritdoc IBigStepper
+    function step(bytes calldata _stateData, bytes calldata _proof, bytes32 _localContext) public returns (bytes32) {
         assembly {
             function revertWithCode(code) {
                 mstore(0, code)
@@ -310,11 +328,11 @@ contract RISCV {
                 // expected memory check: no allocated memory (start after scratch + free-mem-ptr + zero slot = 0x80)
                 revert(0, 0)
             }
-            if iszero(eq(stateData.offset, 132)) {
+            if iszero(eq(_stateData.offset, 132)) {
                 // 32*4+4 = 132 expected state data offset
                 revert(0, 0)
             }
-            if iszero(eq(calldataload(sub(stateData.offset, 32)), stateSize())) {
+            if iszero(eq(calldataload(sub(_stateData.offset, 32)), stateSize())) {
                 // user-provided state size must match expected state size
                 revert(0, 0)
             }
@@ -323,7 +341,7 @@ contract RISCV {
                 let padding := mod(sub(32, mod(v, 32)), 32)
                 out := add(v, padding)
             }
-            if iszero(eq(proof.offset, add(add(stateData.offset, paddedLen(stateSize())), 32))) {
+            if iszero(eq(_proof.offset, add(add(_stateData.offset, paddedLen(stateSize())), 32))) {
                 // 132+stateSize+padding+32 = expected proof offset
                 revert(0, 0)
             }
@@ -332,7 +350,7 @@ contract RISCV {
                 // 132+362+(32-362%32)+32=548
                 out := 548
             }
-            if iszero(eq(proof.offset, proofContentOffset())) { revert(0, 0) }
+            if iszero(eq(_proof.offset, proofContentOffset())) { revert(0, 0) }
 
             //
             // State loading
@@ -342,7 +360,7 @@ contract RISCV {
             }
             // copy the state calldata into memory, so we can mutate it
             mstore(0x40, add(memStateOffset(), stateSize())) // alloc, update free mem pointer
-            calldatacopy(memStateOffset(), stateData.offset, stateSize()) // same format in memory as in calldata
+            calldatacopy(memStateOffset(), _stateData.offset, stateSize()) // same format in memory as in calldata
 
             //
             // State access
@@ -764,8 +782,7 @@ contract RISCV {
                     // as prefix
                 mstore(add(memPtr, 0x04), key)
                 mstore(add(memPtr, 0x24), offset)
-                let cgas := 100000 // TODO change call gas
-                let res := call(cgas, addr, 0, memPtr, 0x44, 0x00, 0x40) // output into scratch space
+                let res := call(gas(), addr, 0, memPtr, 0x44, 0x00, 0x40) // output into scratch space
                 if res {
                     // 1 on success
                     dat := mload(0x00)
@@ -775,7 +792,7 @@ contract RISCV {
                 revertWithCode(0xbadf00d0)
             }
 
-            // Original implementation is at @optimism/src/cannon/PreimageKeyLib.sol
+            // Original implementation is at src/cannon/PreimageKeyLib.sol
             // but it cannot be used because this is inside assembly block
             function localize(preImageKey, localContext_) -> localizedKey {
                 // Grab the current free memory pointer to restore later.
@@ -1499,7 +1516,7 @@ contract RISCV {
                     // I-type, top 12 bits
                     case 0 {
                         // imm12 = 000000000000 ECALL
-                        sysCall(localContext)
+                        sysCall(_localContext)
                         setPC(add64(_pc, toU64(4)))
                     }
                     default {
@@ -1631,3 +1648,4 @@ contract RISCV {
         }
     }
 }
+
