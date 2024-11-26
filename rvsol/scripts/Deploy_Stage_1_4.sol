@@ -3,7 +3,6 @@ pragma solidity ^0.8.15;
 
 import { Config } from "scripts/lib/Config.sol";
 import { Deployer } from "scripts/lib/Deployer.sol";
-import { RISCV } from "../src/RISCV.sol";
 import { PreimageOracle } from "src/cannon/PreimageOracle.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
 import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
@@ -102,10 +101,7 @@ contract Deploy is Deployer, StdAssertions {
     /// @notice Deploy RISCV
     function deployRiscv() public broadcast returns (address addr_) {
         console.log("Deploying RISCV implementation");
-        RISCV riscv = new RISCV{ salt: _implSalt() }(IPreimageOracle(mustGetAddress("PreimageOracle")));
-        save("RISCV", address(riscv));
-        console.log("RISCV deployed at %s", address(riscv));
-        addr_ = address(riscv);
+        addr_ = _deploy("RISCV", "RISCV", abi.encode(IPreimageOracle(mustGetAddress("PreimageOracle"))));
     }
 
     /// @notice Deploy all of the implementations
@@ -419,7 +415,7 @@ contract Deploy is Deployer, StdAssertions {
         assertEq(oracle.minProposalSize(), cfg.preimageOracleMinProposalSize());
         assertEq(oracle.challengePeriod(), cfg.preimageOracleChallengePeriod());
 
-        RISCV riscv = RISCV(mustGetAddress("RISCV"));
+        IBigStepper riscv = IBigStepper(mustGetAddress("RISCV"));
         assertEq(address(riscv.oracle()), address(oracle));
 
         // Check the AnchorStateRegistry configuration.
