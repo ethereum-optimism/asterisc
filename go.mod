@@ -7,7 +7,7 @@ toolchain go1.22.7
 replace github.com/ethereum/go-ethereum v1.14.11 => github.com/ethereum-optimism/op-geth v1.101411.2-0.20241119113622-3dd9b0274bae
 
 require (
-	github.com/ethereum-optimism/optimism v1.10.1-0.20241202195333-623609aef393
+	github.com/ethereum-optimism/optimism v1.10.1-0.20241202195333-117c9a427168
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/holiman/uint256 v1.3.1
 	github.com/pkg/errors v0.9.1
