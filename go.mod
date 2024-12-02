@@ -4,10 +4,10 @@ go 1.22.0
 
 toolchain go1.22.7
 
-replace github.com/ethereum/go-ethereum v1.14.11 => github.com/ethereum-optimism/op-geth v1.101411.2-0.20241119113622-3dd9b0274bae
+replace github.com/ethereum/go-ethereum v1.14.11 => github.com/ethereum-optimism/op-geth v1.101408.1-0.20241002211323-d5a96613c22b
 
 require (
-	github.com/ethereum-optimism/optimism v1.10.1-0.20241202195333-117c9a427168
+	github.com/ethereum-optimism/optimism v1.9.5-0.20241008153126-117c9a427168
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/holiman/uint256 v1.3.1
 	github.com/pkg/errors v0.9.1
@@ -100,6 +100,7 @@ require (
 	github.com/influxdata/line-protocol v0.0.0-20210311194329-9aa0e372d097 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-datastore v0.6.0 // indirect
+	github.com/ipfs/go-ds-leveldb v0.5.0 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
@@ -214,5 +215,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
+	lukechampine.com/uint128 v1.3.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )

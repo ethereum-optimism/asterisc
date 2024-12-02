@@ -262,7 +262,7 @@ func runAsterisc(t *testing.T, ctx context.Context, sys *e2esys.System, inputs u
 	asteriscOpts(&cfg)
 
 	logger := testlog.Logger(t, log.LevelInfo).New("role", "asterisc")
-	executor := vm.NewExecutor(logger, metrics.NoopMetrics.VmMetrics("asterisc"), cfg.Asterisc, vm.NewOpProgramServerExecutor(logger), cfg.AsteriscAbsolutePreState, inputs)
+	executor := vm.NewExecutor(logger, metrics.NoopMetrics.VmMetrics("asterisc"), cfg.Asterisc, vm.NewOpProgramServerExecutor(), cfg.AsteriscAbsolutePreState, inputs)
 
 	t.Log("Running asterisc")
 	err := executor.DoGenerateProof(ctx, proofsDir, math.MaxUint, math.MaxUint, extraVmArgs...)
