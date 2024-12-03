@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.15;
+pragma solidity ^0.8.0;
 
 import { Test } from "@forge-std/Test.sol";
-import { RISCV } from "src/RISCV.sol";
 import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
+import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
+import { DeployUtils } from "@optimism/scripts/libraries/DeployUtils.sol";
 import { CommonTest } from "./CommonTest.sol";
 import "@optimism/src/dispute/lib/Types.sol";
 
@@ -26,13 +27,14 @@ contract RISCV_Test is CommonTest {
         uint64[32] registers;
     }
 
-    RISCV internal riscv;
+    IBigStepper internal riscv;
     PreimageOracle internal oracle;
 
     function setUp() public virtual override {
         super.setUp();
         oracle = new PreimageOracle(0, 0);
-        riscv = new RISCV(IPreimageOracle(address(oracle)));
+        riscv =
+            IBigStepper(DeployUtils.create1({ _name: "RISCV", _args: abi.encode(IPreimageOracle(address(oracle))) }));
         vm.store(address(riscv), 0x0, bytes32(abi.encode(address(oracle))));
         vm.label(address(oracle), "PreimageOracle");
         vm.label(address(riscv), "RISCV");
