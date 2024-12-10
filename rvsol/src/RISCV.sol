@@ -285,34 +285,44 @@ contract RISCV is IBigStepper {
                 out := 0
             }
             function stateOffsetPreimageKey() -> out {
-                out := add(stateOffsetMemRoot(), stateSizeMemRoot())
+                out := 32 // 0 + 32
+                    //                out := add(stateOffsetMemRoot(), stateSizeMemRoot())
             }
             function stateOffsetPreimageOffset() -> out {
-                out := add(stateOffsetPreimageKey(), stateSizePreimageKey())
+                out := 64 // 32 + 32
+                    //                out := add(stateOffsetPreimageKey(), stateSizePreimageKey())
             }
             function stateOffsetPC() -> out {
-                out := add(stateOffsetPreimageOffset(), stateSizePreimageOffset())
+                out := 72 // 64 + 8
+                    //                out := add(stateOffsetPreimageOffset(), stateSizePreimageOffset())
             }
             function stateOffsetExitCode() -> out {
-                out := add(stateOffsetPC(), stateSizePC())
+                out := 80 // 72 + 8
+                    //                out := add(stateOffsetPC(), stateSizePC())
             }
             function stateOffsetExited() -> out {
-                out := add(stateOffsetExitCode(), stateSizeExitCode())
+                out := 81 // 80 + 1
+                    //                out := add(stateOffsetExitCode(), stateSizeExitCode())
             }
             function stateOffsetStep() -> out {
-                out := add(stateOffsetExited(), stateSizeExited())
+                out := 82 // 81 + 1
+                    //                out := add(stateOffsetExited(), stateSizeExited())
             }
             function stateOffsetHeap() -> out {
-                out := add(stateOffsetStep(), stateSizeStep())
+                out := 90 // 82 + 8
+                    //                out := add(stateOffsetStep(), stateSizeStep())
             }
             function stateOffsetLoadReservation() -> out {
-                out := add(stateOffsetHeap(), stateSizeHeap())
+                out := 98 // 90 + 8
+                    //                out := add(stateOffsetHeap(), stateSizeHeap())
             }
             function stateOffsetRegisters() -> out {
-                out := add(stateOffsetLoadReservation(), stateSizeLoadReservation())
+                out := 106 // 98 + 8
+                    //                out := add(stateOffsetLoadReservation(), stateSizeLoadReservation())
             }
             function stateSize() -> out {
-                out := add(stateOffsetRegisters(), stateSizeRegisters())
+                out := 362 // 106 + 256
+                    //                out := add(stateOffsetRegisters(), stateSizeRegisters())
             }
 
             //
