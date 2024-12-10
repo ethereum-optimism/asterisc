@@ -631,6 +631,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			// So it's really 13 bits with a hardcoded 0 bit.
 			pc = add64(pc, imm)
 		}
+
+		if pc&3 != 0 { // quick target alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", pc))
+		}
+
 		// not like the other opcodes: nothing to write to rd register, and PC has already changed
 		setPC(pc)
 	case 0x13: // 001_0011: immediate arithmetic and logic
