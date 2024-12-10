@@ -2246,7 +2246,7 @@ contract RISCV_Test is CommonTest {
     /* J Type instructions */
 
     function test_jal_succeeds() public {
-        uint32 imm = 0xbef054ae;
+        uint32 imm = 0xbef054ac;
         uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         bytes memory encodedState = encodeState(state);
