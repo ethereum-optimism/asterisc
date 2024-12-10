@@ -933,7 +933,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		setPC(add64(pc, toU64(4)))
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
 		rs1Value := getRegister(rs1)
-		rs2Value := getRegister(rs2)
+		rs2Value := and64(getRegister(rs2), u32Mask())
 		var rdValue U64
 		switch funct7.val() {
 		case 1: // RV M extension
