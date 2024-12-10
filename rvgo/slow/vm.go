@@ -1006,13 +1006,23 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
 		setRegister(rd, rdValue)
-		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
+
+		newPC := add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))
+		if and64(newPC, toU64(3)) != (U64{}) { // quick target alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
+		}
+		setPC(newPC) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
 		setRegister(rd, rdValue)
-		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
+
+		newPC := and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))
+		if and64(newPC, toU64(3)) != (U64{}) { // quick target alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
+		}
+		setPC(newPC) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3.val() {
 		case 0: // 000 = ECALL/EBREAK
