@@ -453,6 +453,10 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		setMemoryB32(rightAddr, beWordAsB32(right), proofIndexR)
 	}
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8) {
+		if size.val() > 8 {
+			revertWithCode(riscv.ErrStoreExceeds8Bytes, fmt.Errorf("cannot store more than 8 bytes: %d", size))
+		}
+
 		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
 	}
 
