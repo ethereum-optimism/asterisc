@@ -129,7 +129,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 	proofContentOffset := shortToU64(uint16(stateContentOffset) + paddedStateSize + 32)
 
-	if and(b32asBEWord(calldataload(shortToU64(uint16(stateContentOffset)+paddedStateSize))), shortToU256(60-1)) != (U256{}) {
+	if mod(b32asBEWord(calldataload(shortToU64(uint16(stateContentOffset)+paddedStateSize))), toU256(60)) != toU256(0) {
 		// proof offset must be stateContentOffset+paddedStateSize+32
 		// proof size: 64-5+1=60 * 32 byte leaf,
 		// but multiple memProof can be used, so the proofSize must be a multiple of 60
