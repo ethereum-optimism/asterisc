@@ -346,6 +346,13 @@ contract RISCV is IBigStepper {
             }
             if iszero(eq(_proof.offset, proofContentOffset())) { revert(0, 0) }
 
+            if mod(calldataload(sub(proofContentOffset(), 32)), 60) {
+                // proof offset must be stateContentOffset+paddedStateSize+32
+                // proof size: 64-5+1=60 * 32 byte leaf,
+                // so the proofSize must be a multiple of 60
+                revert(0, 0)
+            }
+
             //
             // State loading
             //
