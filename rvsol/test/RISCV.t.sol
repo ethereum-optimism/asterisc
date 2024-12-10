@@ -2371,11 +2371,22 @@ contract RISCV_Test is CommonTest {
         riscv.step(encodedState, proof, 0);
     }
 
+    function test_invalid_proof_size() public {
+        uint32 insn = encodeRType(0xff, 0, 0, 0, 0, 0);
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+        proof = hex"00"; // Invalid memory proof size
+
+        vm.expectRevert();
+        riscv.step(encodedState, proof, 0);
+    }
+
     function test_invalid_proof() public {
         uint32 insn = encodeRType(0xff, 0, 0, 0, 0, 0);
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         bytes memory encodedState = encodeState(state);
-        proof = hex"00"; // Invalid memory proof
+        // Invalid memory proof
+        proof = hex"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 
         vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000badf00d1");
         riscv.step(encodedState, proof, 0);
