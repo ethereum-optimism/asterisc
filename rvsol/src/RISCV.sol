@@ -1399,7 +1399,7 @@ contract RISCV is IBigStepper {
             case 0x3B {
                 // 011_1011: register arithmetic and logic in 32 bits
                 let rs1Value := getRegister(rs1)
-                let rs2Value := getRegister(rs2)
+                let rs2Value := and64(getRegister(rs2), u32Mask())
                 let rdValue := 0
                 switch funct7
                 case 1 {
