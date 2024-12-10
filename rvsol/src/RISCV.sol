@@ -738,6 +738,8 @@ contract RISCV is IBigStepper {
             }
 
             function storeMem(addr, size, value, proofIndexL, proofIndexR) {
+                if gt(size, 8) { revertWithCode(0xbad512e8) } // cannot store more than 8 bytes
+
                 storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
             }
 
