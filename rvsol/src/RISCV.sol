@@ -1496,7 +1496,13 @@ contract RISCV is IBigStepper {
                 let imm := parseImmTypeJ(instr)
                 let rdValue := add64(_pc, toU64(4))
                 setRegister(rd, rdValue)
-                setPC(add64(_pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2
+
+                let newPC := add64(_pc, signExtend64(shl64(toU64(1), imm), toU64(20)))
+                if and64(newPC, toU64(3)) {
+                    // quick target alignment check
+                    revertWithCode(0xbad10ad0) // target not aligned with 4 bytes
+                }
+                setPC(newPC) // signed offset in multiples of 2
                     // bytes (last bit is there, but ignored)
             }
             case 0x67 {
@@ -1505,8 +1511,13 @@ contract RISCV is IBigStepper {
                 let imm := parseImmTypeI(instr)
                 let rdValue := add64(_pc, toU64(4))
                 setRegister(rd, rdValue)
-                setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least
-                    // significant bit is set to 0
+
+                let newPC := and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))
+                if and64(newPC, toU64(3)) {
+                    // quick target alignment check
+                    revertWithCode(0xbad10ad0) // target not aligned with 4 bytes
+                }
+                setPC(newPC) // least significant bit is set to 0
             }
             case 0x73 {
                 // 111_0011: environment things
