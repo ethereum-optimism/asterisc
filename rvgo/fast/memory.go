@@ -140,7 +140,7 @@ func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
 	p, ok := m.pageLookup(pageIndex)
 	var d int
 	if !ok {
-		l := pageSize - pageAddr
+		l := PageSize - pageAddr
 		if l > 32 {
 			l = 32
 		}
@@ -160,7 +160,7 @@ func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
 	pageAddr = addr & PageAddrMask
 	p, ok = m.pageLookup(pageIndex)
 	if !ok {
-		l := pageSize - pageAddr
+		l := PageSize - pageAddr
 		if l > 32 {
 			l = 32
 		}
