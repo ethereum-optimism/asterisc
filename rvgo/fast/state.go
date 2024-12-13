@@ -13,16 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// page size must be at least 32 bytes (one merkle node)
-// memory merkleization will look the same regardless of page size past 32.
-const (
-	pageAddrSize = 10
-	pageKeySize  = 64 - pageAddrSize
-	pageSize     = 1 << pageAddrSize
-	pageAddrMask = pageSize - 1
-	maxPageCount = 1 << pageKeySize
-)
-
 type VMState struct {
 	Memory *Memory `json:"memory"`
 
