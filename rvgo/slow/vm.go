@@ -129,8 +129,13 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	}
 
 	stateContentOffset := uint8(4 + 32 + 32 + 32 + 32)
-	if iszero(eq(b32asBEWord(calldataload(byteToU64(4+32*3))), shortToU256(stateSize))) {
-		// user-provided state size must match expected state size
+	if iszero(eq(add(b32asBEWord(calldataload(byteToU64(4))), shortToU256(32+4)), shortToU256(uint16(stateContentOffset)))) {
+		// _stateData.offset = _stateData.pointer + 32 + 4
+		// 32*4+4 = 132 expected state data offset
+		panic("invalid state offset input")
+	}
+
+	if iszero(eq(b32asBEWord(calldataload(byteToU64(4+32*3))), shortToU256(stateSize))) { // user-provided state size must match expected state size
 		panic("invalid state size input")
 	}
 
@@ -140,6 +145,11 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		// proof offset must be stateContentOffset+paddedStateSize+32
 		// proof size: 64-5+1=60 * 32 byte leaf,
 		// but multiple memProof can be used, so the proofSize must be a multiple of 60
+		panic("invalid proof size input")
+	}
+
+	if iszero(eq(add(b32asBEWord(calldataload(toU64(36))), shortToU256(32+4)), u64ToU256(proofContentOffset))) {
+		// _proof.offset = proofContentOffset = _proof.pointer + 32 + 4
 		panic("invalid proof offset input")
 	}
 
