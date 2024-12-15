@@ -2034,7 +2034,7 @@ contract RISCV_Test is CommonTest {
     function test_beq_succeeds() public {
         uint16 imm = 0x19cd;
         uint32 insn = encodeBType(0x63, 0, 23, 20, imm); // beq x23, x20, offset
-        (State memory state, bytes memory proof) = constructRISCVState(0x139a, insn);
+        (State memory state, bytes memory proof) = constructRISCVState(0x139c, insn);
         state.registers[23] = 0x2152;
         state.registers[20] = 0x2152;
         bytes memory encodedState = encodeState(state);
@@ -2060,7 +2060,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_bne_succeeds() public {
-        uint16 imm = 0x1d7e;
+        uint16 imm = 0x1d7c;
         uint32 insn = encodeBType(0x63, 1, 20, 26, imm); // bne x20, x26, offset
         (State memory state, bytes memory proof) = constructRISCVState(0x1afc, insn);
         state.registers[20] = 0x14b6;
@@ -2144,9 +2144,9 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_bltu_succeeds() public {
-        uint16 imm = 0x171d;
+        uint16 imm = 0x171c;
         uint32 insn = encodeBType(0x63, 6, 13, 22, imm); // bltu x13, x22, offset
-        (State memory state, bytes memory proof) = constructRISCVState(0x2e3a, insn);
+        (State memory state, bytes memory proof) = constructRISCVState(0x2e3c, insn);
         state.registers[13] = 0xa0cc;
         state.registers[22] = 0xffffffff_ffff795c;
         bytes memory encodedState = encodeState(state);
@@ -2174,7 +2174,7 @@ contract RISCV_Test is CommonTest {
     function test_bgeu_succeeds() public {
         uint16 imm = 0x14b5;
         uint32 insn = encodeBType(0x63, 7, 7, 16, imm); // bgeu x7, x16, offset
-        (State memory state, bytes memory proof) = constructRISCVState(0x296a, insn);
+        (State memory state, bytes memory proof) = constructRISCVState(0x296c, insn);
         state.registers[7] = 0xffffffff_ffff35e5;
         state.registers[16] = 0x7c3c;
         bytes memory encodedState = encodeState(state);

@@ -1206,6 +1206,12 @@ contract RISCV is IBigStepper {
                     // So it's really 13 bits with a hardcoded 0 bit.
                     _pc := add64(_pc, imm)
                 }
+
+                if and64(_pc, toU64(3)) {
+                    // quick target alignment check
+                    revertWithCode(0xbad10ad0) // target not aligned with 4 bytes
+                }
+
                 // not like the other opcodes: nothing to write to rd register, and PC has already changed
                 setPC(_pc)
             }
