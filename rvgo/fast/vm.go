@@ -871,7 +871,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
-		if addr&3 != 0 { // quick addr alignment check
+		if mod64(addr, size) != 0 { // quick addr alignment check
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 4 bytes", addr))
 		}
 
