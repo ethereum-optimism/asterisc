@@ -1147,6 +1147,10 @@ contract RISCV is IBigStepper {
                 let pc_ := _pc
                 // 000_0011: memory loading
                 // LB, LH, LW, LD, LBU, LHU, LWU
+
+                // bits[14:12] set to 111 are reserved
+                if eq64(funct3, toU64(0x7)) { revertWithCode(0xf001ca11) }
+
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4))) // 4 = 100 -> bitflag
                 let size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size

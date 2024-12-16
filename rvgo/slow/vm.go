@@ -760,6 +760,12 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	switch opcode.val() {
 	case 0x03: // 000_0011: memory loading
 		// LB, LH, LW, LD, LBU, LHU, LWU
+
+		// bits[14:12] set to 111 are reserved
+		if eq64(funct3, toU64(0x7)) != (U64{}) {
+			revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+		}
+
 		imm := parseImmTypeI(instr)
 		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
 		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
