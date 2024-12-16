@@ -1271,9 +1271,15 @@ contract RISCV is IBigStepper {
                 }
                 case 1 {
                     // 001 = SLLIW
+
+                    // SLLIW where imm[5] != 0 is reserved
+                    if and64(imm, toU64(0x20)) { revertWithCode(0xf001ca11) }
                     rdValue := mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
                 }
                 case 5 {
+                    // SRLIW and SRAIW where imm[5] != 0 is reserved
+                    if and64(imm, toU64(0x20)) { revertWithCode(0xf001ca11) }
+
                     // 101 = SR~
                     let shamt := and64(imm, toU64(0x1F))
                     switch shr64(toU64(5), imm)
