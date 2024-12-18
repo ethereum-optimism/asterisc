@@ -45,6 +45,8 @@ type VMState struct {
 
 	Registers [32]uint64 `json:"registers"`
 
+	Journal []byte `json:"journal,omitempty"`
+
 	// LastHint is optional metadata, and not part of the VM state itself.
 	// It is used to remember the last pre-image hint,
 	// so a VM can start from any state without fetching prior pre-images,
@@ -65,6 +67,7 @@ func NewVMState() *VMState {
 	return &VMState{
 		Memory: NewMemory(),
 		Heap:   1 << 28, // 0.25 GiB of program code space
+		Journal: make([]byte, 0),
 	}
 }
 
@@ -100,6 +103,8 @@ func (state *VMState) EncodeWitness() StateWitness {
 	for _, r := range state.Registers {
 		out = binary.BigEndian.AppendUint64(out, r)
 	}
+	out = binary.BigEndian.AppendUint64(out, uint64(len(state.Journal)))
+	out = append(out, state.Journal...)
 	return out
 }
 
@@ -209,6 +214,9 @@ func (s *VMState) Serialize(out io.Writer) error {
 	if err := bout.WriteHash(s.StateHash); err != nil {
 		return err
 	}
+	if err := bout.WriteBytes(s.Journal); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -255,6 +263,9 @@ func (s *VMState) Deserialize(in io.Reader) error {
 		return err
 	}
 	if err := bin.ReadHash(&s.StateHash); err != nil {
+		return err
+	}
+	if err := bin.ReadBytes((*[]byte)(&s.Journal)); err != nil {
 		return err
 	}
 

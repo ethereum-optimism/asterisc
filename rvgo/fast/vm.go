@@ -458,6 +458,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			case riscv.FdPreimageWrite: // pre-image key write
 				n = writePreimageKey(addr, count)
 				errCode = toU64(0) // no error
+			case riscv.FdJournalWrite: // journal write
+				journalData, _ := io.ReadAll(s.Memory.ReadMemoryRange(addr, count))
+				s.Journal = append(s.Journal, journalData...)
+				n = count
+				errCode = toU64(0)
 			default: // any other file, including (3) hint read (5) preimage read
 				n = u64Mask()         //  -1 (writing error)
 				errCode = toU64(0x4d) // EBADF

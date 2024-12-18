@@ -38,6 +38,7 @@ const (
 	FdHintWrite     = 4
 	FdPreimageRead  = 5
 	FdPreimageWrite = 6
+	FdJournalWrite  = 7
 
 	ErrUnrecognizedResource           = uint64(0xf0012)
 	ErrUnknownAtomicOperation         = uint64(0xf001a70)
