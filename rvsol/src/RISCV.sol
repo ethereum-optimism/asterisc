@@ -888,7 +888,7 @@ contract RISCV is IBigStepper {
 
                     let errCode := 0
                     // ensure MAP_ANONYMOUS is set and fd == -1
-                    switch or(iszero(and(flags, 0x20)), eq(eq(fd, u64Mask()), 0))
+                    switch or(iszero(and(flags, 0x20)), iszero(eq(fd, u64Mask())))
                     case 1 {
                         addr := u64Mask()
                         errCode := toU64(0x4d)
