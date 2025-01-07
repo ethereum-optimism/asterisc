@@ -632,7 +632,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			pc = add64(pc, imm)
 		}
 
-		if pc&3 != 0 { // quick target alignment check
+		// The PC must be aligned to 4 bytes.
+		if pc&3 != 0 {
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", pc))
 		}
 

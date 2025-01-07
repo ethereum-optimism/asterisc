@@ -805,7 +805,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			pc = add64(pc, imm)
 		}
 
-		if and64(pc, toU64(3)) != (U64{}) { // quick target alignment check
+		// The PC must be aligned to 4 bytes.
+		if and64(pc, toU64(3)) != (U64{}) {
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", pc))
 		}
 
