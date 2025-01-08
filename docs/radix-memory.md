@@ -35,7 +35,7 @@ New benchmark suite is added, which measures the latency of the following operat
 
 - Memory read / write to random addresses
 - Memory read / write to contiguous address
-- Memory write to sparse memory addresse
+- Memory write to sparse memory addresses
 - Memory write to dense memory addresses
 - Merkle proof generation
 - Merkle root calculation
