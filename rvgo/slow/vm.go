@@ -1,6 +1,7 @@
 package slow
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -119,6 +120,12 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	calldataload := func(offset U64) (out [32]byte) {
 		copy(out[:], calldata[offset.val():])
 		return
+	}
+
+	// First 4 bytes of keccak256("step(bytes,bytes,bytes32)")
+	expectedSelector := []byte{0xe1, 0x4c, 0xed, 0x32}
+	if len(calldata) < 4 || !bytes.Equal(calldata[:4], expectedSelector) {
+		panic("invalid function selector")
 	}
 
 	stateContentOffset := uint8(4 + 32 + 32 + 32 + 32)
