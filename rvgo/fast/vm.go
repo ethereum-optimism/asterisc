@@ -839,13 +839,23 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
 		setRegister(rd, rdValue)
-		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
+
+		newPC := add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))
+		if newPC&3 != 0 { // quick target alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
+		}
+		setPC(newPC) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
 		setRegister(rd, rdValue)
-		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
+
+		newPC := and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))
+		if newPC&3 != 0 { // quick addr alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
+		}
+		setPC(newPC) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3 {
 		case 0: // 000 = ECALL/EBREAK
@@ -873,7 +883,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
 		size := shl64(funct3, toU64(1))
-		if lt64(size, toU64(4)) != 0 {
+		if lt64(size, toU64(4)) != 0 || gt64(size, toU64(8)) != 0 {
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)

@@ -2246,7 +2246,7 @@ contract RISCV_Test is CommonTest {
     /* J Type instructions */
 
     function test_jal_succeeds() public {
-        uint32 imm = 0xbef054ae;
+        uint32 imm = 0xbef054ac;
         uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         bytes memory encodedState = encodeState(state);
@@ -2472,6 +2472,18 @@ contract RISCV_Test is CommonTest {
         vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
         riscv.step(encodedState, proof, 0);
     }
+
+    function test_revert_unaligned_jal_instruction() public {
+        // 0xbef054ae % 4 != 0
+        uint32 imm = 0xbef054ae;
+        uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000bad10ad0");
+        riscv.step(encodedState, proof, 0);
+    }
+
     /* Helper methods */
 
     function encodeState(State memory state) internal pure returns (bytes memory) {

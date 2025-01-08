@@ -40,7 +40,7 @@ forge test -vvv --ffi
 - There are few issues with Foundry.
   - Run script directly without manual build does not work with the current version of Foundry (2024-03-15 `3fa0270`). 
     You **must run** `make build` **before** running the deploy script. ([issue](https://github.com/foundry-rs/foundry/issues/6572))
-  - Some older version(2024-02-01 `2f4b5db`) of Foundry makes a dependency error reproted above issue. 
+  - Some older version(2024-02-01 `2f4b5db`) of Foundry makes a dependency error reported above issue. 
     Use the **latest version** of Foundry!
 - The deploy script can be run only once on the devnet because of the `create2` salt. 
   To rerun the script for dev purpose, you must restart the devnet with `make devnet-clean && make devnet-up` command on the monorepo.

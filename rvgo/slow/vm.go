@@ -1,6 +1,7 @@
 package slow
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -119,6 +120,12 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 	calldataload := func(offset U64) (out [32]byte) {
 		copy(out[:], calldata[offset.val():])
 		return
+	}
+
+	// First 4 bytes of keccak256("step(bytes,bytes,bytes32)")
+	expectedSelector := []byte{0xe1, 0x4c, 0xed, 0x32}
+	if len(calldata) < 4 || !bytes.Equal(calldata[:4], expectedSelector) {
+		panic("invalid function selector")
 	}
 
 	stateContentOffset := uint8(4 + 32 + 32 + 32 + 32)
@@ -453,6 +460,10 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		setMemoryB32(rightAddr, beWordAsB32(right), proofIndexR)
 	}
 	storeMem := func(addr U64, size U64, value U64, proofIndexL uint8, proofIndexR uint8) {
+		if size.val() > 8 {
+			revertWithCode(riscv.ErrStoreExceeds8Bytes, fmt.Errorf("cannot store more than 8 bytes: %d", size))
+		}
+
 		storeMemUnaligned(addr, size, u64ToU256(value), proofIndexL, proofIndexR)
 	}
 
@@ -1012,13 +1023,23 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		imm := parseImmTypeJ(instr)
 		rdValue := add64(pc, toU64(4))
 		setRegister(rd, rdValue)
-		setPC(add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
+
+		newPC := add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))
+		if and64(newPC, toU64(3)) != (U64{}) { // quick target alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
+		}
+		setPC(newPC) // signed offset in multiples of 2 bytes (last bit is there, but ignored)
 	case 0x67: // 110_0111: JALR = Jump and link register
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
 		rdValue := add64(pc, toU64(4))
 		setRegister(rd, rdValue)
-		setPC(and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))) // least significant bit is set to 0
+
+		newPC := and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))
+		if and64(newPC, toU64(3)) != (U64{}) { // quick target alignment check
+			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
+		}
+		setPC(newPC) // least significant bit is set to 0
 	case 0x73: // 111_0011: environment things
 		switch funct3.val() {
 		case 0: // 000 = ECALL/EBREAK
@@ -1046,7 +1067,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
 		size := shl64(funct3, toU64(1))
-		if lt64(size, toU64(4)) != (U64{}) {
+		if or64(lt64(size, toU64(4)), gt64(size, toU64(8))) != (U64{}) {
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
