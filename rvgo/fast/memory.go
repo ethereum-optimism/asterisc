@@ -128,7 +128,7 @@ func (m *Memory) SetUnaligned(addr uint64, dat []byte) {
 		m.Invalidate(addr) // invalidate this branch of memory, now that the value changed
 	}
 
-	copy(p.Data[pageAddr:], dat)
+	copy(p.Data[pageAddr:], dat[d:])
 }
 
 func (m *Memory) GetUnaligned(addr uint64, dest []byte) {
