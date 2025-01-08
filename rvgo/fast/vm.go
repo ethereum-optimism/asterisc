@@ -877,7 +877,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
 		size := shl64(funct3, toU64(1))
-		if lt64(size, toU64(4)) != 0 {
+		if lt64(size, toU64(4)) != 0 || gt64(size, toU64(8)) != 0 {
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
