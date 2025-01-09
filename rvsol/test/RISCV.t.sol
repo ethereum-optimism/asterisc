@@ -2460,6 +2460,19 @@ contract RISCV_Test is CommonTest {
         riscv.step(encodedState, proof, 0);
     }
 
+    function test_reserved_load_instruction() public {
+        bytes32 value = hex"61fb11d66dcc9d48";
+        uint16 offset = 0x6bf;
+        uint64 addr = 0xd34d + offset;
+        uint32 insn = encodeIType(0x3, 21, 0x7, 4, offset); // lhu x21, funct 0x7, offset(x4)
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
+        state.registers[4] = 0xd34d;
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        riscv.step(encodedState, proof, 0);
+    }
+
     function test_revert_unaligned_jal_instruction() public {
         // 0xbef054ae % 4 != 0
         uint32 imm = 0xbef054ae;
