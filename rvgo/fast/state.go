@@ -111,6 +111,9 @@ func (state *VMState) Instr() uint32 {
 
 type StateWitness []byte
 
+const STATE_WITNESS_SIZE = 362                  // STATE_WITNESS_SIZE is the size of the state witness encoding in bytes.
+const EXITCODE_WITNESS_OFFSET = 32 + 32 + 8 + 8 // mem-root, preimage-key, preimage-offset, PC
+
 const (
 	VMStatusValid      = 0
 	VMStatusInvalid    = 1
@@ -119,14 +122,13 @@ const (
 )
 
 func (sw StateWitness) StateHash() (common.Hash, error) {
-	offset := 32 + 32 + 8 + 8 // mem-root, preimage-key, preimage-offset, PC
-	if len(sw) <= offset+1 {
-		return common.Hash{}, fmt.Errorf("state must at least be %d bytes, but got %d", offset, len(sw))
+	if len(sw) != STATE_WITNESS_SIZE {
+		return common.Hash{}, fmt.Errorf("invalid witness length. got %d, expected %d", len(sw), STATE_WITNESS_SIZE)
 	}
 
 	hash := crypto.Keccak256Hash(sw)
-	exitCode := sw[offset]
-	exited := sw[offset+1]
+	exitCode := sw[EXITCODE_WITNESS_OFFSET]
+	exited := sw[EXITCODE_WITNESS_OFFSET+1]
 	status := vmStatus(exited == 1, exitCode)
 	hash[0] = status
 	return hash, nil
