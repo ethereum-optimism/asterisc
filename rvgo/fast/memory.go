@@ -283,6 +283,12 @@ func (r *memReader) Read(dest []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
+	if r.addr > 1<<64-1-r.count {
+		// If adding r.count to r.addr would exceed the maximum uint64 value,
+		// we consider that an overflow condition and stop.
+		return 0, io.EOF
+	}
+
 	// Keep iterating over memory until we have all our data.
 	// It may wrap around the address range, and may not be aligned
 	endAddr := r.addr + r.count
