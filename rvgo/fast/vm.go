@@ -666,11 +666,15 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				rdValue = shr64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			case 0x10: // 010000 = SRAI
 				rdValue = sar64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid imm value %d for opcode 0x13", imm))
 			}
 		case 6: // 110 = ORI
 			rdValue = or64(rs1Value, imm)
 		case 7: // 111 = ANDI
 			rdValue = and64(rs1Value, imm)
+		default:
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x13", funct3))
 		}
 		setRegister(rd, rdValue)
 		setPC(add64(pc, byteToU64(4)))
@@ -698,7 +702,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), byteToU64(31))
 			case 0x20: // 0100000 = SRAIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(byteToU64(31), shamt))
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid imm value %d for opcode 0x1B", imm))
 			}
+		default:
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x1B", funct3))
 		}
 		setRegister(rd, rdValue)
 		setPC(add64(pc, byteToU64(4)))
@@ -745,6 +753,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				default:
 					rdValue = mod64(rs1Value, rs2Value)
 				}
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x33", funct3))
 			}
 		default:
 			switch funct3 {
@@ -754,6 +764,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					rdValue = add64(rs1Value, rs2Value)
 				case 0x20: // 0100000 = SUB
 					rdValue = sub64(rs1Value, rs2Value)
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7, funct3))
 				}
 			case 1: // 001 = SLL
 				rdValue = shl64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
@@ -769,11 +781,15 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					rdValue = shr64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // logical: fill with zeroes
 				case 0x20: // 0100000 = SRA
 					rdValue = sar64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7, funct3))
 				}
 			case 6: // 110 = OR
 				rdValue = or64(rs1Value, rs2Value)
 			case 7: // 111 = AND
 				rdValue = and64(rs1Value, rs2Value)
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x3B", funct3))
 			}
 		}
 		setRegister(rd, rdValue)
@@ -815,6 +831,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				default:
 					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x3B", funct3))
 			}
 		default:
 			switch funct3 {
@@ -824,6 +842,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					rdValue = mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				case 0x20: // 0100000 = SUBW
 					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7, funct3))
 				}
 			case 1: // 001 = SLLW
 				rdValue = mask32Signed64(shl64(and64(rs2Value, byteToU64(0x1F)), rs1Value))
@@ -834,7 +854,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), byteToU64(31))
 				case 0x20: // 0100000 = SRAW
 					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(byteToU64(31), shamt))
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7, funct3))
 				}
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x3B", funct3))
 			}
 		}
 		setRegister(rd, rdValue)
