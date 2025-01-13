@@ -866,8 +866,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			default: // imm12 = 000000000001 EBREAK
 				setPC(add64(pc, toU64(4))) // ignore breakpoint
 			}
-		default: // CSR instructions
-			setRegister(rd, 0) // ignore CSR instructions
+		case 1:
+			// CSRRW
+			rs1Value := getRegister(rs1)
+			rdValue := add64(pc, toU64(4))
+			// no source or destination registers must be specified
+			if or64(rs1Value, rdValue) != 0 {
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("only no-op CSRRW instruction are supported"))
+			}
+			setRegister(rd, 0)
+			setPC(add64(pc, toU64(4)))
+		default:
+			setRegister(rd, 0) // ignore other CSR instructions
 			setPC(add64(pc, toU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension

@@ -1801,7 +1801,7 @@ contract RISCV_Test is CommonTest {
 
     function test_csrrw_succeeds() public {
         uint16 imm = 0x29a;
-        uint32 insn = encodeIType(0x73, 13, 1, 2, imm); // csrrw x13, 0x29a, x2
+        uint32 insn = encodeIType(0x73, 0x0, 0x1, 0x0, imm); // csrrw 0x0, 0x29a, 0x0
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         state.registers[2] = 0x4797;
         bytes memory encodedState = encodeState(state);
