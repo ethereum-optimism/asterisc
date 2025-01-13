@@ -271,19 +271,19 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	//
 	writePreimageKey := func(addr U64, count U64) U64 {
 		// adjust count down, so we only have to read a single 32 byte leaf of memory
-		alignment := and64(addr, toU64(31))
-		maxData := sub64(toU64(32), alignment)
+		alignment := and64(addr, byteToU64(31))
+		maxData := sub64(byteToU64(32), alignment)
 		if gt64(count, maxData) != 0 {
 			count = maxData
 		}
 
 		dat := b32asBEWord(getMemoryB32(sub64(addr, alignment), 1))
 		// shift out leading bits
-		dat = shl(u64ToU256(shl64(toU64(3), alignment)), dat)
+		dat = shl(u64ToU256(shl64(byteToU64(3), alignment)), dat)
 		// shift to right end, remove trailing bits
-		dat = shr(u64ToU256(shl64(toU64(3), sub64(toU64(32), count))), dat)
+		dat = shr(u64ToU256(shl64(byteToU64(3), sub64(byteToU64(32), count))), dat)
 
-		bits := shl(toU256(3), u64ToU256(count))
+		bits := shl(byteToU256(3), u64ToU256(count))
 
 		preImageKey := getPreimageKey()
 
@@ -294,7 +294,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		// We reset the pre-image value offset back to 0 (the right part of the merkle pair)
 		setPreimageKey(beWordAsB32(key))
-		setPreimageOffset(toU64(0))
+		setPreimageOffset(byteToU64(0))
 		return count
 	}
 
@@ -307,10 +307,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(riscv.ErrFailToReadPreimage, err)
 		}
 		if iszero64(pdatlen) { // EOF
-			return toU64(0)
+			return byteToU64(0)
 		}
-		alignment := and64(addr, toU64(31))    // how many bytes addr is offset from being left-aligned
-		maxData := sub64(toU64(32), alignment) // higher alignment leaves less room for data this step
+		alignment := and64(addr, byteToU64(31))    // how many bytes addr is offset from being left-aligned
+		maxData := sub64(byteToU64(32), alignment) // higher alignment leaves less room for data this step
 		if gt64(count, maxData) != 0 {
 			count = maxData
 		}
@@ -318,9 +318,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			count = pdatlen
 		}
 
-		bits := shl64(toU64(3), sub64(toU64(32), count))             // 32-count, in bits
-		mask := not(sub(shl(u64ToU256(bits), toU256(1)), toU256(1))) // left-aligned mask for count bytes
-		alignmentBits := u64ToU256(shl64(toU64(3), alignment))
+		bits := shl64(byteToU64(3), sub64(byteToU64(32), count))             // 32-count, in bits
+		mask := not(sub(shl(u64ToU256(bits), byteToU256(1)), byteToU256(1))) // left-aligned mask for count bytes
+		alignmentBits := u64ToU256(shl64(byteToU64(3), alignment))
 		mask = shr(alignmentBits, mask)                  // mask of count bytes, shifted by alignment
 		pdat := shr(alignmentBits, b32asBEWord(pdatB32)) // pdat, shifted by alignment
 
@@ -339,42 +339,42 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	// Syscall handling
 	//
 	sysCall := func() {
-		a7 := getRegister(toU64(17))
+		a7 := getRegister(byteToU64(17))
 		switch a7 {
 		case riscv.SysExit: // exit the calling thread. No multi-thread support yet, so just exit.
-			a0 := getRegister(toU64(10))
+			a0 := getRegister(byteToU64(10))
 			setExitCode(uint8(a0))
 			setExited()
 			// program stops here, no need to change registers.
 		case riscv.SysExitGroup: // exit-group
-			a0 := getRegister(toU64(10))
+			a0 := getRegister(byteToU64(10))
 			setExitCode(uint8(a0))
 			setExited()
 		case riscv.SysBrk: // brk
 			// Go sys_linux_riscv64 runtime will only ever call brk(NULL), i.e. first argument (register a0) set to 0.
 
 			// brk(0) changes nothing about the memory, and returns the current page break
-			v := shl64(toU64(30), toU64(1)) // set program break at 1 GiB
-			setRegister(toU64(10), v)
-			setRegister(toU64(11), toU64(0)) // no error
+			v := shl64(byteToU64(30), byteToU64(1)) // set program break at 1 GiB
+			setRegister(byteToU64(10), v)
+			setRegister(byteToU64(11), byteToU64(0)) // no error
 		case riscv.SysMmap: // mmap
 			// A0 = addr (hint)
-			addr := getRegister(toU64(10))
+			addr := getRegister(byteToU64(10))
 			// A1 = n (length)
-			length := getRegister(toU64(11))
+			length := getRegister(byteToU64(11))
 			// A2 = prot (memory protection type, can ignore)
 			// A3 = flags (shared with other process and or written back to file)
-			flags := getRegister(toU64(13))
+			flags := getRegister(byteToU64(13))
 			// A4 = fd (file descriptor, can ignore because we support anon memory only)
-			fd := getRegister(toU64(14))
+			fd := getRegister(byteToU64(14))
 			// A5 = offset (offset in file, we don't support any non-anon memory, so we can ignore this)
 
-			errCode := toU64(0)
+			errCode := byteToU64(0)
 
 			// ensure MAP_ANONYMOUS is set and fd == -1
 			if (flags&0x20) == 0 || fd != u64Mask() {
 				addr = u64Mask()
-				errCode = toU64(0x4d) // EBADF
+				errCode = byteToU64(0x4d) // EBADF
 			} else {
 				// ignore: prot, flags, fd, offset
 				switch addr {
@@ -394,35 +394,35 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					//fmt.Printf("mmap: 0x%016x (0x%x allowed)\n", addr, length)
 				}
 			}
-			setRegister(toU64(10), addr)
-			setRegister(toU64(11), errCode)
+			setRegister(byteToU64(10), addr)
+			setRegister(byteToU64(11), errCode)
 		case riscv.SysRead: // read
-			fd := getRegister(toU64(10))    // A0 = fd
-			addr := getRegister(toU64(11))  // A1 = *buf addr
-			count := getRegister(toU64(12)) // A2 = count
+			fd := getRegister(byteToU64(10))    // A0 = fd
+			addr := getRegister(byteToU64(11))  // A1 = *buf addr
+			count := getRegister(byteToU64(12)) // A2 = count
 			var n U64
 			var errCode U64
 			switch fd {
 			case riscv.FdStdin: // stdin
-				n = toU64(0) // never read anything from stdin
-				errCode = toU64(0)
+				n = byteToU64(0) // never read anything from stdin
+				errCode = byteToU64(0)
 			case riscv.FdHintRead: // hint-read
 				// say we read it all, to continue execution after reading the hint-write ack response
 				n = count
-				errCode = toU64(0)
+				errCode = byteToU64(0)
 			case riscv.FdPreimageRead: // preimage read
 				n = readPreimageValue(addr, count)
-				errCode = toU64(0)
+				errCode = byteToU64(0)
 			default:
-				n = u64Mask()         //  -1 (reading error)
-				errCode = toU64(0x4d) // EBADF
+				n = u64Mask()             //  -1 (reading error)
+				errCode = byteToU64(0x4d) // EBADF
 			}
-			setRegister(toU64(10), n)
-			setRegister(toU64(11), errCode)
+			setRegister(byteToU64(10), n)
+			setRegister(byteToU64(11), errCode)
 		case riscv.SysWrite: // write
-			fd := getRegister(toU64(10))    // A0 = fd
-			addr := getRegister(toU64(11))  // A1 = *buf addr
-			count := getRegister(toU64(12)) // A2 = count
+			fd := getRegister(byteToU64(10))    // A0 = fd
+			addr := getRegister(byteToU64(11))  // A1 = *buf addr
+			count := getRegister(byteToU64(12)) // A2 = count
 			var n U64
 			var errCode U64
 			switch fd {
@@ -432,14 +432,14 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					panic(fmt.Errorf("stdout writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
-				errCode = toU64(0)
+				errCode = byteToU64(0)
 			case riscv.FdStderr: // stderr
 				_, err := io.Copy(inst.stdErr, s.Memory.ReadMemoryRange(addr, count))
 				if err != nil {
 					panic(fmt.Errorf("stderr writing err: %w", err))
 				}
 				n = count // write completes fully in single instruction step
-				errCode = toU64(0)
+				errCode = byteToU64(0)
 			case riscv.FdHintWrite: // hint-write
 				hintData, _ := io.ReadAll(s.Memory.ReadMemoryRange(addr, count))
 				s.LastHint = append(inst.state.LastHint, hintData...)
@@ -454,91 +454,91 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					}
 				}
 				n = count
-				errCode = toU64(0)
+				errCode = byteToU64(0)
 			case riscv.FdPreimageWrite: // pre-image key write
 				n = writePreimageKey(addr, count)
-				errCode = toU64(0) // no error
+				errCode = byteToU64(0) // no error
 			default: // any other file, including (3) hint read (5) preimage read
-				n = u64Mask()         //  -1 (writing error)
-				errCode = toU64(0x4d) // EBADF
+				n = u64Mask()             //  -1 (writing error)
+				errCode = byteToU64(0x4d) // EBADF
 			}
-			setRegister(toU64(10), n)
-			setRegister(toU64(11), errCode)
+			setRegister(byteToU64(10), n)
+			setRegister(byteToU64(11), errCode)
 		case riscv.SysFcntl: // fcntl - file descriptor manipulation / info lookup
-			fd := getRegister(toU64(10))  // A0 = fd
-			cmd := getRegister(toU64(11)) // A1 = cmd
+			fd := getRegister(byteToU64(10))  // A0 = fd
+			cmd := getRegister(byteToU64(11)) // A1 = cmd
 			var out U64
 			var errCode U64
 			switch cmd {
 			case 0x1: // F_GETFD: get file descriptor flags
 				switch fd {
 				case 0: // stdin
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				case 1: // stdout
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				case 2: // stderr
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				case 3: // hint-read
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				case 4: // hint-write
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				case 5: // pre-image read
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				case 6: // pre-image write
-					out = toU64(0) // no flag set
+					out = byteToU64(0) // no flag set
 				default:
 					out = u64Mask()
-					errCode = toU64(0x4d) //EBADF
+					errCode = byteToU64(0x4d) //EBADF
 				}
 			case 0x3: // F_GETFL: get file descriptor flags
 				switch fd {
 				case 0: // stdin
-					out = toU64(0) // O_RDONLY
+					out = byteToU64(0) // O_RDONLY
 				case 1: // stdout
-					out = toU64(1) // O_WRONLY
+					out = byteToU64(1) // O_WRONLY
 				case 2: // stderr
-					out = toU64(1) // O_WRONLY
+					out = byteToU64(1) // O_WRONLY
 				case 3: // hint-read
-					out = toU64(0) // O_RDONLY
+					out = byteToU64(0) // O_RDONLY
 				case 4: // hint-write
-					out = toU64(1) // O_WRONLY
+					out = byteToU64(1) // O_WRONLY
 				case 5: // pre-image read
-					out = toU64(0) // O_RDONLY
+					out = byteToU64(0) // O_RDONLY
 				case 6: // pre-image write
-					out = toU64(1) // O_WRONLY
+					out = byteToU64(1) // O_WRONLY
 				default:
 					out = u64Mask()
-					errCode = toU64(0x4d) // EBADF
+					errCode = byteToU64(0x4d) // EBADF
 				}
 			default: // no other commands: don't allow changing flags, duplicating FDs, etc.
 				out = u64Mask()
-				errCode = toU64(0x16) // EINVAL (cmd not recognized by this kernel)
+				errCode = byteToU64(0x16) // EINVAL (cmd not recognized by this kernel)
 			}
-			setRegister(toU64(10), out)
-			setRegister(toU64(11), errCode) // EBADF
+			setRegister(byteToU64(10), out)
+			setRegister(byteToU64(11), errCode) // EBADF
 		case riscv.SysOpenat: // openat - the Go linux runtime will try to open optional /sys/kernel files for performance hints
-			setRegister(toU64(10), u64Mask())
-			setRegister(toU64(11), toU64(0xd)) // EACCES - no access allowed
+			setRegister(byteToU64(10), u64Mask())
+			setRegister(byteToU64(11), byteToU64(0xd)) // EACCES - no access allowed
 		case riscv.SysClockGettime: // clock_gettime
-			addr := getRegister(toU64(11)) // addr of timespec struct
+			addr := getRegister(byteToU64(11)) // addr of timespec struct
 			// write 1337s + 42ns as time
-			value := or(shortToU256(1337), shl(shortToU256(64), toU256(42)))
-			storeMemUnaligned(addr, toU64(16), value, 1, 2, true, true)
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
+			value := or(shortToU256(1337), shl(shortToU256(64), byteToU256(42)))
+			storeMemUnaligned(addr, byteToU64(16), value, 1, 2, true, true)
+			setRegister(byteToU64(10), byteToU64(0))
+			setRegister(byteToU64(11), byteToU64(0))
 		case riscv.SysClone: // clone - not supported
-			setRegister(toU64(10), toU64(1))
-			setRegister(toU64(11), toU64(0))
+			setRegister(byteToU64(10), byteToU64(1))
+			setRegister(byteToU64(11), byteToU64(0))
 		case riscv.SysGetrlimit: // getrlimit
-			res := getRegister(toU64(10))
-			addr := getRegister(toU64(11))
+			res := getRegister(byteToU64(10))
+			addr := getRegister(byteToU64(11))
 			switch res {
 			case 0x7: // RLIMIT_NOFILE
 				// first 8 bytes: soft limit. 1024 file handles max open
 				// second 8 bytes: hard limit
-				storeMemUnaligned(addr, toU64(16), or(shortToU256(1024), shl(toU256(64), shortToU256(1024))), 1, 2, true, true)
-				setRegister(toU64(10), toU64(0))
-				setRegister(toU64(11), toU64(0))
+				storeMemUnaligned(addr, byteToU64(16), or(shortToU256(1024), shl(byteToU256(64), shortToU256(1024))), 1, 2, true, true)
+				setRegister(byteToU64(10), byteToU64(0))
+				setRegister(byteToU64(11), byteToU64(0))
 			default:
 				revertWithCode(riscv.ErrUnrecognizedResource, &UnrecognizedResourceErr{Resource: res})
 			}
@@ -550,8 +550,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			// Ignore(no-op) unsupported system calls
-			setRegister(toU64(10), toU64(0))
-			setRegister(toU64(11), toU64(0))
+			setRegister(byteToU64(10), byteToU64(0))
+			setRegister(byteToU64(11), byteToU64(0))
 			// List of ignored(no-op) syscalls used by op-program:
 			// sched_getaffinity - hardcode to indicate affinity with any cpu-set mask
 			// sched_yield - nothing to yield, synchronous execution only, for now
@@ -571,10 +571,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	if getExited() { // early exit if we can
 		return nil
 	}
-	setStep(add64(getStep(), toU64(1)))
+	setStep(add64(getStep(), byteToU64(1)))
 
 	pc := getPC()
-	instr := loadMem(pc, toU64(4), false, 0, 0xff) // raw instruction
+	instr := loadMem(pc, byteToU64(4), false, 0, 0xff) // raw instruction
 
 	// these fields are ignored if not applicable to the instruction type / opcode
 	opcode := parseOpcode(instr)
@@ -589,48 +589,48 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		// LB, LH, LW, LD, LBU, LHU, LWU
 
 		// bits[14:12] set to 111 are reserved
-		if eq64(funct3, toU64(0x7)) != 0 {
+		if eq64(funct3, byteToU64(0x7)) != 0 {
 			revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 		}
 
 		imm := parseImmTypeI(instr)
-		signed := iszero64(and64(funct3, toU64(4)))      // 4 = 100 -> bitflag
-		size := shl64(and64(funct3, toU64(3)), toU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
+		signed := iszero64(and64(funct3, byteToU64(4)))          // 4 = 100 -> bitflag
+		size := shl64(and64(funct3, byteToU64(3)), byteToU64(1)) // 3 = 11 -> 1, 2, 4, 8 bytes size
 		rs1Value := getRegister(rs1)
-		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
+		memIndex := add64(rs1Value, signExtend64(imm, byteToU64(11)))
 		rdValue := loadMem(memIndex, size, signed, 1, 2)
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x23: // 010_0011: memory storing
 		// SB, SH, SW, SD
 		imm := parseImmTypeS(instr)
-		size := shl64(funct3, toU64(1))
+		size := shl64(funct3, byteToU64(1))
 		value := getRegister(rs2)
 		rs1Value := getRegister(rs1)
-		memIndex := add64(rs1Value, signExtend64(imm, toU64(11)))
+		memIndex := add64(rs1Value, signExtend64(imm, byteToU64(11)))
 		storeMem(memIndex, size, value, 1, 2, true, true)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x63: // 110_0011: branching
 		rs1Value := getRegister(rs1)
 		rs2Value := getRegister(rs2)
-		branchHit := toU64(0)
+		branchHit := byteToU64(0)
 		switch funct3 {
 		case 0: // 000 = BEQ
 			branchHit = eq64(rs1Value, rs2Value)
 		case 1: // 001 = BNE
-			branchHit = and64(not64(eq64(rs1Value, rs2Value)), toU64(1))
+			branchHit = and64(not64(eq64(rs1Value, rs2Value)), byteToU64(1))
 		case 4: // 100 = BLT
 			branchHit = slt64(rs1Value, rs2Value)
 		case 5: // 101 = BGE
-			branchHit = and64(not64(slt64(rs1Value, rs2Value)), toU64(1))
+			branchHit = and64(not64(slt64(rs1Value, rs2Value)), byteToU64(1))
 		case 6: // 110 = BLTU
 			branchHit = lt64(rs1Value, rs2Value)
 		case 7: // 111 = BGEU
-			branchHit = and64(not64(lt64(rs1Value, rs2Value)), toU64(1))
+			branchHit = and64(not64(lt64(rs1Value, rs2Value)), byteToU64(1))
 		}
 		switch branchHit {
 		case 0:
-			pc = add64(pc, toU64(4))
+			pc = add64(pc, byteToU64(4))
 		default:
 			imm := parseImmTypeB(instr)
 			// imm is a signed offset, in multiples of 2 bytes.
@@ -653,7 +653,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 0: // 000 = ADDI
 			rdValue = add64(rs1Value, imm)
 		case 1: // 001 = SLLI
-			rdValue = shl64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
+			rdValue = shl64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 		case 2: // 010 = SLTI
 			rdValue = slt64(rs1Value, imm)
 		case 3: // 011 = SLTIU
@@ -661,11 +661,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 4: // 100 = XORI
 			rdValue = xor64(rs1Value, imm)
 		case 5: // 101 = SR~
-			switch shr64(toU64(6), imm) { // in rv64i the top 6 bits select the shift type
+			switch shr64(byteToU64(6), imm) { // in rv64i the top 6 bits select the shift type
 			case 0x00: // 000000 = SRLI
-				rdValue = shr64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
+				rdValue = shr64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			case 0x10: // 010000 = SRAI
-				rdValue = sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
+				rdValue = sar64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			}
 		case 6: // 110 = ORI
 			rdValue = or64(rs1Value, imm)
@@ -673,7 +673,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			rdValue = and64(rs1Value, imm)
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x1B: // 001_1011: immediate arithmetic and logic signed 32 bit
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
@@ -683,25 +683,25 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			rdValue = mask32Signed64(add64(rs1Value, imm))
 		case 1: // 001 = SLLIW
 			// SLLIW where imm[5] != 0 is reserved
-			if and64(imm, toU64(0x20)) != 0 {
+			if and64(imm, byteToU64(0x20)) != 0 {
 				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			// SRLIW and SRAIW where imm[5] != 0 is reserved
-			if and64(imm, toU64(0x20)) != 0 {
+			if and64(imm, byteToU64(0x20)) != 0 {
 				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
-			shamt := and64(imm, toU64(0x1F))
-			switch shr64(toU64(5), imm) { // top 7 bits select the shift type
+			shamt := and64(imm, byteToU64(0x1F))
+			switch shr64(byteToU64(5), imm) { // top 7 bits select the shift type
 			case 0x00: // 0000000 = SRLIW
-				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
+				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), byteToU64(31))
 			case 0x20: // 0100000 = SRAIW
-				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
+				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(byteToU64(31), shamt))
 			}
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x33: // 011_0011: register arithmetic and logic
 		rs1Value := getRegister(rs1)
 		rs2Value := getRegister(rs2)
@@ -712,11 +712,11 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			case 0: // 000 = MUL: signed x signed
 				rdValue = mul64(rs1Value, rs2Value)
 			case 1: // 001 = MULH: upper bits of signed x signed
-				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value))))
+				rdValue = u256ToU64(shr(byteToU256(64), mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value))))
 			case 2: // 010 = MULHSU: upper bits of signed x unsigned
-				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), u64ToU256(rs2Value))))
+				rdValue = u256ToU64(shr(byteToU256(64), mul(signExtend64To256(rs1Value), u64ToU256(rs2Value))))
 			case 3: // 011 = MULHU: upper bits of unsigned x unsigned
-				rdValue = u256ToU64(shr(toU256(64), mul(u64ToU256(rs1Value), u64ToU256(rs2Value))))
+				rdValue = u256ToU64(shr(byteToU256(64), mul(u64ToU256(rs1Value), u64ToU256(rs2Value))))
 			case 4: // 100 = DIV
 				switch rs2Value {
 				case 0:
@@ -756,7 +756,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					rdValue = sub64(rs1Value, rs2Value)
 				}
 			case 1: // 001 = SLL
-				rdValue = shl64(and64(rs2Value, toU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
+				rdValue = shl64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
 			case 2: // 010 = SLT
 				rdValue = slt64(rs1Value, rs2Value)
 			case 3: // 011 = SLTU
@@ -766,9 +766,9 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			case 5: // 101 = SR~
 				switch funct7 {
 				case 0x00: // 0000000 = SRL
-					rdValue = shr64(and64(rs2Value, toU64(0x3F)), rs1Value) // logical: fill with zeroes
+					rdValue = shr64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // logical: fill with zeroes
 				case 0x20: // 0100000 = SRA
-					rdValue = sar64(and64(rs2Value, toU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
+					rdValue = sar64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
 				}
 			case 6: // 110 = OR
 				rdValue = or64(rs1Value, rs2Value)
@@ -777,7 +777,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			}
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x3B: // 011_1011: register arithmetic and logic in 32 bits
 		rs1Value := getRegister(rs1)
 		rs2Value := and64(getRegister(rs2), u32Mask())
@@ -826,35 +826,35 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
 			case 1: // 001 = SLLW
-				rdValue = mask32Signed64(shl64(and64(rs2Value, toU64(0x1F)), rs1Value))
+				rdValue = mask32Signed64(shl64(and64(rs2Value, byteToU64(0x1F)), rs1Value))
 			case 5: // 101 = SR~
-				shamt := and64(rs2Value, toU64(0x1F))
+				shamt := and64(rs2Value, byteToU64(0x1F))
 				switch funct7 {
 				case 0x00: // 0000000 = SRLW
-					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), toU64(31))
+					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), byteToU64(31))
 				case 0x20: // 0100000 = SRAW
-					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
+					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(byteToU64(31), shamt))
 				}
 			}
 		}
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x37: // 011_0111: LUI = Load upper immediate
 		imm := parseImmTypeU(instr)
-		rdValue := shl64(toU64(12), imm)
+		rdValue := shl64(byteToU64(12), imm)
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x17: // 001_0111: AUIPC = Add upper immediate to PC
 		imm := parseImmTypeU(instr)
-		rdValue := add64(pc, signExtend64(shl64(toU64(12), imm), toU64(31)))
+		rdValue := add64(pc, signExtend64(shl64(byteToU64(12), imm), byteToU64(31)))
 		setRegister(rd, rdValue)
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x6F: // 110_1111: JAL = Jump and link
 		imm := parseImmTypeJ(instr)
-		rdValue := add64(pc, toU64(4))
+		rdValue := add64(pc, byteToU64(4))
 		setRegister(rd, rdValue)
 
-		newPC := add64(pc, signExtend64(shl64(toU64(1), imm), toU64(20)))
+		newPC := add64(pc, signExtend64(shl64(byteToU64(1), imm), byteToU64(20)))
 		if newPC&3 != 0 { // quick target alignment check
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
 		}
@@ -862,10 +862,10 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	case 0x67: // 110_0111: JALR = Jump and link register
 		rs1Value := getRegister(rs1)
 		imm := parseImmTypeI(instr)
-		rdValue := add64(pc, toU64(4))
+		rdValue := add64(pc, byteToU64(4))
 		setRegister(rd, rdValue)
 
-		newPC := and64(add64(rs1Value, signExtend64(imm, toU64(11))), xor64(u64Mask(), toU64(1)))
+		newPC := and64(add64(rs1Value, signExtend64(imm, byteToU64(11))), xor64(u64Mask(), byteToU64(1)))
 		if newPC&3 != 0 { // quick addr alignment check
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", newPC))
 		}
@@ -873,21 +873,21 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 	case 0x73: // 111_0011: environment things
 		switch funct3 {
 		case 0: // 000 = ECALL/EBREAK
-			switch shr64(toU64(20), instr) { // I-type, top 12 bits
+			switch shr64(byteToU64(20), instr) { // I-type, top 12 bits
 			case 0: // imm12 = 000000000000 ECALL
 				sysCall()
-				setPC(add64(pc, toU64(4)))
+				setPC(add64(pc, byteToU64(4)))
 			default: // imm12 = 000000000001 EBREAK
-				setPC(add64(pc, toU64(4))) // ignore breakpoint
+				setPC(add64(pc, byteToU64(4))) // ignore breakpoint
 			}
 		default: // CSR instructions
 			setRegister(rd, 0) // ignore CSR instructions
-			setPC(add64(pc, toU64(4)))
+			setPC(add64(pc, byteToU64(4)))
 		}
 	case 0x2F: // 010_1111: RV32A and RV32A atomic operations extension
 		// acquire and release bits:
-		//   aq := and64(shr64(toU64(1), funct7), toU64(1))
-		//   rl := and64(funct7, toU64(1))
+		//   aq := and64(shr64(byteToU64(1), funct7), byteToU64(1))
+		//   rl := and64(funct7, byteToU64(1))
 		// if none set: unordered
 		// if aq is set: no following mem ops observed before acquire mem op
 		// if rl is set: release mem op not observed before earlier mem ops
@@ -896,8 +896,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		// 0b010 == RV32A W variants
 		// 0b011 == RV64A D variants
-		size := shl64(funct3, toU64(1))
-		if lt64(size, toU64(4)) != 0 || gt64(size, toU64(8)) != 0 {
+		size := shl64(funct3, byteToU64(1))
+		if lt64(size, byteToU64(4)) != 0 || gt64(size, byteToU64(8)) != 0 {
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
@@ -905,24 +905,24 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 4 bytes", addr))
 		}
 
-		op := shr64(toU64(2), funct7)
+		op := shr64(byteToU64(2), funct7)
 		switch op {
 		case 0x2: // 00010 = LR = Load Reserved
 			v := loadMem(addr, size, true, 1, 2)
 			setRegister(rd, v)
 			setLoadReservation(addr)
 		case 0x3: // 00011 = SC = Store Conditional
-			rdValue := toU64(1)
+			rdValue := byteToU64(1)
 			if eq64(addr, getLoadReservation()) != 0 {
 				rs2Value := getRegister(rs2)
 				storeMem(addr, size, rs2Value, 1, 2, true, true)
-				rdValue = toU64(0)
+				rdValue = byteToU64(0)
 			}
 			setRegister(rd, rdValue)
-			setLoadReservation(toU64(0))
+			setLoadReservation(byteToU64(0))
 		default: // AMO: Atomic Memory Operation
 			rs2Value := getRegister(rs2)
-			if eq64(size, toU64(4)) != 0 {
+			if eq64(size, byteToU64(4)) != 0 {
 				rs2Value = mask32Signed64(rs2Value)
 			}
 			value := rs2Value
@@ -961,18 +961,18 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			storeMem(addr, size, v, 1, 3, false, true) // after overwriting 1, proof 2 is no longer valid
 			setRegister(rd, rdValue)
 		}
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x0F: // 000_1111: fence
 		// Used to impose additional ordering constraints; flushing the mem operation pipeline.
 		// This VM doesn't have a pipeline, nor additional harts, so this is a no-op.
 		// FENCE / FENCE.TSO / FENCE.I all no-op: there's nothing to synchronize.
-		setPC(add64(pc, toU64(4)))
+		setPC(add64(pc, byteToU64(4)))
 	case 0x07: // FLW/FLD: floating point load word/double
-		setPC(add64(pc, toU64(4))) // no-op this.
+		setPC(add64(pc, byteToU64(4))) // no-op this.
 	case 0x27: // FSW/FSD: floating point store word/double
-		setPC(add64(pc, toU64(4))) // no-op this.
+		setPC(add64(pc, byteToU64(4))) // no-op this.
 	case 0x53: // FADD etc. no-op is enough to pass Go runtime check
-		setPC(add64(pc, toU64(4))) // no-op this.
+		setPC(add64(pc, byteToU64(4))) // no-op this.
 	default:
 		revertWithCode(riscv.ErrUnknownOpCode, fmt.Errorf("unknown instruction opcode: %d", opcode))
 	}

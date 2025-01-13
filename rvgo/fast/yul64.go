@@ -6,11 +6,11 @@ import "github.com/holiman/uint256"
 
 type U64 = uint64
 
-func toU256(v uint8) U256 {
+func byteToU256(v uint8) U256 {
 	return *uint256.NewInt(uint64(v))
 }
 
-func toU64(v uint8) U64 { return uint64(v) }
+func byteToU64(v uint8) U64 { return uint64(v) }
 
 func shortToU64(v uint16) U64 {
 	return uint64(v)
@@ -42,7 +42,7 @@ func u32Mask() uint64 {
 }
 
 func mask32Signed64(v U64) U64 {
-	return signExtend64(and64(v, u32Mask()), toU64(31))
+	return signExtend64(and64(v, u32Mask()), byteToU64(31))
 }
 
 func signExtend64(v uint64, bit uint64) uint64 {
@@ -61,7 +61,7 @@ func signExtend64To256(v U64) U256 {
 	case 0:
 		return *new(uint256.Int).SetUint64(v)
 	default:
-		return or(shl(toU256(64), not(U256{})), *new(uint256.Int).SetUint64(v))
+		return or(shl(byteToU256(64), not(U256{})), *new(uint256.Int).SetUint64(v))
 	}
 }
 
