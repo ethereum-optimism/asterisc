@@ -1542,6 +1542,17 @@ contract RISCV is IBigStepper {
                         setPC(add64(_pc, toU64(4))) // ignore breakpoint
                     }
                 }
+                case 1 {
+                    // CSRRW
+                    let rs1Value := getRegister(rs1)
+                    let rdValue := getRegister(rd)
+
+                    // no source or destination registers must be specified
+                    if or64(rs1Value, rdValue) { revertWithCode(0xbadc0de) }
+
+                    setRegister(rd, toU64(0))
+                    setPC(add64(_pc, toU64(4)))
+                }
                 default {
                     // CSR instructions
                     setRegister(rd, toU64(0)) // ignore CSR instructions

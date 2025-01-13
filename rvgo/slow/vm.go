@@ -1050,7 +1050,17 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			default: // imm12 = 000000000001 EBREAK
 				setPC(add64(pc, toU64(4))) // ignore breakpoint
 			}
-		default: // ignore CSR instructions
+		case 1:
+			// CSRRW
+			rs1Value := getRegister(rs1)
+			rdValue := getRegister(rd)
+			// no source or destination registers must be specified
+			if or64(rs1Value, rdValue) != (U64{}) {
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("only no-op CSRRW instruction are supported"))
+			}
+			setRegister(rd, toU64(0))
+			setPC(add64(pc, toU64(4)))
+		default: // ignore other CSR instructions
 			setRegister(rd, toU64(0)) // ignore CSR instructions
 			setPC(add64(pc, toU64(4)))
 		}
