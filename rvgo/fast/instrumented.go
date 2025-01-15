@@ -73,7 +73,7 @@ func (m *InstrumentedState) Step(proof bool) (wit *StepWitness, err error) {
 
 func (m *InstrumentedState) readPreimage(key [32]byte, offset uint64) (dat [32]byte, datLen uint64, err error) {
 	preimage := m.lastPreimage
-	if key != m.lastPreimageKey {
+	if preimage == nil || key != m.lastPreimageKey {
 		m.lastPreimageKey = key
 		data := m.preimageOracle.GetPreimage(key)
 		// add the length prefix
