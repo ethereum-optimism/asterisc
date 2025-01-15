@@ -3,7 +3,7 @@
 ## Helpful learning resources
 
 - rv32 instruction set cheat sheet: http://blog.translusion.com/images/posts/RISC-V-cheatsheet-RV32I-4-3.pdf
-- rv32: reference card: https://github.com/jameslzhu/riscv-card/blob/master/riscv-card.pdf
+- rv32: reference card: https://github.com/jameslzhu/riscv-card/releases/download/latest/riscv-card.pdf
 - online riscv32 interpreter: https://www.cs.cornell.edu/courses/cs3410/2019sp/riscv/interpreter/#
 - specs: https://riscv.org/technical/specifications/
 - Berkely riscv card: https://inst.eecs.berkeley.edu/~cs61c/fa18/img/riscvcard.pdf

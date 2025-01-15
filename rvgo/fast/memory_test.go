@@ -412,3 +412,12 @@ func TestMemoryBinary(t *testing.T) {
 	m.GetUnaligned(8, dest[:])
 	require.Equal(t, uint8(123), dest[0])
 }
+
+func TestMemoryInvalidSetUnaligned(t *testing.T) {
+	t.Run("SetUnaligned incorrectly writes to next page", func(t *testing.T) {
+		m := NewMemory()
+		m.SetUnaligned(0x0FFE, []byte{0xaa, 0xbb, 0xcc, 0xdd})
+		require.Equal(t, m.pages[0].Data[4094:], []byte{0xaa, 0xbb})
+		require.Equal(t, m.pages[1].Data[0:2], []byte{0xcc, 0xdd})
+	})
+}

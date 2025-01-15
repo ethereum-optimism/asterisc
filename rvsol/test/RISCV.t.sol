@@ -607,6 +607,25 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    function test_remw_by_zero_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 27, 6, 22, 21, 1); // remw x27, x22, x21
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[22] = 0x100f00000; //bits > 32 should be ignored
+        state.registers[21] = 0x200000000; // bits > 32 should be ignored, resulting in division by zero
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[27] = 0x00f00000; // should return original dividend (least 32 bits)
+        expect.registers[22] = state.registers[22];
+        expect.registers[21] = state.registers[21];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function test_remuw_succeeds() public {
         uint32 insn = encodeRType(0x3b, 30, 7, 27, 9, 1); // remuw x30, x27, x9
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
@@ -989,7 +1008,7 @@ contract RISCV_Test is CommonTest {
 
     function test_lrd_succeeds() public {
         bytes32 value = hex"a0b1df92a49eec39";
-        uint64 addr = 0xb86a394544c084ec;
+        uint64 addr = 0xb86a394544c084e0;
         uint8 funct3 = 0x3;
         uint8 funct7 = encodeFunct7(0x2, 0x0, 0x0);
         uint8 size = uint8(1 << (funct3 & 0x3));
@@ -1069,7 +1088,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoaddd_succeeds() public {
-        uint64 addr = 0xeae426a36ff2bb64;
+        uint64 addr = 0xeae426a36ff2bb60;
         uint32 insn;
         uint8 size;
         {
@@ -1101,7 +1120,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoxord_succeeds() public {
-        uint64 addr = 0x2d5ba68f57f1c564;
+        uint64 addr = 0x2d5ba68f57f1c560;
         uint32 insn;
         uint8 size;
         {
@@ -1164,7 +1183,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoord_succeeds() public {
-        uint64 addr = 0xa0d7a5ea65b35664;
+        uint64 addr = 0xa0d7a5ea65b35660;
         uint32 insn;
         uint8 size;
         {
@@ -1260,7 +1279,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amominud_succeeds() public {
-        uint64 addr = 0xe094be571f4baca4;
+        uint64 addr = 0xe094be571f4baca0;
         uint32 insn;
         uint8 size;
         {
@@ -2034,7 +2053,7 @@ contract RISCV_Test is CommonTest {
     function test_beq_succeeds() public {
         uint16 imm = 0x19cd;
         uint32 insn = encodeBType(0x63, 0, 23, 20, imm); // beq x23, x20, offset
-        (State memory state, bytes memory proof) = constructRISCVState(0x139a, insn);
+        (State memory state, bytes memory proof) = constructRISCVState(0x139c, insn);
         state.registers[23] = 0x2152;
         state.registers[20] = 0x2152;
         bytes memory encodedState = encodeState(state);
@@ -2060,7 +2079,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_bne_succeeds() public {
-        uint16 imm = 0x1d7e;
+        uint16 imm = 0x1d7c;
         uint32 insn = encodeBType(0x63, 1, 20, 26, imm); // bne x20, x26, offset
         (State memory state, bytes memory proof) = constructRISCVState(0x1afc, insn);
         state.registers[20] = 0x14b6;
@@ -2144,9 +2163,9 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_bltu_succeeds() public {
-        uint16 imm = 0x171d;
+        uint16 imm = 0x171c;
         uint32 insn = encodeBType(0x63, 6, 13, 22, imm); // bltu x13, x22, offset
-        (State memory state, bytes memory proof) = constructRISCVState(0x2e3a, insn);
+        (State memory state, bytes memory proof) = constructRISCVState(0x2e3c, insn);
         state.registers[13] = 0xa0cc;
         state.registers[22] = 0xffffffff_ffff795c;
         bytes memory encodedState = encodeState(state);
@@ -2174,7 +2193,7 @@ contract RISCV_Test is CommonTest {
     function test_bgeu_succeeds() public {
         uint16 imm = 0x14b5;
         uint32 insn = encodeBType(0x63, 7, 7, 16, imm); // bgeu x7, x16, offset
-        (State memory state, bytes memory proof) = constructRISCVState(0x296a, insn);
+        (State memory state, bytes memory proof) = constructRISCVState(0x296c, insn);
         state.registers[7] = 0xffffffff_ffff35e5;
         state.registers[16] = 0x7c3c;
         bytes memory encodedState = encodeState(state);
@@ -2246,7 +2265,7 @@ contract RISCV_Test is CommonTest {
     /* J Type instructions */
 
     function test_jal_succeeds() public {
-        uint32 imm = 0xbef054ae;
+        uint32 imm = 0xbef054ac;
         uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         bytes memory encodedState = encodeState(state);
@@ -2440,7 +2459,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_unknown_atomic_operation() public {
-        uint64 addr = 0xeae426a36ff2bb64;
+        uint64 addr = 0xeae426a36ff2bb68;
         uint32 insn;
         uint8 size;
         {
@@ -2469,6 +2488,31 @@ contract RISCV_Test is CommonTest {
         bytes memory encodedState = encodeState(state);
 
         vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_reserved_load_instruction() public {
+        bytes32 value = hex"61fb11d66dcc9d48";
+        uint16 offset = 0x6bf;
+        uint64 addr = 0xd34d + offset;
+        uint32 insn = encodeIType(0x3, 21, 0x7, 4, offset); // lhu x21, funct 0x7, offset(x4)
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
+        state.registers[4] = 0xd34d;
+
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        riscv.step(encodedState, proof, 0);
+    }
+
+    function test_revert_unaligned_jal_instruction() public {
+        // 0xbef054ae % 4 != 0
+        uint32 imm = 0xbef054ae;
+        uint32 insn = encodeJType(0x6f, 5, imm); // jal x5, imm
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000bad10ad0");
         riscv.step(encodedState, proof, 0);
     }
 
