@@ -682,8 +682,16 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 0: // 000 = ADDIW
 			rdValue = mask32Signed64(add64(rs1Value, imm))
 		case 1: // 001 = SLLIW
+			// SLLIW where imm[5] != 0 is reserved
+			if and64(imm, toU64(0x20)) != 0 {
+				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+			}
 			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
+			// SRLIW and SRAIW where imm[5] != 0 is reserved
+			if and64(imm, toU64(0x20)) != 0 {
+				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+			}
 			shamt := and64(imm, toU64(0x1F))
 			switch shr64(toU64(5), imm) { // top 7 bits select the shift type
 			case 0x00: // 0000000 = SRLIW

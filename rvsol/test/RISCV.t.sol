@@ -2479,6 +2479,18 @@ contract RISCV_Test is CommonTest {
         riscv.step(encodedState, proof, 0);
     }
 
+    function test_revert_reserved_slliw_instruction() public {
+        uint16 shamt = 0x15;
+        uint16 imm = (0 << 7) | shamt | 0x20; // set 0x20 to make imm[5] != 0
+        uint32 insn = encodeIType(0x1b, 17, 1, 25, imm); // slliw x17, x25, 0x15
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[25] = 0xf956;
+        bytes memory encodedState = encodeState(state);
+
+        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        riscv.step(encodedState, proof, 0);
+    }
+
     function test_reserved_load_instruction() public {
         bytes32 value = hex"61fb11d66dcc9d48";
         uint16 offset = 0x6bf;
@@ -2486,6 +2498,7 @@ contract RISCV_Test is CommonTest {
         uint32 insn = encodeIType(0x3, 21, 0x7, 4, offset); // lhu x21, funct 0x7, offset(x4)
         (State memory state, bytes memory proof) = constructRISCVState(0, insn, addr, value);
         state.registers[4] = 0xd34d;
+
         bytes memory encodedState = encodeState(state);
 
         vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
