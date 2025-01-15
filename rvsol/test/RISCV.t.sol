@@ -2385,9 +2385,11 @@ contract RISCV_Test is CommonTest {
         uint32 insn = encodeRType(0xff, 0, 0, 0, 0, 0);
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
         bytes memory encodedState = encodeState(state);
-        // Invalid memory proof
-        proof =
-            hex"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+
+        // Overwrite the first 60 bytes of the proof with zero to create invalid memory proof
+        for (uint256 i = 0; i < 60 && i < proof.length; i++) {
+            proof[i] = 0x00;
+        }
 
         vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000badf00d1");
         riscv.step(encodedState, proof, 0);
