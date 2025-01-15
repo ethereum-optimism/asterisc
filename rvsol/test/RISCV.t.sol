@@ -989,7 +989,7 @@ contract RISCV_Test is CommonTest {
 
     function test_lrd_succeeds() public {
         bytes32 value = hex"a0b1df92a49eec39";
-        uint64 addr = 0xb86a394544c084ec;
+        uint64 addr = 0xb86a394544c084e0;
         uint8 funct3 = 0x3;
         uint8 funct7 = encodeFunct7(0x2, 0x0, 0x0);
         uint8 size = uint8(1 << (funct3 & 0x3));
@@ -1069,7 +1069,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoaddd_succeeds() public {
-        uint64 addr = 0xeae426a36ff2bb64;
+        uint64 addr = 0xeae426a36ff2bb60;
         uint32 insn;
         uint8 size;
         {
@@ -1101,7 +1101,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoxord_succeeds() public {
-        uint64 addr = 0x2d5ba68f57f1c564;
+        uint64 addr = 0x2d5ba68f57f1c560;
         uint32 insn;
         uint8 size;
         {
@@ -1164,7 +1164,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amoord_succeeds() public {
-        uint64 addr = 0xa0d7a5ea65b35664;
+        uint64 addr = 0xa0d7a5ea65b35660;
         uint32 insn;
         uint8 size;
         {
@@ -1260,7 +1260,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_amominud_succeeds() public {
-        uint64 addr = 0xe094be571f4baca4;
+        uint64 addr = 0xe094be571f4baca0;
         uint32 insn;
         uint8 size;
         {
@@ -2440,7 +2440,7 @@ contract RISCV_Test is CommonTest {
     }
 
     function test_unknown_atomic_operation() public {
-        uint64 addr = 0xeae426a36ff2bb64;
+        uint64 addr = 0xeae426a36ff2bb68;
         uint32 insn;
         uint8 size;
         {

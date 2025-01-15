@@ -1071,7 +1071,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			revertWithCode(riscv.ErrBadAMOSize, fmt.Errorf("bad AMO size: %d", size))
 		}
 		addr := getRegister(rs1)
-		if and64(addr, toU64(3)) != (U64{}) { // quick addr alignment check
+		if mod64(addr, size) != (U64{}) { // quick addr alignment check
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("addr %d not aligned with 4 bytes", addr))
 		}
 
