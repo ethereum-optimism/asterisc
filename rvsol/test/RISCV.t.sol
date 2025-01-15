@@ -607,6 +607,25 @@ contract RISCV_Test is CommonTest {
         assertEq(postState, outputState(expect), "unexpected post state");
     }
 
+    function test_remw_by_zero_succeeds() public {
+        uint32 insn = encodeRType(0x3b, 27, 6, 22, 21, 1); // remw x27, x22, x21
+        (State memory state, bytes memory proof) = constructRISCVState(0, insn);
+        state.registers[22] = 0x100f00000; //bits > 32 should be ignored
+        state.registers[21] = 0x200000000; // bits > 32 should be ignored, resulting in division by zero
+        bytes memory encodedState = encodeState(state);
+
+        State memory expect;
+        expect.memRoot = state.memRoot;
+        expect.pc = state.pc + 4;
+        expect.step = state.step + 1;
+        expect.registers[27] = 0x00f00000; // should return original dividend (least 32 bits)
+        expect.registers[22] = state.registers[22];
+        expect.registers[21] = state.registers[21];
+
+        bytes32 postState = riscv.step(encodedState, proof, 0);
+        assertEq(postState, outputState(expect), "unexpected post state");
+    }
+
     function test_remuw_succeeds() public {
         uint32 insn = encodeRType(0x3b, 30, 7, 27, 9, 1); // remuw x30, x27, x9
         (State memory state, bytes memory proof) = constructRISCVState(0, insn);
