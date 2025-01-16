@@ -65,6 +65,21 @@ fuzz-mac:
   fuzz \
   fuzz-mac
 
+quick = '10s'
+hour = '1h'
+daily = '24h'
+weekend = '2 days'
+fuzztime = $(quick)
+fuzz-parsing: build
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseTypeI ./rvgo/test
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseTypeS ./rvgo/test
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseTypeB ./rvgo/test
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseTypeU ./rvgo/test
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseTypeJ ./rvgo/test
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseOpcode ./rvgo/test
+	go test -run NOTAREALTEST -v -fuzztime $(fuzztime) -fuzz=FuzzParseRd ./rvgo/test
+.PHONY: fuzz-parsing
+
 OP_PROGRAM_PATH ?= $(MONOREPO_ROOT)/op-program/bin-riscv/op-program-client-riscv.elf
 
 prestate: build-rvgo op-program-riscv
