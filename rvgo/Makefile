@@ -16,6 +16,10 @@ build-ffi:
 	env GO111MODULE=on GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build -v $(LDFLAGS) -o ./scripts/go-ffi/go-ffi ./scripts/go-ffi
 .PHONY: build-ffi
 
+build-parse-diff-ffi:
+	env GO111MODULE=on GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build -v $(LDFLAGS) -o ./scripts/parse-diff-ffi/slow ./scripts/parse-diff-ffi
+.PHONY: build-parse-diff-ffi
+
 clean:
 	rm -rf ./bin
 	rm ./scripts/go-ffi/go-ffi

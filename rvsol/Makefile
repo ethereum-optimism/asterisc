@@ -17,3 +17,7 @@ lint-fix:
 lint-check:
 	forge fmt && git diff --exit-code
 .PHONY: lint-check
+
+fuzz-ffi:
+	forge test --match-path ./test/Yul64Test.sol
+.PHONY: fuzz-ffi

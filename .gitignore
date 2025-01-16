@@ -2,6 +2,7 @@ bin
 
 rvgo/bin
 rvgo/scripts/go-ffi/go-ffi
+rvgo/scripts/parse-diff-ffi/slow
 rvgo/test/testdata
 
 rvsol/cache

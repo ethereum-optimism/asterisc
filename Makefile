@@ -65,6 +65,11 @@ fuzz-mac:
   fuzz \
   fuzz-mac
 
+fuzz-ffi: build
+	make -C ./rvgo build-parse-diff-ffi
+	make -C ./rvsol fuzz-ffi
+.PHONY: fuzz-ffi
+
 OP_PROGRAM_PATH ?= $(MONOREPO_ROOT)/op-program/bin-riscv/op-program-client-riscv.elf
 
 prestate: build-rvgo op-program-riscv
