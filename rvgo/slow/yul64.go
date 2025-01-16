@@ -11,12 +11,12 @@ func (v U64) val() uint64 {
 	return (*uint256.Int)(&v).Uint64()
 }
 
-func toU256(v uint8) U256 {
+func byteToU256(v uint8) U256 {
 	return *uint256.NewInt(uint64(v))
 }
 
-func toU64(v uint8) U64 {
-	return U64(toU256(v))
+func byteToU64(v uint8) U64 {
+	return U64(byteToU256(v))
 }
 
 func shortToU64(v uint16) U64 {
@@ -41,30 +41,30 @@ func u64ToU256(v U64) U256 {
 }
 
 func u64Mask() U64 { // max uint64
-	return U64(shr(toU256(192), not(U256{}))) // 256-64 = 192
+	return U64(shr(byteToU256(192), not(U256{}))) // 256-64 = 192
 }
 
 func u32Mask() U64 {
-	return U64(shr(toU256(224), not(U256{}))) // 256-32 = 224
+	return U64(shr(byteToU256(224), not(U256{}))) // 256-32 = 224
 }
 
 func mask32Signed64(v U64) U64 {
-	return signExtend64(and64(v, u32Mask()), toU64(31))
+	return signExtend64(and64(v, u32Mask()), byteToU64(31))
 }
 
 func u64Mod() U256 { // 1 << 64
-	return shl(toU256(64), toU256(1))
+	return shl(byteToU256(64), byteToU256(1))
 }
 
 func u64TopBit() U256 { // 1 << 63
-	return shl(toU256(63), toU256(1))
+	return shl(byteToU256(63), byteToU256(1))
 }
 
 func signExtend64(v U64, bit U64) U64 {
-	switch and(U256(v), shl(U256(bit), toU256(1))) {
+	switch and(U256(v), shl(U256(bit), byteToU256(1))) {
 	case U256{}:
 		// fill with zeroes, by masking
-		return U64(and(U256(v), shr(sub(toU256(63), U256(bit)), U256(u64Mask()))))
+		return U64(and(U256(v), shr(sub(byteToU256(63), U256(bit)), U256(u64Mask()))))
 	default:
 		// fill with ones, by or-ing
 		return U64(or(U256(v), shl(U256(bit), shr(U256(bit), U256(u64Mask())))))
@@ -76,7 +76,7 @@ func signExtend64To256(v U64) U256 {
 	case U256{}:
 		return U256(v)
 	default:
-		return or(shl(toU256(64), not(U256{})), U256(v))
+		return or(shl(byteToU256(64), not(U256{})), U256(v))
 	}
 }
 
