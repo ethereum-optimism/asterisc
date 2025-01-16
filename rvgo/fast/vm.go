@@ -694,44 +694,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV M extension
-			switch funct3 {
-			case 0: // 000 = MUL: signed x signed
-				rdValue = mul64(rs1Value, rs2Value)
-			case 1: // 001 = MULH: upper bits of signed x signed
-				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), signExtend64To256(rs2Value))))
-			case 2: // 010 = MULHSU: upper bits of signed x unsigned
-				rdValue = u256ToU64(shr(toU256(64), mul(signExtend64To256(rs1Value), u64ToU256(rs2Value))))
-			case 3: // 011 = MULHU: upper bits of unsigned x unsigned
-				rdValue = u256ToU64(shr(toU256(64), mul(u64ToU256(rs1Value), u64ToU256(rs2Value))))
-			case 4: // 100 = DIV
-				switch rs2Value {
-				case 0:
-					rdValue = u64Mask()
-				default:
-					rdValue = sdiv64(rs1Value, rs2Value)
-				}
-			case 5: // 101 = DIVU
-				switch rs2Value {
-				case 0:
-					rdValue = u64Mask()
-				default:
-					rdValue = div64(rs1Value, rs2Value)
-				}
-			case 6: // 110 = REM
-				switch rs2Value {
-				case 0:
-					rdValue = rs1Value
-				default:
-					rdValue = smod64(rs1Value, rs2Value)
-				}
-			case 7: // 111 = REMU
-				switch rs2Value {
-				case 0:
-					rdValue = rs1Value
-				default:
-					rdValue = mod64(rs1Value, rs2Value)
-				}
-			}
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid func7 value %d for opcode 0x33", funct7))
 		default:
 			switch funct3 {
 			case 0: // 000 = ADD/SUB
@@ -770,38 +733,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		var rdValue U64
 		switch funct7 {
 		case 1: // RV M extension
-			switch funct3 {
-			case 0: // 000 = MULW
-				rdValue = mask32Signed64(mul64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-			case 4: // 100 = DIVW
-				switch rs2Value {
-				case 0:
-					rdValue = u64Mask()
-				default:
-					rdValue = mask32Signed64(sdiv64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
-				}
-			case 5: // 101 = DIVUW
-				switch rs2Value {
-				case 0:
-					rdValue = u64Mask()
-				default:
-					rdValue = mask32Signed64(div64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-				}
-			case 6: // 110 = REMW
-				switch rs2Value {
-				case 0:
-					rdValue = mask32Signed64(rs1Value)
-				default:
-					rdValue = mask32Signed64(smod64(mask32Signed64(rs1Value), mask32Signed64(rs2Value)))
-				}
-			case 7: // 111 = REMUW
-				switch rs2Value {
-				case 0:
-					rdValue = mask32Signed64(rs1Value)
-				default:
-					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
-				}
-			}
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid func7 value %d for opcode 0x3B", funct7))
 		default:
 			switch funct3 {
 			case 0: // 000 = ADDW/SUBW
@@ -864,7 +796,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 				sysCall()
 				setPC(add64(pc, toU64(4)))
 			default: // imm12 = 000000000001 EBREAK
-				setPC(add64(pc, toU64(4))) // ignore breakpoint
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: unsupported EBREAK"))
 			}
 		default: // CSR instructions
 			setRegister(rd, 0) // ignore CSR instructions
