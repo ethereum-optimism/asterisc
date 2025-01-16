@@ -43,9 +43,11 @@ jobs:
           go-version: '1.22.x'
       - name: Install solc
         run: |
-          sudo add-apt-repository ppa:ethereum/ethereum
           sudo apt-get update
-          sudo apt-get install solc=1:0.8.15-0ubuntu1~impish
+          sudo apt-get install -y python3 python3-pip
+          pip3 install solc-select
+          solc-select install 0.8.15
+          solc-select use 0.8.15
       - name: Build FFI
         run: make build-ffi && make build-parse-diff-ffi
         working-directory: rvgo
