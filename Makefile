@@ -28,7 +28,7 @@ test: build
 .PHONY: test
 
 fuzz-syscalls: build
-	go test -run NOTAREALTEST -v -fuzztime 100s -fuzz=FuzzEverything ./rvgo/test --parallel 15
+	go test -run NOTAREALTEST -v -fuzztime 200s -fuzz=FuzzEverything ./rvgo/test --parallel 15
 .PHONY: fuzz-syscalls
 
 OP_PROGRAM_PATH ?= $(MONOREPO_ROOT)/op-program/bin-riscv/op-program-client-riscv.elf
