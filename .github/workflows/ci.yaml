@@ -42,8 +42,8 @@ jobs:
         with:
           go-version: '1.22.x'
       - name: Build FFI
-        run: go build
-        working-directory: rvgo/scripts/go-ffi
+        run: make build-ffi && make build-parse-diff-ffi
+        working-directory: rvgo
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run foundry tests
