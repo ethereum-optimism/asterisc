@@ -188,11 +188,46 @@ def dict_from_json(json_path):
         print(f"Error: Unable to read the JSON file. Reason: {e}")
         exit(1)
 
+# Gather all possible instruction names from the JSON
+def gather_json_instructions(json_path):
+    data, _ = dict_from_json(json_path)
+    result = set()
+    for op_entry in data['opcodes']:
+        for opcode_hex, opcode_data in op_entry.items():
+            # If the value is just a string, it's a direct instruction name (e.g. "LUI")
+            if isinstance(opcode_data, str):
+                result.add(opcode_data)
+            else:
+                # If the opcode_data has 'funct3' definitions
+                if 'funct3' in opcode_data:
+                    for f3_entry in opcode_data['funct3']:
+                        for f3_hex, f3_data in f3_entry.items():
+                            if isinstance(f3_data, str):
+                                result.add(f3_data)
+                            elif 'funct12' in f3_data:
+                                for f12_entry in f3_data['funct12']:
+                                    for f12_hex, f12_data in f12_entry.items():
+                                        result.add(f12_data)
+
+                # If the opcode_data has 'funct7' definitions
+                if 'funct7' in opcode_data:
+                    for f7_entry in opcode_data['funct7']:
+                        for f7_hex, f7_data in f7_entry.items():
+                            if isinstance(f7_data, str):
+                                result.add(f7_data)
+                            elif 'funct3' in f7_data:
+                                for f3_entry in f7_data['funct3']:
+                                    for f3_hex, f3_data in f3_entry.items():
+                                        result.add(f3_data)
+    return result
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python3 parse_riscv_elf.py <path_to_elf_file> <path_to_json_file>")
         sys.exit(1)
     
+    exit_code = 0
+
     elf_path = sys.argv[1]
     json_path = sys.argv[2]
     instructions = extract_text_section_instructions(elf_path)
@@ -208,6 +243,25 @@ if __name__ == "__main__":
         print(f"There were {nb_unknown} unknown instructions.\n")
         for instru, count in sorted(unknown_instr.items()):
             print(f"Unknown instruction: {instru:08X}: {count} times")
-        exit(1)
+        exit_code = 1
     else:
         print("All instructions known.")
+
+    # Build a set of instructions from the ELF (keys of instruction_counts)
+    used_instructions = set(instruction_counts.keys())
+
+    # If you used "ECALL.WRITE", "ECALL.READ", etc.,
+    # ensure that "ECALL" is also considered used (if it exists).
+    for ui in list(used_instructions):
+        if ui.startswith("ECALL."):
+            used_instructions.add("ECALL")
+
+    all_json_instructions = gather_json_instructions(json_path)
+    extraneous_instructions = all_json_instructions - set(used_instructions)
+    if extraneous_instructions:
+        print("Extraneous instructions in JSON not present in ELF:")
+        for instr in extraneous_instructions:
+            print("  ", instr)
+        exit_code = 1
+
+    exit(exit_code)
