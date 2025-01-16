@@ -41,6 +41,11 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
+      - name: Install solc
+        run: |
+          sudo add-apt-repository ppa:ethereum/ethereum
+          sudo apt-get update
+          sudo apt-get install solc=1:0.8.15-0ubuntu1~impish
       - name: Build FFI
         run: make build-ffi && make build-parse-diff-ffi
         working-directory: rvgo
