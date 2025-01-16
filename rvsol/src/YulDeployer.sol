@@ -26,10 +26,7 @@ contract YulDeployer is Test {
             deployedAddress := create(0, add(bytecode, 0x20), mload(bytecode))
         }
 
-        require(
-            deployedAddress != address(0),
-            "YulDeployer could not deploy contract"
-        );
+        require(deployedAddress != address(0), "YulDeployer could not deploy contract");
 
         return deployedAddress;
     }

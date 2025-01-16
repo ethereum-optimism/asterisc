@@ -11,11 +11,11 @@ test:
 .PHONY: test
 
 lint-fix:
-	forge fmt
+	forge fmt ./**/*.sol
 .PHONY: lint-fix
 
 lint-check:
-	forge fmt && git diff --exit-code
+	forge fmt ./**/*.sol && git diff --exit-code
 .PHONY: lint-check
 
 fuzz-ffi:
