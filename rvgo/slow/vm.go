@@ -823,7 +823,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		}
 
 		// The PC must be aligned to 4 bytes.
-		if and64(pc, toU64(3)) != (U64{}) {
+		if and64(pc, byteToU64(3)) != (U64{}) {
 			revertWithCode(riscv.ErrNotAlignedAddr, fmt.Errorf("pc %d not aligned with 4 bytes", pc))
 		}
 
@@ -870,7 +870,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 			if and64(imm, byteToU64(0x20)) != (U64{}) {
 				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
-			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
+			rdValue = mask32Signed64(shl64(and64(imm, byteToU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			// SRLIW and SRAIW imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != (U64{}) {

@@ -686,7 +686,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			if and64(imm, byteToU64(0x20)) != 0 {
 				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
-			rdValue = mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
+			rdValue = mask32Signed64(shl64(and64(imm, byteToU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			// SRLIW and SRAIW where imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != 0 {
