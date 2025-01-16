@@ -22,8 +22,8 @@ jobs:
         working-directory: tests/go-tests
       - name: Run tests
         run: go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
-      - name: Fuzz
-        run: make fuzz
+      - name: Fuzz syscalls
+        run: make fuzz-syscalls
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
