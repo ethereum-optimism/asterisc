@@ -774,7 +774,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 		// bits[14:12] set to 111 are reserved
 		if eq64(funct3, byteToU64(0x7)) != (U64{}) {
-			revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 		}
 
 		imm := parseImmTypeI(instr)

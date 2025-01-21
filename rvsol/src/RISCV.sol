@@ -1161,7 +1161,7 @@ contract RISCV is IBigStepper {
                 // LB, LH, LW, LD, LBU, LHU, LWU
 
                 // bits[14:12] set to 111 are reserved
-                if eq64(funct3, toU64(0x7)) { revertWithCode(0xf001ca11) }
+                if eq64(funct3, toU64(0x7)) { revertWithCode(0xbadc0de) }
 
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4))) // 4 = 100 -> bitflag
