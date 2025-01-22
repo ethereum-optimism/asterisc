@@ -1161,7 +1161,7 @@ contract RISCV is IBigStepper {
                 // LB, LH, LW, LD, LBU, LHU, LWU
 
                 // bits[14:12] set to 111 are reserved
-                if eq64(funct3, toU64(0x7)) { revertWithCode(0xf001ca11) }
+                if eq64(funct3, toU64(0x7)) { revertWithCode(0xbadc0de) }
 
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4))) // 4 = 100 -> bitflag
@@ -1295,12 +1295,12 @@ contract RISCV is IBigStepper {
                     // 001 = SLLIW
 
                     // SLLIW where imm[5] != 0 is reserved
-                    if and64(imm, toU64(0x20)) { revertWithCode(0xf001ca11) }
+                    if and64(imm, toU64(0x20)) { revertWithCode(0xbadc0de) }
                     rdValue := mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
                 }
                 case 5 {
                     // SRLIW and SRAIW where imm[5] != 0 is reserved
-                    if and64(imm, toU64(0x20)) { revertWithCode(0xf001ca11) }
+                    if and64(imm, toU64(0x20)) { revertWithCode(0xbadc0de) }
 
                     // 101 = SR~
                     let shamt := and64(imm, toU64(0x1F))

@@ -590,7 +590,7 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 
 		// bits[14:12] set to 111 are reserved
 		if eq64(funct3, byteToU64(0x7)) != 0 {
-			revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 		}
 
 		imm := parseImmTypeI(instr)
@@ -688,13 +688,13 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 		case 1: // 001 = SLLIW
 			// SLLIW where imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != 0 {
-				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			rdValue = mask32Signed64(shl64(and64(imm, byteToU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			// SRLIW and SRAIW where imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != 0 {
-				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			shamt := and64(imm, byteToU64(0x1F))
 			switch shr64(byteToU64(5), imm) { // top 7 bits select the shift type

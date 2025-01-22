@@ -774,7 +774,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 		// bits[14:12] set to 111 are reserved
 		if eq64(funct3, byteToU64(0x7)) != (U64{}) {
-			revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 		}
 
 		imm := parseImmTypeI(instr)
@@ -872,13 +872,13 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case 1: // 001 = SLLIW
 			// SLLIW where imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != (U64{}) {
-				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			rdValue = mask32Signed64(shl64(and64(imm, byteToU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			// SRLIW and SRAIW imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != (U64{}) {
-				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			shamt := and64(imm, byteToU64(0x1F))
 			switch shr64(byteToU64(5), imm).val() { // top 7 bits select the shift type
