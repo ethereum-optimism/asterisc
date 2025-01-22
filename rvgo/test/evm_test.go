@@ -150,6 +150,12 @@ func stepEVM(t *testing.T, env *vm.EVM, wit *fast.StepWitness, addrs *Addresses,
 		require.Equal(t, ret, revertCode)
 		return
 	}
+
+	if err != nil && ret == nil {
+		require.ErrorIs(t, err, vm.ErrExecutionReverted)
+		return
+	}
+
 	require.NoError(t, err, "evm must not fail (ret: %x), at step %d", ret, step)
 	gasUsed = startingGas - leftOverGas
 

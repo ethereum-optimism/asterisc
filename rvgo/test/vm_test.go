@@ -10,7 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/asterisc/rvgo/fast"
+	"github.com/ethereum-optimism/asterisc/rvgo/riscv"
 	"github.com/ethereum-optimism/asterisc/rvgo/slow"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 func forEachTestSuite(t *testing.T, path string, callItem func(t *testing.T, path string)) {
@@ -185,4 +189,85 @@ func TestEVMStep(t *testing.T) {
 	runTestCategory("rv64um-p")
 	runTestCategory("rv64ua-p")
 	//runTestCategory("benchmarks")  TODO benchmarks (fix ELF bench data loading and wrap in Go benchmark?) https://github.com/ethereum-optimism/asterisc/issues/89
+}
+
+func TestVMProofSizes(t *testing.T) {
+	testCases := []struct {
+		name             string
+		memProof         []byte
+		expectedSlowErr  string
+		expectedSlowHash common.Hash
+		revertCode       []byte
+		expectedEVMPost  string
+	}{
+		{
+			// Revert on proof size checking
+			name:             "MemProof of length 10, revert <nil>",
+			memProof:         make([]byte, 10),
+			expectedSlowErr:  "revert: <nil>",
+			expectedSlowHash: common.Hash{},
+			revertCode:       nil,
+			expectedEVMPost:  "0x",
+		},
+		{
+			// Revert on proof size checking
+			name:             "MemProof of length 60, revert <nil>",
+			memProof:         make([]byte, 60),
+			expectedSlowErr:  "revert: <nil>",
+			expectedSlowHash: common.Hash{},
+			revertCode:       nil,
+			expectedEVMPost:  "0x",
+		},
+		{
+			// Revert after proof size checking due to invalid proof
+			name:             "MemProof of length 60*32, revert <nil>",
+			memProof:         make([]byte, 60*32),
+			expectedSlowErr:  "revert badf00d1: revert: bad memory proof, got mem root: 35cd541162972205c2a30d6a7d172f1e8b4584eef5d15a46f835cc3c90492137, expected 14af5385bcbb1e4738bbae8106046e6e2fca42875aa5c000c582587742bcc748",
+			expectedSlowHash: common.Hash{},
+			revertCode:       []byte("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xba\xdf\x00\xd1"),
+			expectedEVMPost:  "0x",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			contracts := testContracts(t)
+			addrs := testAddrs
+			env := newEVMEnv(t, contracts, addrs)
+
+			pc := uint64(0)
+			state := &fast.VMState{
+				PC:              pc,
+				Heap:            0,
+				ExitCode:        0,
+				Exited:          false,
+				Memory:          fast.NewMemory(),
+				LoadReservation: 0,
+				Registers:       [32]uint64{17: uint64(riscv.SysFutex)},
+				Step:            0,
+			}
+
+			fastState := fast.NewInstrumentedState(state, nil, os.Stdout, os.Stderr)
+			stepWitness, _ := fastState.Step(true)
+
+			stepWitness.MemProof = tc.memProof
+
+			input, err := stepWitness.EncodeStepInput(fast.LocalContext{})
+			require.NoError(t, err, "failed to encode step input")
+
+			slowPostHash, slowErr := slow.Step(input, nil)
+
+			if tc.expectedSlowErr != "" {
+				require.EqualError(t, slowErr, tc.expectedSlowErr)
+			} else {
+				require.NoError(t, slowErr)
+			}
+
+			require.Equal(t, tc.expectedSlowHash, slowPostHash)
+
+			evmPost, _, _ := stepEVM(t, env, stepWitness, addrs, 0, tc.revertCode)
+			require.Equal(t, tc.expectedEVMPost, hexutil.Bytes(evmPost).String())
+		})
+	}
 }
