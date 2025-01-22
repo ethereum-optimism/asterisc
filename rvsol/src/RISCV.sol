@@ -1168,7 +1168,7 @@ contract RISCV is IBigStepper {
                 // LB, LH, LW, LD, LBU, LHU, LWU
 
                 // bits[14:12] set to 111 are reserved
-                if eq64(funct3, toU64(0x7)) { revertWithCode(0xf001ca11) }
+                if eq64(funct3, toU64(0x7)) { revertWithCode(0xbadc0de) }
 
                 let imm := parseImmTypeI(instr)
                 let signed := iszero64(and64(funct3, toU64(4))) // 4 = 100 -> bitflag
@@ -1274,6 +1274,7 @@ contract RISCV is IBigStepper {
                         // 010000 = SRAI
                         rdValue := sar64(and64(imm, toU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
                     }
+                    default { revertWithCode(0xbadc0de) }
                 }
                 case 6 {
                     // 110 = ORI
@@ -1283,6 +1284,7 @@ contract RISCV is IBigStepper {
                     // 111 = ANDI
                     rdValue := and64(rs1Value, imm)
                 }
+                default { revertWithCode(0xbadc0de) }
                 setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             }
@@ -1300,12 +1302,12 @@ contract RISCV is IBigStepper {
                     // 001 = SLLIW
 
                     // SLLIW where imm[5] != 0 is reserved
-                    if and64(imm, toU64(0x20)) { revertWithCode(0xf001ca11) }
+                    if and64(imm, toU64(0x20)) { revertWithCode(0xbadc0de) }
                     rdValue := mask32Signed64(shl64(and64(imm, toU64(0x1F)), rs1Value))
                 }
                 case 5 {
                     // SRLIW and SRAIW where imm[5] != 0 is reserved
-                    if and64(imm, toU64(0x20)) { revertWithCode(0xf001ca11) }
+                    if and64(imm, toU64(0x20)) { revertWithCode(0xbadc0de) }
 
                     // 101 = SR~
                     let shamt := and64(imm, toU64(0x1F))
@@ -1319,7 +1321,9 @@ contract RISCV is IBigStepper {
                         // 0100000 = SRAIW
                         rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
                     }
+                    default { revertWithCode(0xbadc0de) }
                 }
+                default { revertWithCode(0xbadc0de) }
                 setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
             }
@@ -1373,6 +1377,7 @@ contract RISCV is IBigStepper {
                         case 0 { rdValue := rs1Value }
                         default { rdValue := mod64(rs1Value, rs2Value) }
                     }
+                    default { revertWithCode(0xbadc0de) }
                 }
                 default {
                     switch funct3
@@ -1387,6 +1392,7 @@ contract RISCV is IBigStepper {
                             // 0100000 = SUB
                             rdValue := sub64(rs1Value, rs2Value)
                         }
+                        default { revertWithCode(0xbadc0de) }
                     }
                     case 1 {
                         // 001 = SLL
@@ -1416,6 +1422,7 @@ contract RISCV is IBigStepper {
                             // 0100000 = SRA
                             rdValue := sar64(and64(rs2Value, toU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
                         }
+                        default { revertWithCode(0xbadc0de) }
                     }
                     case 6 {
                         // 110 = OR
@@ -1425,6 +1432,7 @@ contract RISCV is IBigStepper {
                         // 111 = AND
                         rdValue := and64(rs1Value, rs2Value)
                     }
+                    default { revertWithCode(0xbadc0de) }
                 }
                 setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))
@@ -1474,6 +1482,7 @@ contract RISCV is IBigStepper {
                             rdValue := mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
                     }
+                    default { revertWithCode(0xbadc0de) }
                 }
                 default {
                     switch funct3
@@ -1488,6 +1497,7 @@ contract RISCV is IBigStepper {
                             // 0100000 = SUBW
                             rdValue := mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
                         }
+                        default { revertWithCode(0xbadc0de) }
                     }
                     case 1 {
                         // 001 = SLLW
@@ -1505,7 +1515,9 @@ contract RISCV is IBigStepper {
                             // 0100000 = SRAW
                             rdValue := signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(toU64(31), shamt))
                         }
+                        default { revertWithCode(0xbadc0de) }
                     }
+                    default { revertWithCode(0xbadc0de) }
                 }
                 setRegister(rd, rdValue)
                 setPC(add64(_pc, toU64(4)))

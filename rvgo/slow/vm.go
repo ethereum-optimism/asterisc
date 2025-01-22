@@ -774,7 +774,7 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 
 		// bits[14:12] set to 111 are reserved
 		if eq64(funct3, byteToU64(0x7)) != (U64{}) {
-			revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 		}
 
 		imm := parseImmTypeI(instr)
@@ -850,11 +850,15 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				rdValue = shr64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
 			case 0x10: // 010000 = SRAI
 				rdValue = sar64(and64(imm, byteToU64(0x3F)), rs1Value) // lower 6 bits in 64 bit mode
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid imm value %d for opcode 0x13", imm.val()))
 			}
 		case 6: // 110 = ORI
 			rdValue = or64(rs1Value, imm)
 		case 7: // 111 = ANDI
 			rdValue = and64(rs1Value, imm)
+		default:
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x13", funct3.val()))
 		}
 		setRegister(rd, rdValue)
 		setPC(add64(pc, byteToU64(4)))
@@ -868,13 +872,13 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 		case 1: // 001 = SLLIW
 			// SLLIW where imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != (U64{}) {
-				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			rdValue = mask32Signed64(shl64(and64(imm, byteToU64(0x1F)), rs1Value))
 		case 5: // 101 = SR~
 			// SRLIW and SRAIW imm[5] != 0 is reserved
 			if and64(imm, byteToU64(0x20)) != (U64{}) {
-				revertWithCode(riscv.ErrInvalidSyscall, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction %d: reserved instruction encoding", instr))
 			}
 			shamt := and64(imm, byteToU64(0x1F))
 			switch shr64(byteToU64(5), imm).val() { // top 7 bits select the shift type
@@ -882,7 +886,11 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), byteToU64(31))
 			case 0x20: // 0100000 = SRAIW
 				rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(byteToU64(31), shamt))
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid imm value %d for opcode 0x1B", imm.val()))
 			}
+		default:
+			revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x1B", funct3.val()))
 		}
 		setRegister(rd, rdValue)
 		setPC(add64(pc, byteToU64(4)))
@@ -929,6 +937,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				default:
 					rdValue = mod64(rs1Value, rs2Value)
 				}
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x33", funct3.val()))
 			}
 		default:
 			switch funct3.val() {
@@ -938,6 +948,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 					rdValue = add64(rs1Value, rs2Value)
 				case 0x20: // 0100000 = SUB
 					rdValue = sub64(rs1Value, rs2Value)
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7.val(), funct3.val()))
 				}
 			case 1: // 001 = SLL
 				rdValue = shl64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // only the low 6 bits are consider in RV6VI
@@ -953,11 +965,15 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 					rdValue = shr64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // logical: fill with zeroes
 				case 0x20: // 0100000 = SRA
 					rdValue = sar64(and64(rs2Value, byteToU64(0x3F)), rs1Value) // arithmetic: sign bit is extended
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7.val(), funct3.val()))
 				}
 			case 6: // 110 = OR
 				rdValue = or64(rs1Value, rs2Value)
 			case 7: // 111 = AND
 				rdValue = and64(rs1Value, rs2Value)
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x3B", funct3.val()))
 			}
 		}
 		setRegister(rd, rdValue)
@@ -999,6 +1015,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 				default:
 					rdValue = mask32Signed64(mod64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				}
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x3B", funct3.val()))
 			}
 		default:
 			switch funct3.val() {
@@ -1008,6 +1026,8 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 					rdValue = mask32Signed64(add64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
 				case 0x20: // 0100000 = SUBW
 					rdValue = mask32Signed64(sub64(and64(rs1Value, u32Mask()), and64(rs2Value, u32Mask())))
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7.val(), funct3.val()))
 				}
 			case 1: // 001 = SLLW
 				rdValue = mask32Signed64(shl64(and64(rs2Value, byteToU64(0x1F)), rs1Value))
@@ -1018,7 +1038,11 @@ func Step(calldata []byte, po PreimageOracle) (stateHash common.Hash, outErr err
 					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), byteToU64(31))
 				case 0x20: // 0100000 = SRAW
 					rdValue = signExtend64(shr64(shamt, and64(rs1Value, u32Mask())), sub64(byteToU64(31), shamt))
+				default:
+					revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct7 value %d for funct3 %d", funct7.val(), funct3.val()))
 				}
+			default:
+				revertWithCode(riscv.ErrIllegalInstruction, fmt.Errorf("illegal instruction: invalid funct3 value %d for opcode 0x3B", funct3.val()))
 			}
 		}
 		setRegister(rd, rdValue)

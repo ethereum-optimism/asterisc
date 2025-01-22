@@ -2501,7 +2501,7 @@ contract RISCV_Test is CommonTest {
         state.registers[25] = 0xf956;
         bytes memory encodedState = encodeState(state);
 
-        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        vm.expectRevert(hex"000000000000000000000000000000000000000000000000000000000badc0de");
         riscv.step(encodedState, proof, 0);
     }
 
@@ -2515,7 +2515,7 @@ contract RISCV_Test is CommonTest {
 
         bytes memory encodedState = encodeState(state);
 
-        vm.expectRevert(hex"00000000000000000000000000000000000000000000000000000000f001ca11");
+        vm.expectRevert(hex"000000000000000000000000000000000000000000000000000000000badc0de");
         riscv.step(encodedState, proof, 0);
     }
 
