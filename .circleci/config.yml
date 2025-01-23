@@ -51,6 +51,38 @@ commands:
           name: Install mise dependencies
           command: mise install
 
+  install-go-modules:
+    parameters:
+      from:
+        description: Path to go.sum file
+        type: string
+        default: go.sum
+      path:
+        description: Go module cache path
+        type: string
+        default: /go/pkg/mod
+      version:
+        description: Version (cache breaker)
+        type: string
+        default: v1
+      after_download:
+        description: List of steps to run after downloading go modules
+        type: steps
+        default: []
+    steps:
+      - restore_cache:
+          name: Restore Go modules cache
+          keys:
+            - go-mod-{{ arch }}-{{ checksum "<< parameters.from >>" }}-<< parameters.version >>
+      - run:
+          name: Download Go modules
+          command: go mod download
+      - steps: << parameters.after_download >>
+      - save_cache:
+          key: go-mod-{{ arch }}-{{ checksum "<< parameters.from >>" }}-<< parameters.version >>
+          paths:
+              - << parameters.path >>
+
   checkout-with-monorepo:
     steps:
       - checkout
@@ -59,6 +91,12 @@ commands:
           # This will also fetch monorepo's submodule.
           # Therefore we do not have to call `make submodules` at monorepo root
           command: git submodule update --init --recursive
+
+      - run:
+          name: Debug CPUs
+          command: |
+            cat /proc/cpuinfo | grep processor | wc -l
+            cat /proc/cpuinfo | grep 'core id'
   install-contracts-dependencies:
     description: "Install the dependencies for the smart contracts"
     steps:
@@ -73,16 +111,12 @@ jobs:
     steps:
       - checkout-with-monorepo
       - install-dependencies
+      - install-go-modules
       - run:
           name: Check L1 geth version
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
           working_directory: rvsol/lib/optimism
       - install-contracts-dependencies
-      - restore_cache:
-          name: Restore Go modules cache
-          keys:
-            - gomod-contracts-build-{{ checksum "go.sum" }}
-            - gomod-contracts-build-
       - restore_cache:
           name: Restore Go build cache
           keys:
@@ -106,11 +140,6 @@ jobs:
           command: make devnet-allocs-tests
           working_directory: rvsol/lib/optimism
       - save_cache:
-          name: Save Go modules cache
-          key: gomod-contracts-build-{{ checksum "go.sum" }}
-          paths:
-            - "/go/pkg/mod"
-      - save_cache:
           name: Save Go build cache
           key: golang-build-cache-contracts-build-{{ checksum "go.sum" }}
           paths:
@@ -130,21 +159,13 @@ jobs:
     steps:
       - checkout-with-monorepo
       - install-dependencies
-      - restore_cache:
-          key: gomod>-{{ checksum "rvsol/lib/optimism/go.sum" }}
-          name: Restore Go modules cache for monorepo
-      - run:
-          name: Sanity check go mod cache path
-          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
-          working_directory: rvsol/lib/optimism
-      - run:
-          command: go mod download
-          name: Download Go module dependencies
-          working_directory: rvsol/lib/optimism
-      - run:
-          name: Go mod tidy
-          command: make mod-tidy && git diff --exit-code
-          working_directory: rvsol/lib/optimism
+      - install-go-modules:
+          from: rvsol/lib/optimism/go.sum
+          after_download:
+            - run:
+                name: Tidy modules
+                command: make mod-tidy && git diff --exit-code
+                working_directory: rvsol/lib/optimism
       - run:
           name: run Go linter
           command: |
@@ -152,40 +173,21 @@ jobs:
             golangci-lint run --help | grep concurrency
             make lint-go
           working_directory: rvsol/lib/optimism
-      - save_cache:
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
-          name: Save Go modules cache
-          paths:
-            - "/go/pkg/mod"
 
   go-mod-download-asterisc:
     executor: default
     steps:
       - checkout
       - install-dependencies
-      - restore_cache:
-          key: gomod-{{ checksum "go.sum" }}
-          name: Restore Go modules cache
-      - run:
-          name: Sanity check go mod cache path
-          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
-      - run:
-          command: go mod download
-          name: Download Go module dependencies
-      - save_cache:
-          key: gomod-{{ checksum "go.sum" }}
-          name: Save Go modules cache
-          paths:
-            - "/go/pkg/mod"
+      - install-go-modules
 
   op-program-riscv:
     executor: default
     steps:
       - checkout-with-monorepo
       - install-dependencies
-      - restore_cache:
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
-          name: Restore Go modules cache
+      - install-go-modules:
+          from: rvsol/lib/optimism/go.sum
       - run:
           name: Build op-program-client-riscv
           command: make op-program-client-riscv
@@ -206,9 +208,7 @@ jobs:
       - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
-      - restore_cache:
-          key: gomod-{{ checksum "go.sum" }}
-          name: Restore Go modules cache
+      - install-go-modules
       - run:
           name: Load op-program-client-riscv
           command: |
@@ -321,10 +321,8 @@ jobs:
       - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
-      - restore_cache:
-          name: Restore Go modules cache for monorepo
-          # this go mod cache will be populated from go-mod-download-monorepo step
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
+      - install-go-modules:
+          from: rvsol/lib/optimism/go.sum
       - run:
           name: Make op-program at monorepo
           command: make op-program
@@ -342,10 +340,7 @@ jobs:
             cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock
             mkdir -p packages/contracts-bedrock/deployments/devnetL1
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 packages/contracts-bedrock/deployments
-      - restore_cache:
-          name: Restore Go modules cache
-          # this go mod cache will be populated from go-mod-download-monorepo step
-          key: gomod-{{ checksum "go.sum" }}
+      - install-go-modules
       - run:
           name: Load asterisc artifacts
           command: |
