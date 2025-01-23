@@ -9,14 +9,9 @@ workflows:
   main:
     jobs:
       - contracts-bedrock-build
-      - go-mod-download-monorepo
-      - go-mod-download-asterisc
-      - op-program-riscv:
-          requires:
-            - go-mod-download-monorepo
+      - op-program-riscv
       - asterisc-prestate:
           requires:
-            - go-mod-download-asterisc
             - op-program-riscv
             - contracts-bedrock-build
       - devnet-allocs-including-asterisc:
@@ -153,33 +148,6 @@ jobs:
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
             - ".devnet-standard"
-
-  go-mod-download-monorepo:
-    executor: default
-    steps:
-      - checkout-with-monorepo
-      - install-dependencies
-      - install-go-modules:
-          from: rvsol/lib/optimism/go.sum
-          after_download:
-            - run:
-                name: Tidy modules
-                command: make mod-tidy && git diff --exit-code
-                working_directory: rvsol/lib/optimism
-      - run:
-          name: run Go linter
-          command: |
-            # Identify how many cores it defaults to
-            golangci-lint run --help | grep concurrency
-            make lint-go
-          working_directory: rvsol/lib/optimism
-
-  go-mod-download-asterisc:
-    executor: default
-    steps:
-      - checkout
-      - install-dependencies
-      - install-go-modules
 
   op-program-riscv:
     executor: default
