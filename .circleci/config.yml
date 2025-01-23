@@ -2,8 +2,8 @@ version: 2.1
 
 executors:
   default:
-    machine:
-      image: ubuntu-2204:2024.08.1
+    docker:
+      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
 
 workflows:
   main:
@@ -373,6 +373,7 @@ jobs:
     steps:
       - checkout
       - install-dependencies
+      - setup_remote_docker
       - run:
           name: Checkout asterisc to correct commit
           command: |
