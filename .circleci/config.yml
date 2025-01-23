@@ -1,10 +1,9 @@
 version: 2.1
 
-parameters:
-  ci_builder_image:
-    type: string
-    # depends with rvsol/lib/optimism submodule version
-    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
+executors:
+  default:
+    docker:
+      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
 
 workflows:
   main:
@@ -40,6 +39,18 @@ workflows:
           asterisc-commit: "25feabf"
 
 commands:
+  install-dependencies:
+    steps:
+      - run:
+          name: Install mise
+          command: curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+      - run:
+          name: Activate mise
+          command: echo 'eval "$(mise activate bash)"' >> $BASH_ENV
+      - run:
+          name: Install mise dependencies
+          command: mise install
+
   checkout-with-monorepo:
     steps:
       - checkout
@@ -57,11 +68,11 @@ commands:
 
 jobs:
   contracts-bedrock-build:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     resource_class: xlarge
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - run:
           name: Check L1 geth version
           command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
@@ -115,10 +126,10 @@ jobs:
             - ".devnet-standard"
 
   go-mod-download-monorepo:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - restore_cache:
           key: gomod>-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache for monorepo
@@ -148,10 +159,10 @@ jobs:
             - "/go/pkg/mod"
 
   go-mod-download-asterisc:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     steps:
       - checkout
+      - install-dependencies
       - restore_cache:
           key: gomod-{{ checksum "go.sum" }}
           name: Restore Go modules cache
@@ -168,19 +179,10 @@ jobs:
             - "/go/pkg/mod"
 
   op-program-riscv:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    parameters:
-      file:
-        default: rvsol/lib/optimism/go.sum
-        description: The file name of checksum for restore_cache and save_cache.
-        type: string
-      key:
-        default: gomod
-        description: The key of restore_cache and save_cache.
-        type: string
+    executor: default
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - restore_cache:
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Restore Go modules cache
@@ -198,23 +200,14 @@ jobs:
             - "op-program-artifacts"
 
   asterisc-prestate:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    parameters:
-      file:
-        default: go.sum
-        description: The file name of checksum for restore_cache and save_cache.
-        type: string
-      key:
-        default: gomod
-        description: The key of restore_cache and save_cache.
-        type: string
+    executor: default
     steps:
       - checkout
+      - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
       - restore_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
+          key: gomod-{{ checksum "go.sum" }}
           name: Restore Go modules cache
       - run:
           name: Load op-program-client-riscv
@@ -235,10 +228,10 @@ jobs:
             - "asterisc-artifacts"
 
   devnet-allocs-including-asterisc:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
       - run:
@@ -320,12 +313,12 @@ jobs:
             # we do not patch devnetL1.json because it did not change
 
   op-e2e-asterisc-tests:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     resource_class: xlarge
     parallelism: 4
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
       - restore_cache:
@@ -362,18 +355,16 @@ jobs:
           name: run tests
           no_output_timeout: 20m
           command: |
-            mkdir -p /testlogs
-            OP_TESTLOG_DISABLE_COLOR=true OP_E2E_DISABLE_PARALLEL=false gotestsum --format=testname --junitfile=/tmp/test-results/op_e2e_test-asterisc.xml --jsonfile=/testlogs/test.log -- -failfast -timeout=60m -parallel=8 ./faultproofs
+            mkdir -p /tmp/testlogs
+            OP_TESTLOG_DISABLE_COLOR=true OP_E2E_DISABLE_PARALLEL=false gotestsum --format=testname --junitfile=/tmp/test-results/op_e2e_test-asterisc.xml --jsonfile=/tmp/testlogs/test.log -- -failfast -timeout=60m -parallel=8 ./faultproofs
           working_directory: op-e2e
       - store_artifacts:
-          path: /testlogs
-          when: always
+          path: /tmp/testlogs
       - store_test_results:
           path: /tmp/test-results
 
   prestate-reproducibility:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     parameters:
       version:
         type: string
@@ -381,6 +372,8 @@ jobs:
         type: string
     steps:
       - checkout
+      - install-dependencies
+      - setup_remote_docker
       - run:
           name: Checkout asterisc to correct commit
           command: |
@@ -388,7 +381,6 @@ jobs:
             cp prestates.json temp.json
             git checkout "<<parameters.asterisc-commit>>"
             cp -f temp.json prestates.json
-      - setup_remote_docker
       - run:
           name: Fetch submodules for asterisc
           command: git submodule update --init
