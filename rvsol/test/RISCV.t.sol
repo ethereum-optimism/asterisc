@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 import { Test } from "@forge-std/Test.sol";
-import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
-import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
+import { IPreimageOracle } from "interfaces/cannon/IPreimageOracle.sol";
+import { IBigStepper } from "interfaces/dispute/IBigStepper.sol";
 import { PreimageOracle } from "@optimism/src/cannon/PreimageOracle.sol";
 import { DeployUtils } from "@optimism/scripts/libraries/DeployUtils.sol";
 import { CommonTest } from "./CommonTest.sol";
