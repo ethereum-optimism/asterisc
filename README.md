@@ -15,7 +15,7 @@ Read the [docs](./docs) to get started.
 We use [`mise`](https://mise.jdx.dev/) as a dependency manager for these tools.
 Once properly installed, `mise` will provide the correct versions for each tool. `mise` does not
 replace any other installations of these binaries and will only serve these binaries when you are
-working inside of the `optimism` directory.
+working inside of the `asterisc` directory.
 
 #### Install `mise`
 
