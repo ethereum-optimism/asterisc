@@ -109,7 +109,7 @@ jobs:
           name: Save Go modules cache
           key: gomod-contracts-build-{{ checksum "go.sum" }}
           paths:
-            - "/go/pkg/mod"
+            - "/home/circleci/.go_workspace/pkg/mod"
       - save_cache:
           name: Save Go build cache
           key: golang-build-cache-contracts-build-{{ checksum "go.sum" }}
@@ -135,7 +135,7 @@ jobs:
           name: Restore Go modules cache for monorepo
       - run:
           name: Sanity check go mod cache path
-          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
+          command: test "$(go env GOMODCACHE)" == "/home/circleci/.go_workspace/pkg/mod" # yes, it's an odd path
           working_directory: rvsol/lib/optimism
       - run:
           command: go mod download
@@ -156,7 +156,7 @@ jobs:
           key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
           name: Save Go modules cache
           paths:
-            - "/go/pkg/mod"
+            - "/home/circleci/.go_workspace/pkg/mod"
 
   go-mod-download-asterisc:
     executor: default
@@ -168,7 +168,7 @@ jobs:
           name: Restore Go modules cache
       - run:
           name: Sanity check go mod cache path
-          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
+          command: test "$(go env GOMODCACHE)" == "/home/circleci/.go_workspace/pkg/mod" # yes, it's an odd path
       - run:
           command: go mod download
           name: Download Go module dependencies
@@ -176,7 +176,7 @@ jobs:
           key: gomod-{{ checksum "go.sum" }}
           name: Save Go modules cache
           paths:
-            - "/go/pkg/mod"
+            - "/home/circleci/.go_workspace/pkg/mod"
 
   op-program-riscv:
     executor: default
