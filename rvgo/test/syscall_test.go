@@ -77,7 +77,7 @@ func TestStateSyscallUnsupported(t *testing.T) {
 	syscalls := []int{
 		riscv.SysPrlimit64,
 		riscv.SysFutex,
-		riscv.SysNanosleep,
+		//riscv.SysNanosleep,
 	}
 
 	for _, syscall := range syscalls {

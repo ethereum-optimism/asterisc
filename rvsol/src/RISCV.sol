@@ -1129,10 +1129,10 @@ contract RISCV is IBigStepper {
                     // futex - not supported, for now
                     revertWithCode(0xf001ca11) // unsupported system call
                 }
-                case 101 {
-                    // nanosleep - not supported, for now
-                    revertWithCode(0xf001ca11) // unsupported system call
-                }
+//                case 101 {
+//                    // nanosleep - not supported, for now
+//                    revertWithCode(0xf001ca11) // unsupported system call
+//                }
                 default {
                     // Ignore(no-op) unsupported system calls
                     setRegister(toU64(10), toU64(0))
