@@ -77,9 +77,6 @@ commands:
       - run:
           name: Download Go modules
           command: go mod download
-      - run:
-          name: Debug cache
-          command: go env GOMODCACHE
       - steps: << parameters.after_download >>
       - save_cache:
           key: go-mod-{{ arch }}-{{ checksum "<< parameters.from >>" }}-<< parameters.version >>
@@ -94,6 +91,12 @@ commands:
           # This will also fetch monorepo's submodule.
           # Therefore we do not have to call `make submodules` at monorepo root
           command: git submodule update --init --recursive
+
+      - run:
+          name: Debug CPUs
+          command: |
+            cat /proc/cpuinfo | grep processor | wc -l
+            cat /proc/cpuinfo | grep 'core id'
   install-contracts-dependencies:
     description: "Install the dependencies for the smart contracts"
     steps:
