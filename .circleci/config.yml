@@ -153,6 +153,7 @@ jobs:
 
   op-program-riscv:
     executor: default
+    resource_class: xlarge
     steps:
       - checkout-with-monorepo
       - install-dependencies
