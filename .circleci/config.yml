@@ -153,6 +153,7 @@ jobs:
 
   op-program-riscv:
     executor: default
+    resource_class: xlarge
     steps:
       - checkout-with-monorepo
       - install-dependencies
@@ -173,6 +174,7 @@ jobs:
 
   asterisc-prestate:
     executor: default
+    resource_class: xlarge
     steps:
       - checkout
       - install-dependencies
@@ -199,6 +201,7 @@ jobs:
 
   devnet-allocs-including-asterisc:
     executor: default
+    resource_class: xlarge
     steps:
       - checkout-with-monorepo
       - install-dependencies
