@@ -10,6 +10,7 @@ workflows:
     jobs:
       - contracts-bedrock-build
       - op-program-riscv
+      - op-program-test
       - asterisc-prestate:
           requires:
             - op-program-riscv
@@ -175,6 +176,27 @@ jobs:
           paths:
             - "op-program-artifacts"
 
+  op-program-test:
+    executor: default
+    steps:
+      - checkout-with-monorepo
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Build asterisc
+          command: make build-rvgo && cp rvgo/bin/asterisc tests/op-program-test/
+      - run:
+          name: Build op-program
+          command: |
+            make -C rvsol/lib/optimism/op-program op-program-host
+            cp rvsol/lib/optimism/op-program/bin/op-program tests/op-program-test/
+      - run: 
+          name: Run op-program
+          command: |
+            tar -xzvf ./test-data.tar.gz
+            ./local_cmd.sh
+          working_directory: tests/op-program-test
+  
   asterisc-prestate:
     executor: default
     resource_class: xlarge
