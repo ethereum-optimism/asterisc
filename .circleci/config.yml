@@ -8,6 +8,7 @@ executors:
 workflows:
   main:
     jobs:
+      - check-optimism-version-match
       - contracts-bedrock-build
       - op-program-riscv
       - op-program-test
@@ -106,6 +107,15 @@ commands:
           working_directory: rvsol/lib/optimism/packages/contracts-bedrock
 
 jobs:
+  check-optimism-version-match:
+    executor: default
+    steps:
+      - checkout-with-monorepo
+      - install-dependencies
+      - run:
+          name: Check if optimism submodule version matches go.mod version
+          command: ./.github/scripts/check_versions.sh
+          
   contracts-bedrock-build:
     executor: default
     resource_class: xlarge
