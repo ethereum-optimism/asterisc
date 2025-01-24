@@ -200,6 +200,7 @@ jobs:
 
   devnet-allocs-including-asterisc:
     executor: default
+    resource_class: xlarge
     steps:
       - checkout-with-monorepo
       - install-dependencies
