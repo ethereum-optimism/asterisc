@@ -33,6 +33,7 @@ workflows:
           version: "1.3.1"
           asterisc-commit: "25feabf"
       - rvgo-tests
+      - rvsol-lint
       - rvsol-tests
 
 commands:
@@ -398,6 +399,17 @@ jobs:
       - run:
           name: Upload coverage to Codecov
           command: codecov-cli do-upload --token $CODECOV_TOKEN --verbose
+
+  rvsol-lint:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Run lint
+          command: make lint-check
+          working_directory: rvsol
 
   rvsol-tests:
     executor: default
