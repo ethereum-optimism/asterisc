@@ -32,6 +32,7 @@ workflows:
       - prestate-reproducibility:
           version: "1.3.1"
           asterisc-commit: "25feabf"
+      - rvgo-lint
       - rvgo-tests
       - rvsol-lint
       - rvsol-tests
@@ -375,6 +376,16 @@ jobs:
               echo "Prestate did not match expected"
               exit 1
             fi
+
+  rvgo-lint:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Run lint
+          command: golangci-lint run
 
   rvgo-tests:
     executor: default
