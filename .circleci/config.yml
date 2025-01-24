@@ -173,6 +173,7 @@ jobs:
 
   asterisc-prestate:
     executor: default
+    resource_class: xlarge
     steps:
       - checkout
       - install-dependencies
