@@ -32,6 +32,7 @@ workflows:
       - prestate-reproducibility:
           version: "1.3.1"
           asterisc-commit: "25feabf"
+      - rvgo-tests
 
 commands:
   install-dependencies:
@@ -369,3 +370,27 @@ jobs:
               echo "Prestate did not match expected"
               exit 1
             fi
+
+  rvgo-tests:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Build rvsol
+          command: forge build
+          working_directory: rvsol
+      - run:
+          name: Build rv64g test binaries
+          command: make bin bin/simple bin/minimal
+          working_directory: tests/go-tests
+      - run:
+          name: Run tests
+          command: go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
+      - run:
+          name: Fuzz
+          command: make fuzz
+      - run:
+          name: Upload coverage to Codecov
+          command: codecov-cli do-upload --token $CODECOV_TOKEN --verbose
