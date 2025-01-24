@@ -10,6 +10,7 @@ just = "1.37.0"
 
 # Go dependencies
 "ubi:golangci/golangci-lint" = "v1.63.4"
+"go:github.com/ethereum/go-ethereum/cmd/abigen" = "1.14.9"
 "go:github.com/ethereum/go-ethereum/cmd/geth" = "1.14.7"
 "go:gotest.tools/gotestsum" = "1.12.0"
 
