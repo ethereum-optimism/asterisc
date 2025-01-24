@@ -2,7 +2,6 @@ bin
 
 rvgo/bin
 rvgo/scripts/go-ffi/go-ffi
-rvgo/test/testdata
 
 rvsol/cache
 rvsol/out
