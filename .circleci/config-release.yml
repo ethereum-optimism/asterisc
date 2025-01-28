@@ -1,0 +1,84 @@
+# 
+# 
+# 
+# Config file for a docker release CircleCI pipeline
+# 
+# This pipeline needs to be configured manually in the CircleCI UI
+# (see https://circleci.com/docs/pipelines/#add-or-edit-a-pipeline)
+# 
+# 
+# 
+version: 2.1
+
+executors:
+  default:
+    machine:
+      image: ubuntu-2204:2024.08.1
+
+orbs:
+  docker: circleci/docker@2.8.1
+  utils: ethereum-optimism/circleci-utils@0.0.15
+
+parameters:
+  extra-tags:
+    type: string
+    description: Comma-separated list of image tags to use besides the commit hash
+    default: ""
+
+workflows:
+  publish:
+    jobs:
+      - publish-docker:
+          image: ethereum-optimism/asterisc/asterisc
+          tag: "<< pipeline.git.revision >>,<< pipeline.parameters.extra-tags >>"
+          context:
+            - circleci-repo-asterisc
+      # - docker/publish:
+      #     # Image properties
+      #     registry: ghcr.io
+      #     image: ethereum-optimism/asterisc/asterisc
+      #     tag: "<< pipeline.git.revision >>,<< pipeline.parameters.extra-tags >>"
+      #     # Authentication
+      #     after_checkout:
+      #       - utils/get-github-access-token
+      #       - run:
+      #           name: Debug login
+      #     context:
+      #       - circleci-repo-asterisc
+      #     docker-password: GITHUB_APP_ID
+      #     docker-username: GITHUB_APP_TOKEN
+      #     # Build properties
+      #     dockerfile: Dockerfile.release
+      #     use-buildkit: true
+
+jobs:
+  publish-docker:
+    executor: default
+    parameters:
+      registry:
+        type: string
+        default: ghcr.io
+      image:
+        type: string
+      tag:
+        type: string
+    steps:
+      - checkout
+      - utils/get-github-access-token
+      # The docker orb has issues with logging in so we use an inline login command
+      - run:
+          name: Docker Login
+          command: echo "$GITHUB_APP_TOKEN" | docker login -u "$GITHUB_APP_ID" --password-stdin << parameters.registry >>
+      - docker/build:
+          # Image properties
+          registry: << parameters.registry >>
+          image: << parameters.image >>
+          tag: << parameters.tag >>
+          # Build properties
+          dockerfile: Dockerfile.release
+          use-buildkit: true
+      - docker/push:
+          # Image properties
+          registry: << parameters.registry >>
+          image: << parameters.image >>
+          tag: << parameters.tag >>
