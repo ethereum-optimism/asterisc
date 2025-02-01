@@ -87,8 +87,8 @@ jobs:
             FOUNDRY_PROFILE: ci
           working_directory: rvsol/lib/optimism/packages/contracts-bedrock
       - run:
-          name: Generate default allocs
-          command: make devnet-allocs-tests
+          name: Generate allocs
+          command: make devnet-allocs
           working_directory: rvsol/lib/optimism
       - save_cache:
           name: Save Go modules cache
@@ -108,6 +108,7 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
+            - ".devnet"
             - ".devnet-standard"
 
   go-mod-download-monorepo:
@@ -256,6 +257,7 @@ jobs:
             cp /tmp/workspace/.devnet-standard/allocs-l2-ecotone.json .devnet-standard/allocs-l2-ecotone.json
             cp /tmp/workspace/.devnet-standard/allocs-l2-fjord.json .devnet-standard/allocs-l2-fjord.json
             cp /tmp/workspace/.devnet-standard/allocs-l2-granite.json .devnet-standard/allocs-l2-granite.json
+            cp /tmp/workspace/.devnet-standard/allocs-l2-holocene.json .devnet-standard/allocs-l2-holocene.json
             cp /tmp/workspace/.devnet-standard/addresses.json .devnet-standard/addresses.json
             cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json devnetL1.json
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
@@ -307,6 +309,7 @@ jobs:
             cp .devnet-standard/allocs-l2-ecotone.json .devnet-asterisc/allocs-l2-ecotone.json
             cp .devnet-standard/allocs-l2-fjord.json .devnet-asterisc/allocs-l2-fjord.json
             cp .devnet-standard/allocs-l2-granite.json .devnet-asterisc/allocs-l2-granite.json
+            cp .devnet-standard/allocs-l2-holocene.json .devnet-asterisc/allocs-l2-holocene.json
           working_directory: rvsol
       - persist_to_workspace:
           root: rvsol
@@ -340,6 +343,7 @@ jobs:
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-ecotone.json .devnet-standard/allocs-l2-ecotone.json
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-fjord.json .devnet-standard/allocs-l2-fjord.json
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-granite.json .devnet-standard/allocs-l2-granite.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-holocene.json .devnet-standard/allocs-l2-holocene.json
             cp /tmp/workspace/.devnet-asterisc/addresses.json .devnet-standard/addresses.json
             mkdir -p packages/contracts-bedrock
             cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock
