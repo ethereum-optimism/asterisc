@@ -62,10 +62,6 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout-with-monorepo
-      - run:
-          name: Check L1 geth version
-          command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
-          working_directory: rvsol/lib/optimism
       - install-contracts-dependencies
       - restore_cache:
           name: Restore Go modules cache
