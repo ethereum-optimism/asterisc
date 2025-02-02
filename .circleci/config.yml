@@ -1,23 +1,19 @@
 version: 2.1
 
-parameters:
-  ci_builder_image:
-    type: string
-    # depends with rvsol/lib/optimism submodule version
-    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
+executors:
+  default:
+    docker:
+      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
 
 workflows:
   main:
     jobs:
+      - check-optimism-version-match
       - contracts-bedrock-build
-      - go-mod-download-monorepo
-      - go-mod-download-asterisc
-      - op-program-riscv:
-          requires:
-            - go-mod-download-monorepo
+      - op-program-riscv
+      - op-program-test
       - asterisc-prestate:
           requires:
-            - go-mod-download-asterisc
             - op-program-riscv
             - contracts-bedrock-build
       - devnet-allocs-including-asterisc:
@@ -38,8 +34,57 @@ workflows:
       - prestate-reproducibility:
           version: "1.3.1"
           asterisc-commit: "25feabf"
+      - go-lint
+      - rvgo-abigen
+      - rvgo-tests
+      - rvsol-lint
+      - rvsol-tests
 
 commands:
+  install-dependencies:
+    steps:
+      - run:
+          name: Install mise
+          command: curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+      - run:
+          name: Activate mise
+          command: echo 'eval "$(mise activate bash)"' >> $BASH_ENV
+      - run:
+          name: Install mise dependencies
+          command: mise install
+
+  install-go-modules:
+    parameters:
+      from:
+        description: Path to go.sum file
+        type: string
+        default: go.sum
+      path:
+        description: Go module cache path
+        type: string
+        default: /go/pkg/mod
+      version:
+        description: Version (cache breaker)
+        type: string
+        default: v1
+      after_download:
+        description: List of steps to run after downloading go modules
+        type: steps
+        default: []
+    steps:
+      - restore_cache:
+          name: Restore Go modules cache
+          keys:
+            - go-mod-{{ arch }}-{{ checksum "<< parameters.from >>" }}-<< parameters.version >>
+      - run:
+          name: Download Go modules
+          command: go mod download
+      - steps: << parameters.after_download >>
+      - save_cache:
+          key: go-mod-{{ arch }}-{{ checksum "<< parameters.from >>" }}-<< parameters.version >>
+          paths:
+              - << parameters.path >>
+
   checkout-with-monorepo:
     steps:
       - checkout
@@ -48,6 +93,12 @@ commands:
           # This will also fetch monorepo's submodule.
           # Therefore we do not have to call `make submodules` at monorepo root
           command: git submodule update --init --recursive
+
+      - run:
+          name: Debug CPUs
+          command: |
+            cat /proc/cpuinfo | grep processor | wc -l
+            cat /proc/cpuinfo | grep 'core id'
   install-contracts-dependencies:
     description: "Install the dependencies for the smart contracts"
     steps:
@@ -56,18 +107,23 @@ commands:
           working_directory: rvsol/lib/optimism/packages/contracts-bedrock
 
 jobs:
+  check-optimism-version-match:
+    executor: default
+    steps:
+      - checkout-with-monorepo
+      - install-dependencies
+      - run:
+          name: Check if optimism submodule version matches go.mod version
+          command: ./.github/scripts/check_versions.sh
+          
   contracts-bedrock-build:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     resource_class: xlarge
     steps:
       - checkout-with-monorepo
+      - install-dependencies
+      - install-go-modules
       - install-contracts-dependencies
-      - restore_cache:
-          name: Restore Go modules cache
-          keys:
-            - gomod-contracts-build-{{ checksum "go.sum" }}
-            - gomod-contracts-build-
       - restore_cache:
           name: Restore Go build cache
           keys:
@@ -91,11 +147,6 @@ jobs:
           command: make devnet-allocs
           working_directory: rvsol/lib/optimism
       - save_cache:
-          name: Save Go modules cache
-          key: gomod-contracts-build-{{ checksum "go.sum" }}
-          paths:
-            - "/go/pkg/mod"
-      - save_cache:
           name: Save Go build cache
           key: golang-build-cache-contracts-build-{{ checksum "go.sum" }}
           paths:
@@ -111,76 +162,14 @@ jobs:
             - ".devnet"
             - ".devnet-standard"
 
-  go-mod-download-monorepo:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    steps:
-      - checkout-with-monorepo
-      - restore_cache:
-          key: gomod>-{{ checksum "rvsol/lib/optimism/go.sum" }}
-          name: Restore Go modules cache for monorepo
-      - run:
-          name: Sanity check go mod cache path
-          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
-          working_directory: rvsol/lib/optimism
-      - run:
-          command: go mod download
-          name: Download Go module dependencies
-          working_directory: rvsol/lib/optimism
-      - run:
-          name: Go mod tidy
-          command: make mod-tidy && git diff --exit-code
-          working_directory: rvsol/lib/optimism
-      - run:
-          name: run Go linter
-          command: |
-            # Identify how many cores it defaults to
-            golangci-lint run --help | grep concurrency
-            make lint-go
-          working_directory: rvsol/lib/optimism
-      - save_cache:
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
-          name: Save Go modules cache
-          paths:
-            - "/go/pkg/mod"
-
-  go-mod-download-asterisc:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    steps:
-      - checkout
-      - restore_cache:
-          key: gomod-{{ checksum "go.sum" }}
-          name: Restore Go modules cache
-      - run:
-          name: Sanity check go mod cache path
-          command: test "$(go env GOMODCACHE)" == "/go/pkg/mod" # yes, it's an odd path
-      - run:
-          command: go mod download
-          name: Download Go module dependencies
-      - save_cache:
-          key: gomod-{{ checksum "go.sum" }}
-          name: Save Go modules cache
-          paths:
-            - "/go/pkg/mod"
-
   op-program-riscv:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    parameters:
-      file:
-        default: rvsol/lib/optimism/go.sum
-        description: The file name of checksum for restore_cache and save_cache.
-        type: string
-      key:
-        default: gomod
-        description: The key of restore_cache and save_cache.
-        type: string
+    executor: default
+    resource_class: xlarge
     steps:
       - checkout-with-monorepo
-      - restore_cache:
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
-          name: Restore Go modules cache
+      - install-dependencies
+      - install-go-modules:
+          from: rvsol/lib/optimism/go.sum
       - run:
           name: Build op-program-client-riscv
           command: make op-program-client-riscv
@@ -194,25 +183,36 @@ jobs:
           paths:
             - "op-program-artifacts"
 
+  op-program-test:
+    executor: default
+    steps:
+      - checkout-with-monorepo
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Build asterisc
+          command: make build-rvgo && cp rvgo/bin/asterisc tests/op-program-test/
+      - run:
+          name: Build op-program
+          command: |
+            make -C rvsol/lib/optimism/op-program op-program-host
+            cp rvsol/lib/optimism/op-program/bin/op-program tests/op-program-test/
+      - run: 
+          name: Run op-program
+          command: |
+            tar -xzvf ./test-data.tar.gz
+            ./local_cmd.sh
+          working_directory: tests/op-program-test
+  
   asterisc-prestate:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    parameters:
-      file:
-        default: go.sum
-        description: The file name of checksum for restore_cache and save_cache.
-        type: string
-      key:
-        default: gomod
-        description: The key of restore_cache and save_cache.
-        type: string
+    executor: default
+    resource_class: xlarge
     steps:
       - checkout
+      - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
-      - restore_cache:
-          key: << parameters.key >>-{{ checksum "<< parameters.file >>" }}
-          name: Restore Go modules cache
+      - install-go-modules
       - run:
           name: Load op-program-client-riscv
           command: |
@@ -232,10 +232,11 @@ jobs:
             - "asterisc-artifacts"
 
   devnet-allocs-including-asterisc:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
+    resource_class: xlarge
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
       - run:
@@ -319,18 +320,16 @@ jobs:
             # we do not patch devnetL1.json because it did not change
 
   op-e2e-asterisc-tests:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     resource_class: xlarge
     parallelism: 4
     steps:
       - checkout-with-monorepo
+      - install-dependencies
       - attach_workspace:
           at: /tmp/workspace
-      - restore_cache:
-          name: Restore Go modules cache for monorepo
-          # this go mod cache will be populated from go-mod-download-monorepo step
-          key: gomod-{{ checksum "rvsol/lib/optimism/go.sum" }}
+      - install-go-modules:
+          from: rvsol/lib/optimism/go.sum
       - run:
           name: Make op-program at monorepo
           command: make op-program
@@ -349,10 +348,7 @@ jobs:
             cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock
             mkdir -p packages/contracts-bedrock/deployments/devnetL1
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 packages/contracts-bedrock/deployments
-      - restore_cache:
-          name: Restore Go modules cache
-          # this go mod cache will be populated from go-mod-download-monorepo step
-          key: gomod-{{ checksum "go.sum" }}
+      - install-go-modules
       - run:
           name: Load asterisc artifacts
           command: |
@@ -362,18 +358,16 @@ jobs:
           name: run tests
           no_output_timeout: 20m
           command: |
-            mkdir -p /testlogs
-            OP_TESTLOG_DISABLE_COLOR=true OP_E2E_DISABLE_PARALLEL=false gotestsum --format=testname --junitfile=/tmp/test-results/op_e2e_test-asterisc.xml --jsonfile=/testlogs/test.log -- -failfast -timeout=60m -parallel=8 ./faultproofs
+            mkdir -p /tmp/testlogs
+            OP_TESTLOG_DISABLE_COLOR=true OP_E2E_DISABLE_PARALLEL=false gotestsum --format=testname --junitfile=/tmp/test-results/op_e2e_test-asterisc.xml --jsonfile=/tmp/testlogs/test.log -- -failfast -timeout=60m -parallel=8 ./faultproofs
           working_directory: op-e2e
       - store_artifacts:
-          path: /testlogs
-          when: always
+          path: /tmp/testlogs
       - store_test_results:
           path: /tmp/test-results
 
   prestate-reproducibility:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    executor: default
     parameters:
       version:
         type: string
@@ -381,6 +375,8 @@ jobs:
         type: string
     steps:
       - checkout
+      - install-dependencies
+      - setup_remote_docker
       - run:
           name: Checkout asterisc to correct commit
           command: |
@@ -388,7 +384,6 @@ jobs:
             cp prestates.json temp.json
             git checkout "<<parameters.asterisc-commit>>"
             cp -f temp.json prestates.json
-      - setup_remote_docker
       - run:
           name: Fetch submodules for asterisc
           command: git submodule update --init
@@ -414,3 +409,80 @@ jobs:
               echo "Prestate did not match expected"
               exit 1
             fi
+
+  go-lint:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Run lint
+          command: golangci-lint run
+
+  rvgo-abigen:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Build rvsol
+          command: forge build
+          working_directory: rvsol
+      - run:
+          name: Check bindings
+          command: |
+            make gen-bindings
+            git diff --exit-code bindings
+          working_directory: rvgo
+
+  rvgo-tests:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Build rvsol
+          command: forge build
+          working_directory: rvsol
+      - run:
+          name: Build rv64g test binaries
+          command: make bin bin/simple bin/minimal
+          working_directory: tests/go-tests
+      - run:
+          name: Run tests
+          command: go test -v ./rvgo/... -coverprofile=coverage.out -coverpkg=./rvgo/...
+      - run:
+          name: Fuzz
+          command: make fuzz
+      - run:
+          name: Upload coverage to Codecov
+          command: codecov-cli do-upload --token $CODECOV_TOKEN --verbose
+
+  rvsol-lint:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Run lint
+          command: make lint-check
+          working_directory: rvsol
+
+  rvsol-tests:
+    executor: default
+    steps:
+      - checkout
+      - install-dependencies
+      - install-go-modules
+      - run:
+          name: Build FFI
+          command: go build
+          working_directory: rvgo/scripts/go-ffi
+      - run:
+          name: Run foundry tests
+          command: forge test -vvv --ffi
+          working_directory: rvsol
