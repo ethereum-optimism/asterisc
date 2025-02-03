@@ -77,6 +77,7 @@ func NewChallengerConfig(t *testing.T, sys op_e2e_challenger.EndpointProvider, l
 	l1Endpoint := sys.NodeEndpoint("l1").RPC()
 	l1Beacon := sys.L1BeaconEndpoint().RestHTTP()
 	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, sys.RollupEndpoint(l2NodeName).RPC(), sys.NodeEndpoint(l2NodeName).RPC(), t.TempDir())
+	cfg.Asterisc.L2Custom = true
 	// The devnet can't set the absolute prestate output root because the contracts are deployed in L1 genesis
 	// before the L2 genesis is known.
 	cfg.AllowInvalidPrestate = true
