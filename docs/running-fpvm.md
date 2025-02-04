@@ -19,7 +19,7 @@ Before you begin, make sure you have the following:
 ## Step 1: Gathering the necessary hashes
 
 A fault proof program starts from a specific l2 head, and runs the fault proof program until another l2 head in the future. 
-Then, we want to validate that the l2 output root the output root generated is equal to the claim we want to verify against.
+Then, we want to validate that the L2 output root generated is equal to the claim we want to verify against.
 
 Take a look at the following command:
 ```bash
@@ -45,7 +45,7 @@ The following command…
 - checks the final output root is equal to `l2.claim`.
 
 ### Step 1.1: Gathering the l2 head and output root
-Pick a l2 block number to start derivation from. 
+Pick an L2 block number to start derivation from.
 
 For example, if we start from block `123,993,796`, call the following rpc on your op-node RPC: 
 ```bash
@@ -77,7 +77,7 @@ This will return something like (but not exactly):
 The `outputRoot` and `blockRef.hash` are what we're interested in. These values correspond to the `l2.head` and `l2.outputroot` in the previous command.
 
 ### Step 1.2: Gathering the target l2 head and output root
-Now, pick a l2 block number to end derivation at. 
+Now, pick an L2 block number to end derivation at.
 
 For example, if we start from block `123,993,889`, call the following rpc on your op-node RPC:
 ```bash
@@ -118,7 +118,7 @@ Once this is ready, we can run the Asterisc FPVM.
 
 What is a FPVM?
 - First, the op-program is compiled down to a binary in RISC-V format.
-- Then, this ELF binary is fed into the Asterisc, which produced a json format of the program (prestate)
+- Then, this ELF binary is fed into the Asterisc, which produces a JSON format of the program (prestate)
 - Finally, Asterisc can execute through this json
 
 ### Step 2.1: Compiling op-program into RISC-V
@@ -153,7 +153,7 @@ To run Asterisc with the prestate generated in the above step, run:
     --meta=./bin/meta.json
 ```
 
-Note that the `prestate.json` is now provided as the `input`.
+Note that `prestate.json` is now provided as the `input`.
 
 ## Step 3: Running the Fault Proof Program with Asterisc
 Now, run the FPP within the FPVM, using the prestate JSON and the pre-images gathered earlier.
