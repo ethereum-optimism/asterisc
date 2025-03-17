@@ -14,6 +14,9 @@ parameters:
         "select_job",
         "build-asterisc-image"
       ]
+  git_tag_version_to_push:
+    type: string
+    default: "latest"
 
 workflows:
   main:
@@ -510,39 +513,31 @@ jobs:
       - run:
           name: Checkout the latest git tag
           command: |
-            export GIT_VERSION=$(git tag | sort -V | tail -n 1)
-            GIT_VERSION=${GIT_VERSION}
+            #unless the git_tag_version_to_push is not latest, use the value of git_tag_version_to_push
+            if [[ "<< pipeline.parameters.git_tag_version_to_push >>" = "latest" ]]; then
+              export GIT_VERSION=$(git tag | sort -V | tail -n 1)
+            else
+              export GIT_VERSION="<< pipeline.parameters.git_tag_version_to_push >>"
+            fi
+
             echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
             export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            export GIT_COMMIT=$(git rev-parse HEAD)
             echo "export TIMESTAMP=$TIMESTAMP" >> $BASH_ENV
-            echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
             export DOCKER_PATH="ghcr.io/ethereum-optimism/asterisc"
             echo "export DOCKER_PATH=$DOCKER_PATH" >> $BASH_ENV
       - run:
           name: Checkout tag
           command: |
             git checkout $GIT_VERSION
+            export GIT_COMMIT=$(git rev-parse HEAD)
+            echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
       - run:
           name: Build asterisc image
           command: |
             echo "GIT_VERSION: $GIT_VERSION"
             echo "TIMESTAMP: $TIMESTAMP"
             echo "GIT_COMMIT: $GIT_COMMIT"
-            
-            # docker buildx build \
-            #   --platform linux/amd64 \
-            #   --label "org.opencontainers.image.source=https://github.com/ethereum-optimism/asterisc" \
-            #   --label "org.opencontainers.image.title=asterisc" \
-            #   --label "org.opencontainers.image.revision=${GIT_COMMIT}" \
-            #   --label "org.opencontainers.image.created=${TIMESTAMP}" \
-            #   --label "org.opencontainers.image.version=${GIT_VERSION}" \
-            #   --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
-            #   --label "org.opencontainers.image.licenses=MIT" \
-            #   -t ${DOCKER_PATH}:${GIT_VERSION} \
-            #   -t ${DOCKER_PATH}:latest \
-            #   -f Dockerfile.release .
-            
+                        
             docker buildx build \
               --platform linux/amd64 \
               --label "org.opencontainers.image.source=https://github.com/ethereum-optimism/asterisc" \
@@ -553,11 +548,12 @@ jobs:
               --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
               --label "org.opencontainers.image.licenses=MIT" \
               -t ${DOCKER_PATH}:${GIT_VERSION} \
+              -t ${DOCKER_PATH}:latest \
               -f Dockerfile.release .
       - run:
             name: Push asterisc image
             command: |
               echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
               docker push ${DOCKER_PATH}:${GIT_VERSION}
-      #         # docker push ${DOCKER_PATH}:latest
+              docker push ${DOCKER_PATH}:latest
           
