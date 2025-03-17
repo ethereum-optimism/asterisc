@@ -511,11 +511,11 @@ jobs:
           name: Checkout the latest git tag
           command: |
             export GIT_VERSION=$(git tag | sort -V | tail -n 1)
-            echo "export GIT_VERSION: $GIT_VERSION" >> $BASH_ENV
+            echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
             export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             export GIT_COMMIT=$(git rev-parse HEAD)
-            echo "export TIMESTAMP: $TIMESTAMP" >> $BASH_ENV
-            echo "export GIT_COMMIT: $GIT_COMMIT" >> $BASH_ENV
+            echo "export TIMESTAMP=$TIMESTAMP" >> $BASH_ENV
+            echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
       - run:
           name: Build asterisc image
           command: |
