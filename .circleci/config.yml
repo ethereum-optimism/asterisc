@@ -554,10 +554,10 @@ jobs:
               --label "org.opencontainers.image.licenses=MIT" \
               -t ${DOCKER_PATH}:${GIT_VERSION} \
               -f Dockerfile.release .
-      # - run:
-      #       name: Push asterisc image
-      #       command: |
-      #         echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
-      #         docker push ${DOCKER_PATH}:${GIT_VERSION}
+      - run:
+            name: Push asterisc image
+            command: |
+              echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
+              docker push ${DOCKER_PATH}:${GIT_VERSION}
       #         # docker push ${DOCKER_PATH}:latest
           
