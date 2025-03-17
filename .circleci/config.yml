@@ -12,7 +12,7 @@ parameters:
     enum:
       [
         "select_job",
-        "build-asterisc-image"
+        "build-and-push-asterisc-image"
       ]
   git_tag_version_to_push:
     type: string
@@ -52,9 +52,9 @@ workflows:
       - rvgo-tests
       - rvsol-lint
       - rvsol-tests
-  build-asterisc-image-workflow:
+  build-and-push-asterisc-image-workflow:
     when: 
-      equal: [ "pipeline.parameters.run_job","build-asterisc-image" ]
+      equal: [ "pipeline.parameters.run_job","build-and-push-asterisc-image" ]
     jobs:
       - build-and-push-asterisc-image:
           context: circleci-PAT-WRITE-GITHUB-PACKAGES
