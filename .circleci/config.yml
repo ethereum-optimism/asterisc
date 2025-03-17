@@ -511,11 +511,14 @@ jobs:
           name: Checkout the latest git tag
           command: |
             export GIT_VERSION=$(git tag | sort -V | tail -n 1)
+            GIT_VERSION=${GIT_VERSION}-test2
             echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
             export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             export GIT_COMMIT=$(git rev-parse HEAD)
             echo "export TIMESTAMP=$TIMESTAMP" >> $BASH_ENV
             echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
+            export DOCKER_PATH="ghcr.io/ethereum-optimism/asterisc"
+            echo "export DOCKER_PATH=$DOCKER_PATH" >> $BASH_ENV
       - run:
           name: Build asterisc image
           command: |
@@ -532,8 +535,8 @@ jobs:
             #   --label "org.opencontainers.image.version=${GIT_VERSION}" \
             #   --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
             #   --label "org.opencontainers.image.licenses=MIT" \
-            #   -t ghcr.io/ethereum-optimism/asterisc/asterisc:${GIT_VERSION} \
-            #   -t ghcr.io/ethereum-optimism/asterisc/asterisc:latest \
+            #   -t ${DOCKER_PATH}:${GIT_VERSION} \
+            #   -t ${DOCKER_PATH}:latest \
             #   -f Dockerfile.release .
             
             docker buildx build \
@@ -545,11 +548,11 @@ jobs:
               --label "org.opencontainers.image.version=${GIT_VERSION}" \
               --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
               --label "org.opencontainers.image.licenses=MIT" \
-              -t ghcr.io/ethereum-optimism/asterisc/asterisc:${GIT_VERSION}-test \
+              -t ${DOCKER_PATH}:${GIT_VERSION} \
               -f Dockerfile.release .
       # - run:
       #       name: Push asterisc image
       #       command: |
-      #         docker push ghcr.io/ethereum-optimism/asterisc/asterisc:${GIT_VERSION}-test
-              # docker push ghcr.io/ethereum-optimism/asterisc/asterisc:latest
+      #         docker push ${DOCKER_PATH}:${GIT_VERSION}
+              # docker push ${DOCKER_PATH}:latest
           
