@@ -56,14 +56,14 @@ workflows:
       - rvsol-lint
       - rvsol-tests
   build-and-push-asterisc-image-workflow:
-    # when: 
-    #   equal: [ "<< pipeline.parameters.run_job >>","build-and-push-asterisc-image" ]
+    when: 
+      equal: [ "<< pipeline.parameters.run_job >>","build-and-push-asterisc-image" ]
     jobs:
       - build-and-push-asterisc-image:
           context: oplabs-gcr
-          # filters:
-          #   branches:
-          #     only: master
+          filters:
+            branches:
+              only: master
 
 commands:
   install-dependencies:
