@@ -1,5 +1,8 @@
 version: 2.1
 
+orbs:
+  utils: ethereum-optimism/circleci-utils@1.0.17
+
 executors:
   default:
     docker:
@@ -53,14 +56,14 @@ workflows:
       - rvsol-lint
       - rvsol-tests
   build-and-push-asterisc-image-workflow:
-    when: 
-      equal: [ "<< pipeline.parameters.run_job >>","build-and-push-asterisc-image" ]
+    # when: 
+    #   equal: [ "<< pipeline.parameters.run_job >>","build-and-push-asterisc-image" ]
     jobs:
       - build-and-push-asterisc-image:
-          context: circleci-PAT-WRITE-GITHUB-PACKAGES
-          filters:
-            branches:
-              only: master
+          context: oplabs-gcr
+          # filters:
+          #   branches:
+          #     only: master
 
 commands:
   install-dependencies:
@@ -512,6 +515,15 @@ jobs:
   build-and-push-asterisc-image:
     machine:    
       image: ubuntu-2204:2024.08.1
+    parameters:
+      registry:
+        description: Docker registry
+        type: string
+        default: "us-docker.pkg.dev"
+      repo:
+        description: Docker repo
+        type: string
+        default: "oplabs-tools-artifacts/internal-images"
     steps:
       - checkout
       - run:
@@ -527,7 +539,7 @@ jobs:
             echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
             export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             echo "export TIMESTAMP=$TIMESTAMP" >> $BASH_ENV
-            export DOCKER_PATH="ghcr.io/ethereum-optimism/asterisc/asterisc"
+            export DOCKER_PATH="<< parameters.registry >>/<< parameters.repo >>/asterisc"
             echo "export DOCKER_PATH=$DOCKER_PATH" >> $BASH_ENV
       - run:
           name: Checkout tag
@@ -535,6 +547,7 @@ jobs:
             git checkout $GIT_VERSION
             export GIT_COMMIT=$(git rev-parse HEAD)
             echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
+      - utils/gcp-oidc-authenticate
       - run:
           name: Build asterisc image
           command: |
@@ -557,7 +570,7 @@ jobs:
       - run:
             name: Push asterisc image
             command: |
-              echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
+              gcloud auth configure-docker << parameters.registry >>
               docker push ${DOCKER_PATH}:${GIT_VERSION}
               docker push ${DOCKER_PATH}:latest
           
