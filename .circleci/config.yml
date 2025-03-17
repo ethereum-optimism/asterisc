@@ -511,7 +511,7 @@ jobs:
           name: Checkout the latest git tag
           command: |
             export GIT_VERSION=$(git tag | sort -V | tail -n 1)
-            GIT_VERSION=${GIT_VERSION}-test2
+            GIT_VERSION=${GIT_VERSION}
             echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
             export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             export GIT_COMMIT=$(git rev-parse HEAD)
@@ -519,6 +519,10 @@ jobs:
             echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
             export DOCKER_PATH="ghcr.io/ethereum-optimism/asterisc"
             echo "export DOCKER_PATH=$DOCKER_PATH" >> $BASH_ENV
+      - run:
+          name: Checkout tag
+          command: |
+            git checkout $GIT_VERSION
       - run:
           name: Build asterisc image
           command: |
@@ -553,6 +557,7 @@ jobs:
       # - run:
       #       name: Push asterisc image
       #       command: |
+      #         echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
       #         docker push ${DOCKER_PATH}:${GIT_VERSION}
-              # docker push ${DOCKER_PATH}:latest
+      #         # docker push ${DOCKER_PATH}:latest
           
