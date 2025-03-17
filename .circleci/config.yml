@@ -523,7 +523,7 @@ jobs:
       repo:
         description: Docker repo
         type: string
-        default: "oplabs-tools-artifacts/internal-images"
+        default: "oplabs-tools-artifacts/images"
     steps:
       - checkout
       - run:
