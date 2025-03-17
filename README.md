@@ -10,6 +10,20 @@ The interface of the Asterisc binary is essentially the same as Cannon for op-ch
 
 Read the [docs](./docs) to get started.
 
+### Docker Images
+
+You can pull the latest Docker image:
+```bash
+docker pull \
+    us-docker.pkg.dev/oplabs-tools-artifacts/images/asterisc:latest
+```
+
+Or pull a specific version:
+```bash
+docker pull \
+    us-docker.pkg.dev/oplabs-tools-artifacts/images/asterisc:v1.2.0
+```
+
 ### Development environment
 
 We use [`mise`](https://mise.jdx.dev/) as a dependency manager for these tools.

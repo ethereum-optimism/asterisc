@@ -1,9 +1,25 @@
 version: 2.1
 
+orbs:
+  utils: ethereum-optimism/circleci-utils@1.0.17
+
 executors:
   default:
     docker:
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
+
+parameters:
+  run_job:
+    type: enum
+    default: "select_job"
+    enum:
+      [
+        "select_job",
+        "build-and-push-asterisc-image"
+      ]
+  git_tag_version_to_push:
+    type: string
+    default: "latest"
 
 workflows:
   main:
@@ -39,6 +55,15 @@ workflows:
       - rvgo-tests
       - rvsol-lint
       - rvsol-tests
+  build-and-push-asterisc-image-workflow:
+    when: 
+      equal: [ "<< pipeline.parameters.run_job >>","build-and-push-asterisc-image" ]
+    jobs:
+      - build-and-push-asterisc-image:
+          context: oplabs-gcr
+          filters:
+            branches:
+              only: master
 
 commands:
   install-dependencies:
@@ -486,3 +511,66 @@ jobs:
           name: Run foundry tests
           command: forge test -vvv --ffi
           working_directory: rvsol
+  
+  build-and-push-asterisc-image:
+    machine:    
+      image: ubuntu-2204:2024.08.1
+    parameters:
+      registry:
+        description: Docker registry
+        type: string
+        default: "us-docker.pkg.dev"
+      repo:
+        description: Docker repo
+        type: string
+        default: "oplabs-tools-artifacts/images"
+    steps:
+      - checkout
+      - run:
+          name: Checkout the latest git tag
+          command: |
+            #unless the git_tag_version_to_push is not latest, use the value of git_tag_version_to_push
+            if [[ "<< pipeline.parameters.git_tag_version_to_push >>" = "latest" ]]; then
+              export GIT_VERSION=$(git tag | sort -V | tail -n 1)
+            else
+              export GIT_VERSION="<< pipeline.parameters.git_tag_version_to_push >>"
+            fi
+
+            echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
+            export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            echo "export TIMESTAMP=$TIMESTAMP" >> $BASH_ENV
+            export DOCKER_PATH="<< parameters.registry >>/<< parameters.repo >>/asterisc"
+            echo "export DOCKER_PATH=$DOCKER_PATH" >> $BASH_ENV
+      - run:
+          name: Checkout tag
+          command: |
+            git checkout $GIT_VERSION
+            export GIT_COMMIT=$(git rev-parse HEAD)
+            echo "export GIT_COMMIT=$GIT_COMMIT" >> $BASH_ENV
+      - utils/gcp-oidc-authenticate
+      - run:
+          name: Build asterisc image
+          command: |
+            echo "GIT_VERSION: $GIT_VERSION"
+            echo "TIMESTAMP: $TIMESTAMP"
+            echo "GIT_COMMIT: $GIT_COMMIT"
+                        
+            docker buildx build \
+              --platform linux/amd64 \
+              --label "org.opencontainers.image.source=https://github.com/ethereum-optimism/asterisc" \
+              --label "org.opencontainers.image.title=asterisc" \
+              --label "org.opencontainers.image.revision=${GIT_COMMIT}" \
+              --label "org.opencontainers.image.created=${TIMESTAMP}" \
+              --label "org.opencontainers.image.version=${GIT_VERSION}" \
+              --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
+              --label "org.opencontainers.image.licenses=MIT" \
+              -t ${DOCKER_PATH}:${GIT_VERSION} \
+              -t ${DOCKER_PATH}:latest \
+              -f Dockerfile.release .
+      - run:
+            name: Push asterisc image
+            command: |
+              gcloud auth configure-docker << parameters.registry >>
+              docker push ${DOCKER_PATH}:${GIT_VERSION}
+              docker push ${DOCKER_PATH}:latest
+          
