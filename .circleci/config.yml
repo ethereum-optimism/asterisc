@@ -503,7 +503,8 @@ jobs:
           working_directory: rvsol
   
   build-asterisc-image:
-    executor: default
+    machine:    
+      image: ubuntu-2204:2024.08.1
     steps:
       - checkout
       - run:
