@@ -52,11 +52,15 @@ workflows:
       - rvgo-tests
       - rvsol-lint
       - rvsol-tests
-  build-asterisc-image:
+  build-asterisc-image-workflow:
+    when: 
+      equal: [ "pipeline.parameters.run_job","build-asterisc-image" ]
     jobs:
-      - build-asterisc-image:
+      - build-and-push-asterisc-image:
           context: circleci-PAT-WRITE-GITHUB-PACKAGES
-    
+          # filters:
+          #   branches:
+          #     only: master
 
 commands:
   install-dependencies:
@@ -505,7 +509,7 @@ jobs:
           command: forge test -vvv --ffi
           working_directory: rvsol
   
-  build-asterisc-image:
+  build-and-push-asterisc-image:
     machine:    
       image: ubuntu-2204:2024.08.1
     steps:
@@ -523,7 +527,7 @@ jobs:
             echo "export GIT_VERSION=$GIT_VERSION" >> $BASH_ENV
             export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             echo "export TIMESTAMP=$TIMESTAMP" >> $BASH_ENV
-            export DOCKER_PATH="ghcr.io/ethereum-optimism/asterisc"
+            export DOCKER_PATH="ghcr.io/ethereum-optimism/asterisc/asterisc"
             echo "export DOCKER_PATH=$DOCKER_PATH" >> $BASH_ENV
       - run:
           name: Checkout tag
@@ -555,5 +559,5 @@ jobs:
             command: |
               echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
               docker push ${DOCKER_PATH}:${GIT_VERSION}
-              docker push ${DOCKER_PATH}:latest
+              # docker push ${DOCKER_PATH}:latest
           
