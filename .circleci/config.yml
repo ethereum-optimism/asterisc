@@ -5,6 +5,16 @@ executors:
     docker:
       - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
 
+parameters:
+  run_job:
+    type: enum
+    default: "select_job"
+    enum:
+      [
+        "select_job",
+        "build-asterisc-image"
+      ]
+
 workflows:
   main:
     jobs:
@@ -39,6 +49,11 @@ workflows:
       - rvgo-tests
       - rvsol-lint
       - rvsol-tests
+  build-asterisc-image:
+    jobs:
+      - build-asterisc-image:
+          context: circleci-PAT-WRITE-GITHUB-PACKAGES
+    
 
 commands:
   install-dependencies:
@@ -486,3 +501,54 @@ jobs:
           name: Run foundry tests
           command: forge test -vvv --ffi
           working_directory: rvsol
+  
+  build-asterisc-image:
+    executor: default
+    steps:
+      - checkout
+      - run:
+          name: Checkout the latest git tag
+          command: |
+            export GIT_VERSION=$(git tag | sort -V | tail -n 1)
+            echo "export GIT_VERSION: $GIT_VERSION" >> $BASH_ENV
+            export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            export GIT_COMMIT=$(git rev-parse HEAD)
+            echo "export TIMESTAMP: $TIMESTAMP" >> $BASH_ENV
+            echo "export GIT_COMMIT: $GIT_COMMIT" >> $BASH_ENV
+      - run:
+          name: Build asterisc image
+          command: |
+            echo "GIT_VERSION: $GIT_VERSION"
+            echo "TIMESTAMP: $TIMESTAMP"
+            echo "GIT_COMMIT: $GIT_COMMIT"
+            
+            # docker buildx build \
+            #   --platform linux/amd64 \
+            #   --label "org.opencontainers.image.source=https://github.com/ethereum-optimism/asterisc" \
+            #   --label "org.opencontainers.image.title=asterisc" \
+            #   --label "org.opencontainers.image.revision=${GIT_COMMIT}" \
+            #   --label "org.opencontainers.image.created=${TIMESTAMP}" \
+            #   --label "org.opencontainers.image.version=${GIT_VERSION}" \
+            #   --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
+            #   --label "org.opencontainers.image.licenses=MIT" \
+            #   -t ghcr.io/ethereum-optimism/asterisc/asterisc:${GIT_VERSION} \
+            #   -t ghcr.io/ethereum-optimism/asterisc/asterisc:latest \
+            #   -f Dockerfile.release .
+            
+            docker buildx build \
+              --platform linux/amd64 \
+              --label "org.opencontainers.image.source=https://github.com/ethereum-optimism/asterisc" \
+              --label "org.opencontainers.image.title=asterisc" \
+              --label "org.opencontainers.image.revision=${GIT_COMMIT}" \
+              --label "org.opencontainers.image.created=${TIMESTAMP}" \
+              --label "org.opencontainers.image.version=${GIT_VERSION}" \
+              --label "org.opencontainers.image.description=RISC-V interactive fraud-proof tech" \
+              --label "org.opencontainers.image.licenses=MIT" \
+              -t ghcr.io/ethereum-optimism/asterisc/asterisc:${GIT_VERSION}-test \
+              -f Dockerfile.release .
+      # - run:
+      #       name: Push asterisc image
+      #       command: |
+      #         docker push ghcr.io/ethereum-optimism/asterisc/asterisc:${GIT_VERSION}-test
+              # docker push ghcr.io/ethereum-optimism/asterisc/asterisc:latest
+          
