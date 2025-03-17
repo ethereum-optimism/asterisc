@@ -54,7 +54,7 @@ workflows:
       - rvsol-tests
   build-and-push-asterisc-image-workflow:
     when: 
-      equal: [ "pipeline.parameters.run_job","build-and-push-asterisc-image" ]
+      equal: [ "<< pipeline.parameters.run_job >>","build-and-push-asterisc-image" ]
     jobs:
       - build-and-push-asterisc-image:
           context: circleci-PAT-WRITE-GITHUB-PACKAGES
