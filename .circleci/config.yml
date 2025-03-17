@@ -58,9 +58,9 @@ workflows:
     jobs:
       - build-and-push-asterisc-image:
           context: circleci-PAT-WRITE-GITHUB-PACKAGES
-          # filters:
-          #   branches:
-          #     only: master
+          filters:
+            branches:
+              only: master
 
 commands:
   install-dependencies:
@@ -559,5 +559,5 @@ jobs:
             command: |
               echo $GITHUB_TOKEN_PAT_WRITE_PACKAGES | docker login ghcr.io -u ethereum-optimism --password-stdin
               docker push ${DOCKER_PATH}:${GIT_VERSION}
-              # docker push ${DOCKER_PATH}:latest
+              docker push ${DOCKER_PATH}:latest
           
