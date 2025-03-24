@@ -8,14 +8,14 @@ import { Chains } from "scripts/lib/Chains.sol";
 import { Config } from "scripts/lib/Config.sol";
 import { Deployer } from "scripts/lib/Deployer.sol";
 
-import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
-import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
-import { IDisputeGameFactory } from "@optimism/src/dispute/interfaces/IDisputeGameFactory.sol";
-import { IDisputeGame } from "@optimism/src/dispute/interfaces/IDisputeGame.sol";
-import { IFaultDisputeGame } from "@optimism/src/dispute/interfaces/IFaultDisputeGame.sol";
+import { IBigStepper } from "interfaces/dispute/IBigStepper.sol";
+import { IPreimageOracle } from "interfaces/cannon/IPreimageOracle.sol";
+import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
+import { IDisputeGame } from "interfaces/dispute/IDisputeGame.sol";
+import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
 import { FaultDisputeGame } from "@optimism/src/dispute/FaultDisputeGame.sol";
-import { IDelayedWETH } from "@optimism/src/dispute/interfaces/IDelayedWETH.sol";
-import { IAnchorStateRegistry } from "@optimism/src/dispute/interfaces/IAnchorStateRegistry.sol";
+import { IDelayedWETH } from "interfaces/dispute/IDelayedWETH.sol";
+import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.sol";
 import "@optimism/src/dispute/lib/Types.sol";
 
 contract Deploy is Deployer {

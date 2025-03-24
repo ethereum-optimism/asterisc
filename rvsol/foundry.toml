@@ -17,6 +17,7 @@ remappings = [
   # We need these remappings to use the Optimism monorepo contracts as a library.
   'src/dispute=lib/optimism/packages/contracts-bedrock/src/dispute',
   'src/libraries=lib/optimism/packages/contracts-bedrock/src/libraries',
+  'interfaces=lib/optimism/packages/contracts-bedrock/interfaces',
   'scripts/libraries=lib/optimism/packages/contracts-bedrock/scripts/libraries',
   'test/mocks=lib/optimism/packages/contracts-bedrock/test/mocks',
 

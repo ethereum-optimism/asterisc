@@ -546,8 +546,8 @@ func (inst *InstrumentedState) riscvStep() (outErr error) {
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		case riscv.SysFutex: // futex - not supported, for now
 			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
-		case riscv.SysNanosleep: // nanosleep - not supported, for now
-			revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
+		//case riscv.SysNanosleep: // nanosleep - not supported, for now
+		//	revertWithCode(riscv.ErrInvalidSyscall, &UnsupportedSyscallErr{SyscallNum: a7})
 		default:
 			// Ignore(no-op) unsupported system calls
 			setRegister(byteToU64(10), byteToU64(0))
