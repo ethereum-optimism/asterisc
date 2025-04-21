@@ -75,13 +75,13 @@ async def subscribe_logs():
             if len(logs) == 2:
                 break
 
-    l2_block_reqeust = {
+    l2_block_request = {
         "jsonrpc": "2.0",
         "method": "eth_getBlockByNumber",
         "params": [hex(logs[0]["l2BlockNumber"]), False],
         "id": 1,
     }
-    res = requests.post(L2_HTTP_ENDPOINT, json=l2_block_reqeust).json()
+    res = requests.post(L2_HTTP_ENDPOINT, json=l2_block_request).json()
 
     global l2_head
     l2_head = res["result"]["hash"]
