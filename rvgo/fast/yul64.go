@@ -20,6 +20,7 @@ func shortToU256(v uint16) U256 {
 	return *uint256.NewInt(uint64(v))
 }
 
+// nolint:unused
 func longToU256(v uint64) U256 {
 	return *uint256.NewInt(v)
 }
@@ -65,81 +66,118 @@ func signExtend64To256(v U64) U256 {
 }
 
 func add64(x, y uint64) uint64 {
-	return u256ToU64(add(longToU256(x), longToU256(y)))
+	return x + y
 }
 
 func sub64(x, y uint64) uint64 {
-	return u256ToU64(sub(longToU256(x), longToU256(y)))
+	return x - y
 }
 
 func mul64(x, y uint64) uint64 {
-	return u256ToU64(mul(longToU256(x), longToU256(y)))
+	return x * y
 }
 
 func div64(x, y uint64) uint64 {
-	return u256ToU64(div(longToU256(x), longToU256(y)))
+	if y == 0 {
+		return 0
+	}
+	return x / y
 }
 
 func sdiv64(x, y uint64) uint64 { // note: signed overflow semantics are the same between Go and EVM assembly
-	return u256ToU64(sdiv(signExtend64To256(x), signExtend64To256(y)))
+	if y == 0 {
+		return 0
+	}
+	if x == uint64(1<<63) && y == ^uint64(0) {
+		return 1 << 63
+	}
+	return uint64(int64(x) / int64(y))
 }
 
 func mod64(x, y uint64) uint64 {
-	return u256ToU64(mod(longToU256(x), longToU256(y)))
+	if y == 0 {
+		return 0
+	} else {
+		return x % y
+	}
 }
 
 func smod64(x, y uint64) uint64 {
-	return u256ToU64(smod(signExtend64To256(x), signExtend64To256(y)))
+	if y == 0 {
+		return 0
+	} else {
+		return uint64(int64(x) % int64(y))
+	}
 }
 
 func not64(x uint64) uint64 {
-	return u256ToU64(not(longToU256(x)))
+	return ^x
 }
 
 func lt64(x, y uint64) uint64 {
-	return u256ToU64(lt(longToU256(x), longToU256(y)))
+	if x < y {
+		return 1
+	} else {
+		return 0
+	}
 }
 
 func gt64(x, y uint64) uint64 {
-	return u256ToU64(gt(longToU256(x), longToU256(y)))
+	if x > y {
+		return 1
+	} else {
+		return 0
+	}
 }
 
 func slt64(x, y uint64) uint64 {
-	return u256ToU64(slt(signExtend64To256(x), signExtend64To256(y)))
+	if int64(x) < int64(y) {
+		return 1
+	} else {
+		return 0
+	}
 }
 
 func sgt64(x, y uint64) uint64 {
-	return u256ToU64(sgt(signExtend64To256(x), signExtend64To256(y)))
+	if int64(x) > int64(y) {
+		return 1
+	} else {
+		return 0
+	}
 }
 
 func eq64(x, y uint64) uint64 {
-	return u256ToU64(eq(longToU256(x), longToU256(y)))
+	if x == y {
+		return 1
+	} else {
+		return 0
+	}
 }
 
 func iszero64(x uint64) bool {
-	return iszero(longToU256(x))
+	return x == 0
 }
 
-func and64(x, y uint64) U64 {
-	return u256ToU64(and(longToU256(x), longToU256(y)))
+func and64(x, y uint64) uint64 {
+	return x & y
 }
 
 func or64(x, y uint64) uint64 {
-	return u256ToU64(or(longToU256(x), longToU256(y)))
+	return x | y
 }
 
 func xor64(x, y uint64) uint64 {
-	return u256ToU64(xor(longToU256(x), longToU256(y)))
+	return x ^ y
 }
 
 func shl64(x, y uint64) uint64 {
-	return u256ToU64(shl(longToU256(x), longToU256(y)))
+	return y << x
 }
 
 func shr64(x, y uint64) uint64 {
-	return u256ToU64(shr(longToU256(x), longToU256(y)))
+	return y >> x
 }
 
 func sar64(x, y uint64) uint64 {
-	return u256ToU64(sar(longToU256(x), signExtend64To256(y)))
+	return uint64(int64(y) >> x)
 }
