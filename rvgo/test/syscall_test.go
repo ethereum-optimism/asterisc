@@ -21,14 +21,14 @@ import (
 
 var syscallInsn = []byte{0x73, 0x00, 0x00, 0x00}
 
-func staticOracle(t *testing.T, preimageData []byte) *testOracle {
+func staticOracle(t *testing.T, preImageData []byte) *testOracle {
 	return &testOracle{
 		hint: func(v []byte) {},
 		getPreimage: func(k [32]byte) []byte {
-			if k != preimage.Keccak256Key(crypto.Keccak256Hash(preimageData)).PreimageKey() {
+			if k != preimage.Keccak256Key(crypto.Keccak256Hash(preImageData)).PreimageKey() {
 				t.Fatalf("invalid preimage request for %x", k)
 			}
-			return preimageData
+			return preImageData
 		},
 	}
 }
