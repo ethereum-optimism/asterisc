@@ -6,7 +6,7 @@ orbs:
 executors:
   default:
     docker:
-      - image: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.53.0
+      - image: cimg/base:2024.01
 
 parameters:
   run_job:
@@ -68,15 +68,68 @@ workflows:
 commands:
   install-dependencies:
     steps:
+      - checkout
+      - run:
+          name: Initialize mise environment
+          command: |
+            # This is used to create a per-user cache key to preserve permissions across different
+            # executor types.
+            user=$(whoami)
+            echo "$user" > .executor-user
+            echo "Set executor user to $user."
+            
+            if [[ "$user" == "root" ]]; then
+              # Self-hosted runners will persist this cache between runs. Cleaning it up means that we
+              # preserve the semantics of the cache regardless of executor type. It's also much faster
+              # to delete the cache and recreate it than it is to overwrite it in place.
+              rm -rf /data/mise-data
+              echo "Cleaned up cache data."
+            
+              mkdir -p /data/mise-data
+              echo "Created Mise data dir."
+              mkdir -p ~/.cache
+              echo "Created Mise cache dir."
+            else
+              sudo rm -rf /data/mise-data
+              echo "Cleaned up cache data."
+              sudo mkdir -p /data/mise-data
+              sudo chown -R "$user:$user" /data/mise-data
+              echo "Created Mise data dir."
+              sudo mkdir -p ~/.cache
+              sudo chown -R "$user:$user" ~/.cache
+              echo "Created Mise cache dir."
+            fi
+      - restore_cache:
+          name: Restore mise cache
+          keys:
+            - mise-v5-{{ checksum ".executor-user" }}-{{ checksum "mise.toml" }}
       - run:
           name: Install mise
-          command: curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+          command: |
+            if command -v mise &> /dev/null; then
+              echo "mise already installed at $(command -v mise)"
+            else
+              curl https://mise.run | sh
+            fi
+            
+            echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$BASH_ENV"
+            echo "export MISE_DATA_DIR=/data/mise-data" >> "$BASH_ENV"
+            echo "export MISE_JOBS=$(nproc)" >> "$BASH_ENV"
+            echo "eval \"\$($HOME/.local/bin/mise activate --shims)\"" >> "$BASH_ENV"
       - run:
-          name: Activate mise
-          command: echo 'eval "$(mise activate bash)"' >> $BASH_ENV
-      - run:
-          name: Install mise dependencies
-          command: mise install
+          name: Install mise deps
+          command: |
+            mise install -v -y
+            if [ -f "rvsol/lib/optimism/mise.toml" ]; then
+              cd rvsol/lib/optimism
+              mise install -v -y
+            fi
+
+      - save_cache:
+          name: Save mise cache
+          key: mise-v5-{{ checksum ".executor-user" }}-{{ checksum "mise.toml" }}
+          paths:
+            - /data/mise-data
 
   install-go-modules:
     parameters:
@@ -148,10 +201,6 @@ jobs:
       - checkout-with-monorepo
       - install-dependencies
       - install-go-modules
-      - run:
-          name: Check L1 geth version
-          command: ./ops/scripts/geth-version-checker.sh || (echo "geth version is wrong, update ci-builder"; false)
-          working_directory: rvsol/lib/optimism
       - install-contracts-dependencies
       - restore_cache:
           name: Restore Go build cache
@@ -172,8 +221,8 @@ jobs:
             FOUNDRY_PROFILE: ci
           working_directory: rvsol/lib/optimism/packages/contracts-bedrock
       - run:
-          name: Generate default allocs
-          command: make devnet-allocs-tests
+          name: Generate allocs
+          command: make devnet-allocs
           working_directory: rvsol/lib/optimism
       - save_cache:
           name: Save Go build cache
@@ -188,6 +237,7 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
+            - ".devnet"
             - ".devnet-standard"
 
   op-program-riscv:
@@ -286,6 +336,7 @@ jobs:
             cp /tmp/workspace/.devnet-standard/allocs-l2-ecotone.json .devnet-standard/allocs-l2-ecotone.json
             cp /tmp/workspace/.devnet-standard/allocs-l2-fjord.json .devnet-standard/allocs-l2-fjord.json
             cp /tmp/workspace/.devnet-standard/allocs-l2-granite.json .devnet-standard/allocs-l2-granite.json
+            cp /tmp/workspace/.devnet-standard/allocs-l2-holocene.json .devnet-standard/allocs-l2-holocene.json
             cp /tmp/workspace/.devnet-standard/addresses.json .devnet-standard/addresses.json
             cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json devnetL1.json
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 devnetL1
@@ -337,6 +388,7 @@ jobs:
             cp .devnet-standard/allocs-l2-ecotone.json .devnet-asterisc/allocs-l2-ecotone.json
             cp .devnet-standard/allocs-l2-fjord.json .devnet-asterisc/allocs-l2-fjord.json
             cp .devnet-standard/allocs-l2-granite.json .devnet-asterisc/allocs-l2-granite.json
+            cp .devnet-standard/allocs-l2-holocene.json .devnet-asterisc/allocs-l2-holocene.json
           working_directory: rvsol
       - persist_to_workspace:
           root: rvsol
@@ -368,6 +420,7 @@ jobs:
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-ecotone.json .devnet-standard/allocs-l2-ecotone.json
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-fjord.json .devnet-standard/allocs-l2-fjord.json
             cp /tmp/workspace/.devnet-asterisc/allocs-l2-granite.json .devnet-standard/allocs-l2-granite.json
+            cp /tmp/workspace/.devnet-asterisc/allocs-l2-holocene.json .devnet-standard/allocs-l2-holocene.json
             cp /tmp/workspace/.devnet-asterisc/addresses.json .devnet-standard/addresses.json
             mkdir -p packages/contracts-bedrock
             cp -r /tmp/workspace/packages/contracts-bedrock/deploy-config packages/contracts-bedrock

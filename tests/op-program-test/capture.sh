@@ -48,7 +48,7 @@ mv meta.json ./test-data/
 tar -czvf test-data.tar.gz ./test-data
 
 # Clean up
-rm -r ./test-data ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf ./out.json
+rm -r ./test-data ./capture_cmd.sh ./asterisc ./op-program ./op-program-client-riscv.elf
 
 # Write optimism version
 echo $git_commit_hash > VERSION

@@ -4,14 +4,15 @@
 go = "1.22.7"
 jq = "1.7.1"
 just = "1.37.0"
+python = "3.12.0"
 
 # Code coverage
 "ubi:codecov/codecov-cli" = "v10.0.1"
 
 # Go dependencies
 "ubi:golangci/golangci-lint" = "v1.63.4"
-"go:github.com/ethereum/go-ethereum/cmd/abigen" = "1.14.9"
-"go:github.com/ethereum/go-ethereum/cmd/geth" = "1.14.7"
+"go:github.com/ethereum/go-ethereum/cmd/abigen" = "1.14.11"
+"go:github.com/ethereum/go-ethereum/cmd/geth" = "1.14.11"
 "go:gotest.tools/gotestsum" = "1.12.0"
 
 # Foundry dependencies

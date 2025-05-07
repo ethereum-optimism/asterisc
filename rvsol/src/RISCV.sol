@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import { IPreimageOracle } from "@optimism/src/cannon/interfaces/IPreimageOracle.sol";
-import { IBigStepper } from "@optimism/src/dispute/interfaces/IBigStepper.sol";
+import { IPreimageOracle } from "@optimism/interfaces/cannon/IPreimageOracle.sol";
+import { IBigStepper } from "@optimism/interfaces/dispute/IBigStepper.sol";
 
 /// @title RISCV
 /// @notice The RISCV contract emulates a single RISCV hart cycle statelessly, using memory proofs to verify the
@@ -1129,10 +1129,10 @@ contract RISCV is IBigStepper {
                     // futex - not supported, for now
                     revertWithCode(0xf001ca11) // unsupported system call
                 }
-                case 101 {
-                    // nanosleep - not supported, for now
-                    revertWithCode(0xf001ca11) // unsupported system call
-                }
+                //                case 101 {
+                //                    // nanosleep - not supported, for now
+                //                    revertWithCode(0xf001ca11) // unsupported system call
+                //                }
                 default {
                     // Ignore(no-op) unsupported system calls
                     setRegister(toU64(10), toU64(0))

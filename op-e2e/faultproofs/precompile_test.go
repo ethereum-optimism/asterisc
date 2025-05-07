@@ -1,9 +1,10 @@
 package faultproofs
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"os/exec"
 
 	"math"
 	"math/big"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/asterisc/op-e2e/e2eutils/disputegame"
-	"github.com/ethereum-optimism/asterisc/rvgo/fast"
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/utils"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/vm"
@@ -23,7 +23,6 @@ import (
 	op_e2e_faultproofs "github.com/ethereum-optimism/optimism/op-e2e/faultproofs"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
-	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -86,10 +85,6 @@ func TestPrecompiles(t *testing.T) {
 			cfg := e2esys.EcotoneSystemConfig(t, &genesisTime)
 			// We don't need a verifier - just the sequencer is enough
 			delete(cfg.Nodes, "verifier")
-			// Use a small sequencer window size to avoid test timeout while waiting for empty blocks
-			// But not too small to ensure that our claim and subsequent state change is published
-			cfg.DeployConfig.SequencerWindowSize = 16
-
 			sys, err := cfg.Start(t)
 			require.Nil(t, err, "Error starting up system")
 
@@ -259,32 +254,39 @@ func runAsterisc(t *testing.T, ctx context.Context, sys *e2esys.System, inputs u
 	dir := t.TempDir()
 	proofsDir := filepath.Join(dir, "asterisc-proofs")
 	cfg := config.NewConfig(common.Address{}, l1Endpoint, l1Beacon, rollupEndpoint, l2Endpoint, dir)
+	cfg.Asterisc.L2Custom = true
 	asteriscOpts(&cfg)
 
 	logger := testlog.Logger(t, log.LevelInfo).New("role", "asterisc")
-	executor := vm.NewExecutor(logger, metrics.NoopMetrics.VmMetrics("asterisc"), cfg.Asterisc, vm.NewOpProgramServerExecutor(), cfg.AsteriscAbsolutePreState, inputs)
+	executor := vm.NewExecutor(logger, metrics.NoopMetrics.ToTypedVmMetrics("asterisc"), cfg.Asterisc, vm.NewOpProgramServerExecutor(logger), cfg.AsteriscAbsolutePreState, inputs)
 
 	t.Log("Running asterisc")
 	err := executor.DoGenerateProof(ctx, proofsDir, math.MaxUint, math.MaxUint, extraVmArgs...)
 	require.NoError(t, err, "failed to generate proof")
 
-	state, err := parseState(filepath.Join(proofsDir, "final.json.gz"))
-	require.NoError(t, err, "failed to parse state")
-	require.True(t, state.Exited, "asterisc did not exit")
-	require.Zero(t, state.ExitCode, "asterisc failed with exit code %d", state.ExitCode)
-	t.Logf("Completed in %d steps", state.Step)
+	stdOut, _, err := runCmd(ctx, cfg.Asterisc.VmBin, "witness", "--input", vm.FinalStatePath(proofsDir, cfg.Asterisc.BinarySnapshots))
+	require.NoError(t, err, "failed to run witness cmd")
+	type stateData struct {
+		Step     uint64 `json:"step"`
+		ExitCode uint8  `json:"exitCode"`
+		Exited   bool   `json:"exited"`
+	}
+	var data stateData
+	err = json.Unmarshal([]byte(stdOut), &data)
+	require.NoError(t, err, "failed to parse state data")
+	require.True(t, data.Exited, "cannon did not exit")
+	require.Zero(t, data.ExitCode, "cannon failed with exit code %d", data.ExitCode)
+	t.Logf("Completed in %d steps", data.Step)
 }
 
-func parseState(path string) (*fast.VMState, error) {
-	file, err := ioutil.OpenDecompressed(path)
-	if err != nil {
-		return nil, fmt.Errorf("cannot open state file (%v): %w", path, err)
-	}
-	defer file.Close()
-	var state fast.VMState
-	err = json.NewDecoder(file).Decode(&state)
-	if err != nil {
-		return nil, fmt.Errorf("invalid asterisc state (%v): %w", path, err)
-	}
-	return &state, nil
+func runCmd(ctx context.Context, binary string, args ...string) (stdOut string, stdErr string, err error) {
+	var outBuf bytes.Buffer
+	var errBuf bytes.Buffer
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	stdOut = outBuf.String()
+	stdErr = errBuf.String()
+	return
 }
