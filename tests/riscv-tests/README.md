@@ -44,7 +44,7 @@ cp benchmarks/*.riscv.dump riscv-tests/benchmarks
   - `v` = virtual memory enabled, may be interesting (TODO)
   - ignore multi-core tests
 
-Test structure is documented here: https://riscv.org/wp-content/uploads/2015/01/riscv-testing-frameworks-bootcamp-jan2015.pdf
+Test structure is documented [here](https://web.archive.org/web/20230806164251/https://riscv.org/wp-content/uploads/2015/01/riscv-testing-frameworks-bootcamp-jan2015.pdf).
 But lacks test format definition.
 
 Test format (reverse engineered, cannot find docs):
