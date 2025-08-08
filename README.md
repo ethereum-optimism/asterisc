@@ -201,7 +201,7 @@ and having a Go mirror of the smart-contract behavior for testing/debugging in g
 ## RISC-V subset support
 
 - `RV32I` support - 32 bit base instruction set
-  - `FENCE`, `ECALL`, `EBREAK` are hardwired to implement a minimal subset of systemcalls of the linux kernel 
+  - `FENCE`, `ECALL`, `EBREAK` are hardwired to implement a minimal subset of system calls of the linux kernel 
 - `RV64I` support
 - `RV32M`+`RV64M`: Multiplication support
 - `RV32A`+`RV64A`: Atomics support
@@ -260,7 +260,7 @@ and with 64 bit operations and concurrent but deterministic threads it may suppo
 including a lot more features. More features = more complexity however, which can form a risk.
 
 Asterisc aims to be more minimal, simple and easy to audit. By running a single process,
-and hardwiring only the necessary systemcalls, the complexity of supporting all the RISC-V instruction set extensions 
+and hardwiring only the necessary system calls, the complexity of supporting all the RISC-V instruction set extensions 
 and running a full linux kernel or multi-process system is avoided.
 
 ### Why not web-assembly?
