@@ -16,9 +16,6 @@ jobs:
       registry: us-docker.pkg.dev/oplabs-tools-artifacts/oss
       gcp_project_id: ${{ vars.GCP_PROJECT_ID_OPLABS_TOOLS_ARTIFACTS }}
       attest: true
-      build_args: |
-        GIT_COMMIT=${{ github.sha }}
-        GIT_DATE=${{ github.event.head_commit.timestamp }}
     permissions:
       contents: read
       id-token: write

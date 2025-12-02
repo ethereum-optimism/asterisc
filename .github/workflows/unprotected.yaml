@@ -18,9 +18,6 @@ jobs:
       registry: ttl.sh/${{ github.sha }}
       tag: 24h
       attest: false
-      build_args: |
-        GIT_COMMIT=${{ github.sha }}
-        GIT_DATE=${{ github.event.head_commit.timestamp }}
     permissions:
       contents: read
       id-token: write
