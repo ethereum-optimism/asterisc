@@ -1,0 +1,26 @@
+name: build
+
+on:
+  push:
+    tags:
+      - '*'
+    branches:
+      - 'master'
+
+jobs:
+  build:
+    uses: ethereum-optimism/factory/.github/workflows/docker-build.yaml@753bcd4284a6d36eac6e31df2492015ab8650331
+    with:
+      image_name: asterisc
+      dockerfile: Dockerfile.release
+      registry: us-docker.pkg.dev/oplabs-tools-artifacts/oss
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID_OPLABS_TOOLS_ARTIFACTS }}
+      attest: true
+      build_args: |
+        GIT_COMMIT=${{ github.sha }}
+        GIT_DATE=${{ github.event.head_commit.timestamp }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+

@@ -1,0 +1,29 @@
+name: build (PR)
+
+on:
+  pull_request:
+    branches:
+      - 'master'
+    paths:
+      - 'Dockerfile.release'
+      - 'rvgo/**'
+      - '.github/workflows/unprotected.yaml'
+
+jobs:
+  build:
+    uses: ethereum-optimism/factory/.github/workflows/docker-build.yaml@753bcd4284a6d36eac6e31df2492015ab8650331
+    with:
+      image_name: asterisc
+      dockerfile: Dockerfile.release
+      registry: ttl.sh/${{ github.sha }}
+      tag: 24h
+      attest: false
+      build_args: |
+        GIT_COMMIT=${{ github.sha }}
+        GIT_DATE=${{ github.event.head_commit.timestamp }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+
